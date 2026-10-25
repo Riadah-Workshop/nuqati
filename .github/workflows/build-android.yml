@@ -1,1 +1,80 @@
 
+name: Build Nuqati Android APK (current source)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android Flutter project
+        run: flutter create --platforms=android --project-name nuqati_driver .
+
+      - name: Use updated driver application
+        run: |
+          test -s main.dart || (echo 'ERROR: mobile/main.dart missing' && exit 1)
+          mkdir -p lib
+          cp main.dart lib/main.dart
+          grep -q 'Iqama / Saudi ID number' lib/main.dart || (echo 'ERROR: Iqama login UI missing' && exit 1)
+          if grep -q 'Driver email' lib/main.dart; then
+            echo 'ERROR: old email login still present'
+            exit 1
+          fi
+
+      - name: Add Android permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          permissions = [
+              'android.permission.INTERNET',
+              'android.permission.ACCESS_FINE_LOCATION',
+              'android.permission.ACCESS_COARSE_LOCATION'
+          ]
+          for perm in permissions:
+              if perm not in s:
+                  s = s.replace(
+                      '<application',
+                      f'<uses-permission android:name="{perm}"/>\n    <application',
+                      1
+                  )
+          p.write_text(s)
+          PY
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Remove generated example test
+        run: rm -f test/widget_test.dart
+
+      - name: Build Android APK
+        run: flutter build apk --debug --dart-define=NUQATI_API=https://staging-nuqati.al-riadah.sa
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuqati-android-iqama-current
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
