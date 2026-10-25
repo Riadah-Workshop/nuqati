@@ -4,9 +4,7 @@
         reverse_proxy api:8000
     }
     handle {
-        basic_auth {
-            {$STAGING_USER} {$STAGING_PASSWORD_HASH}
-        }
+       
         root * /srv
         try_files {path} /index.html
         file_server
