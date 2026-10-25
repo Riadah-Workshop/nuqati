@@ -120,7 +120,43 @@ class _DriverAppState extends State<DriverApp>{
   panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[Text(tr('Change password','تغيير كلمة المرور'),style:const TextStyle(color:lime,fontWeight:FontWeight.bold)),const SizedBox(height:12),field(oldPassword,tr('Current password','كلمة المرور الحالية'),secret:true),const SizedBox(height:10),field(newPassword,tr('New password (12+ characters)','كلمة المرور الجديدة (12 حرفاً على الأقل)'),secret:true),const SizedBox(height:12),action(tr('Update password','تحديث كلمة المرور'),changePassword)])),
   action(tr('LOG OUT','تسجيل الخروج'),logout,secondary:true)
  ]);
- Widget navItem(IconData icon,String title,int index)=>Expanded(child:InkWell(onTap:()=>setState(()=>tab=index),borderRadius:BorderRadius.circular(18),child:Container(padding:const EdgeInsets.symmetric(vertical:11),decoration:BoxDecoration(color:tab==index?lime.withOpacity(.16):Colors.transparent,borderRadius:BorderRadius.circular(18)),child:Column(mainAxisSize:MainAxisSize.min,children:[Icon(icon,color:tab==index?lime:Colors.white70),const SizedBox(height:4),Text(title,style:TextStyle(fontSize:11,fontWeight:tab==index?FontWeight.bold:FontWeight.normal,color:tab==index?lime:Colors.white70))])))));
+ Widget navItem(IconData icon, String title, int index) {
+  return Expanded(
+    child: InkWell(
+      onTap: () => setState(() => tab = index),
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: tab == index
+              ? lime.withOpacity(.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: tab == index ? lime : Colors.white70,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: tab == index
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: tab == index ? lime : Colors.white70,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}=>Expanded(child:InkWell(onTap:()=>setState(()=>tab=index),borderRadius:BorderRadius.circular(18),child:Container(padding:const EdgeInsets.symmetric(vertical:11),decoration:BoxDecoration(color:tab==index?lime.withOpacity(.16):Colors.transparent,borderRadius:BorderRadius.circular(18)),child:Column(mainAxisSize:MainAxisSize.min,children:[Icon(icon,color:tab==index?lime:Colors.white70),const SizedBox(height:4),Text(title,style:TextStyle(fontSize:11,fontWeight:tab==index?FontWeight.bold:FontWeight.normal,color:tab==index?lime:Colors.white70))])))));
  @override Widget build(BuildContext context)=>Scaffold(
  backgroundColor:navy,
  appBar:AppBar(backgroundColor:navy,foregroundColor:Colors.white,title:Text(tr('NUQATI · Driver','نقاطي · السائق')),actions:[if(token.isNotEmpty)IconButton(tooltip:tr('Log out','خروج'),onPressed:logout,icon:const Icon(Icons.logout))]),
