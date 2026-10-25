@@ -1,9 +1,9 @@
-name: Build Nuqati Android APK
+name: Build Nuqati iOS Simulator
 on:
   workflow_dispatch:
 jobs:
-  build-android:
-    runs-on: ubuntu-latest
+  build-ios:
+    runs-on: macos-latest
     permissions:
       contents: read
     defaults:
@@ -11,27 +11,20 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Generate Android project
-        run: flutter create --platforms=android --project-name nuqati_driver .
-      - name: Configure Android location permissions
+      - name: Generate iOS project
+        run: flutter create --platforms=ios --project-name nuqati_driver .
+      - name: Set iOS location usage description
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/src/main/AndroidManifest.xml')
+          p = Path('ios/Runner/Info.plist')
           s = p.read_text()
-          permissions = ('<uses-permission android:name="android.permission.INTERNET" />\n'
-                         '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n'
-                         '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n')
-          if 'android.permission.ACCESS_FINE_LOCATION' not in s:
-              s = s.replace('<application', permissions + '    <application', 1)
+          if '<key>NSLocationWhenInUseUsageDescription</key>' not in s:
+              s = s.replace('</dict>', '<key>NSLocationWhenInUseUsageDescription</key>\n<string>Nuqati uses your location during an active trip to record driving distance and events.</string>\n</dict>', 1)
           p.write_text(s)
           PY
       - name: Install dependencies
@@ -40,10 +33,12 @@ jobs:
         run: rm -f test/widget_test.dart
       - name: Analyze Flutter code
         run: flutter analyze --no-fatal-infos
-      - name: Build Android pilot APK
-        run: flutter build apk --debug --dart-define=NUQATI_API=https://staging-nuqati.al-riadah.sa
+      - name: Build iOS simulator app
+        run: flutter build ios --simulator --debug --dart-define=NUQATI_API=https://staging-nuqati.al-riadah.sa
+      - name: Package simulator app
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app nuqati-ios-simulator.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: nuqati-android-iqama-pilot
-          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          name: nuqati-ios-simulator-iqama-pilot
+          path: mobile/nuqati-ios-simulator.zip
           retention-days: 7
