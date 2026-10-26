@@ -1,3 +1,4 @@
+import math
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -6,7 +7,6 @@ from .config import settings
 from .db import Base, engine, get_db
 from .models import Company, Driver, Vehicle, OdometerReading, Trip, MaintenanceSchedule, User, DriverMetadata
 from .schemas import CompanyCreate, CompanyOut, DriverCreate, DriverOut, VehicleCreate, VehicleOut, OdometerCreate, OdometerOut, MaintenanceScheduleUpsert, MaintenanceScheduleOut
-
 from .auth import current_user, hash_password, verify_password, encode_token, allow, scope
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
