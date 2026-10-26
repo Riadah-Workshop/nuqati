@@ -70,6 +70,8 @@ export default function App() {
   const [selectedRoute,setSelectedRoute]=useState<any>(null);
   const [selectedTripId,setSelectedTripId]=useState<number|null>(null);
   const [routeLoading,setRouteLoading]=useState(false);
+  const [tripSearch,setTripSearch]=useState('');
+  const [tripStatusFilter,setTripStatusFilter]=useState('all');
   const [companyLogos,setCompanyLogos]=useState<Record<number,string>>({});
   const [expandedCompany,setExpandedCompany]=useState<number|null>(null);
   const [editingCompany,setEditingCompany]=useState<number|null>(null);
@@ -336,18 +338,26 @@ export default function App() {
           </div>})}
         </div>}
         <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Trips':'الرحلات'}</th><th>{lang==='en'?'Score /100':'التقييم / ١٠٠'}</th><th>{lang==='en'?'Speeding':'تجاوز السرعة'}</th><th>{lang==='en'?'Harsh braking':'الفرملة العنيفة'}</th><th>{lang==='en'?'Harsh acceleration':'التسارع العنيف'}</th><th>{lang==='en'?'Last GPS':'آخر موقع GPS'}</th></tr></thead><tbody>{report.drivers.map((d:any)=><tr key={d.driver_id}><td>{d.driver_name}</td><td>{d.trips}</td><td>{d.score??'—'}</td><td>{d.violations.speeding}</td><td>{d.violations.harsh_braking}</td><td>{d.violations.harsh_acceleration}</td><td>{d.latest_location?<><a href={`https://www.openstreetmap.org/?mlat=${d.latest_location.latitude}&mlon=${d.latest_location.longitude}#map=15/${d.latest_location.latitude}/${d.latest_location.longitude}`} target="_blank" rel="noreferrer">{lang==='en'?'View map':'عرض الخريطة'}</a><small> {new Date(d.latest_location.recorded_at).toLocaleString()}</small></>:(lang==='en'?'No GPS data':'لا توجد بيانات موقع')}</td></tr>)}</tbody></table></div>
-        {report.drivers.map((d:any)=><article key={d.driver_id} className="panel"><h3>{d.driver_name} · {lang==='en'?'Trip history':'سجل الرحلات'}</h3>
-          {d.trip_details.length?<div className="table-wrap"><table><thead><tr>
-            <th>{lang==='en'?'Trip':'الرحلة'}</th><th>{lang==='en'?'Start (Saudi time)':'البداية (السعودية)'}</th><th>{lang==='en'?'Stop (Saudi time)':'النهاية (السعودية)'}</th><th>{lang==='en'?'Duration':'المدة'}</th><th>{lang==='en'?'Max speed':'السرعة القصوى'}</th><th>{lang==='en'?'Distance':'المسافة'}</th><th>{lang==='en'?'Violations':'المخالفات'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Route':'المسار'}</th>
-          </tr></thead><tbody>{d.trip_details.map((t:any)=><tr key={t.id} style={{background:selectedTripId===t.id?'rgba(163,230,53,.1)':undefined}}>
-            <td>#{t.id}</td><td style={{whiteSpace:'nowrap'}}>{new Date(t.started_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB',{timeZone:'Asia/Riyadh'})}</td>
-            <td style={{whiteSpace:'nowrap'}}>{t.ended_at?new Date(t.ended_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB',{timeZone:'Asia/Riyadh'}):(lang==='en'?'In progress':'جارية')}</td>
-            <td>{Math.max(0,Math.floor((new Date(t.ended_at||Date.now()).getTime()-new Date(t.started_at).getTime())/60000))} {lang==='en'?'min':'دقيقة'}</td>
-            <td>{t.max_speed_kmh==null?'—':Number(t.max_speed_kmh).toFixed(1)+' km/h'}</td><td>{Number(t.distance_km||0).toFixed(2)} km</td><td>{t.violations.length}</td>
-            <td>{lang==='en'?t.status:({active:'نشطة',completed:'مكتملة'} as Record<string,string>)[t.status]||t.status}</td>
-            <td><button type="button" className="refresh" onClick={()=>{if(selectedTripId===t.id){setSelectedTripId(null);setSelectedRoute(null)}else viewTripRoute(t.id)}}>{selectedTripId===t.id?(lang==='en'?'Close':'إغلاق'):(lang==='en'?'View map':'عرض الخريطة')}</button></td>
-          </tr>)}</tbody></table></div>:<p>{lang==='en'?'No trips in selected period':'لا توجد رحلات في الفترة المختارة'}</p>}
-        </article>)}      </section>}
+        {(()=>{
+          const trips=report.drivers.flatMap((d:any)=>(d.trip_details||[]).map((t:any)=>({...t,driver_name:d.driver_name,driver_id:d.driver_id})));
+          const shown=trips.filter((t:any)=>(tripStatusFilter==='all'||t.status===tripStatusFilter)&&(!tripSearch||`${t.id} ${t.driver_name}`.toLowerCase().includes(tripSearch.toLowerCase()))).sort((a:any,b:any)=>new Date(b.started_at).getTime()-new Date(a.started_at).getTime());
+          const totalKm=trips.reduce((sum:number,t:any)=>sum+Number(t.distance_km||0),0);
+          const totalMinutes=trips.reduce((sum:number,t:any)=>sum+Math.max(0,(new Date(t.ended_at||Date.now()).getTime()-new Date(t.started_at).getTime())/60000),0);
+          const maxSpeed=Math.max(0,...trips.map((t:any)=>Number(t.max_speed_kmh||0)));
+          const violationCount=trips.reduce((sum:number,t:any)=>sum+(t.violations?.length||0),0);
+          const saDate=(v:string)=>new Date(v).toLocaleString(lang==='ar'?'ar-SA':'en-GB',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+          const duration=(t:any)=>{const mins=Math.max(0,Math.floor((new Date(t.ended_at||Date.now()).getTime()-new Date(t.started_at).getTime())/60000));return `${Math.floor(mins/60)}h ${mins%60}m`};
+          return <div className="nuqati-trips">
+            <div className="nuqati-trip-heading"><div><h3>{lang==='en'?'Trip intelligence':'تحليل الرحلات'}</h3><p>{lang==='en'?'GPS trip records and route history':'سجل الرحلات والمسارات المسجلة بنظام تحديد المواقع'}</p></div><span className="nuqati-trip-count">{trips.length} {lang==='en'?'trips':'رحلة'}</span></div>
+            <div className="nuqati-trip-kpis">
+              {[[lang==='en'?'Total trips':'إجمالي الرحلات',String(trips.length),'◈'],[lang==='en'?'Distance':'المسافة الإجمالية',`${totalKm.toFixed(2)} km`,'↗'],[lang==='en'?'Driving time':'مدة القيادة',`${Math.floor(totalMinutes/60)}h ${Math.floor(totalMinutes%60)}m`,'◷'],[lang==='en'?'Top recorded speed':'أعلى سرعة مسجلة',`${maxSpeed.toFixed(1)} km/h`,'◉'],[lang==='en'?'Violations':'المخالفات',String(violationCount),'⚠']].map(([name,value,symbol])=><div className="nuqati-trip-kpi" key={name}><span className="nuqati-kpi-icon">{symbol}</span><small>{name}</small><strong>{value}</strong></div>)}
+            </div>
+            <div className="nuqati-trip-table-card"><div className="nuqati-trip-toolbar"><h3>{lang==='en'?'Trip history':'سجل الرحلات'}</h3><div className="nuqati-trip-filters"><input aria-label={lang==='en'?'Search trips':'بحث الرحلات'} placeholder={lang==='en'?'Search trip or driver':'ابحث عن رحلة أو سائق'} value={tripSearch} onChange={e=>setTripSearch(e.target.value)}/><select aria-label={lang==='en'?'Trip status':'حالة الرحلة'} value={tripStatusFilter} onChange={e=>setTripStatusFilter(e.target.value)}><option value="all">{lang==='en'?'All statuses':'جميع الحالات'}</option><option value="active">{lang==='en'?'Active':'جارية'}</option><option value="completed">{lang==='en'?'Completed':'مكتملة'}</option></select></div></div>
+              <div className="table-wrap nuqati-trip-table-wrap"><table className="nuqati-trip-table"><thead><tr><th>#</th><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Start · Saudi time':'البداية · السعودية'}</th><th>{lang==='en'?'Stop · Saudi time':'النهاية · السعودية'}</th><th>{lang==='en'?'Duration':'المدة'}</th><th>{lang==='en'?'Distance':'المسافة'}</th><th>{lang==='en'?'Max speed':'السرعة القصوى'}</th><th>{lang==='en'?'Violations':'المخالفات'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Details':'التفاصيل'}</th></tr></thead><tbody>{shown.map((t:any)=><tr key={t.id} className={selectedTripId===t.id?'nuqati-trip-selected':''}><td><strong>#{t.id}</strong></td><td>{t.driver_name}</td><td>{saDate(t.started_at)}</td><td>{t.ended_at?saDate(t.ended_at):(lang==='en'?'In progress':'جارية')}</td><td>{duration(t)}</td><td>{Number(t.distance_km||0).toFixed(2)} km</td><td>{t.max_speed_kmh==null?'—':Number(t.max_speed_kmh).toFixed(1)+' km/h'}</td><td><span className={(t.violations?.length||0)>0?'nuqati-violation-count is-alert':'nuqati-violation-count'}>{t.violations?.length||0}</span></td><td><span className={'nuqati-trip-status '+(t.status==='active'?'is-active':'is-completed')}>{t.status==='active'?(lang==='en'?'● Active':'● جارية'):(lang==='en'?'✓ Completed':'✓ مكتملة')}</span></td><td><button type="button" className="nuqati-map-button" onClick={()=>viewTripRoute(t.id)}>{lang==='en'?'View route ↗':'عرض المسار ↗'}</button></td></tr>)}</tbody></table>{shown.length===0&&<div className="empty">{lang==='en'?'No matching trips':'لا توجد رحلات مطابقة'}</div>}</div>
+            </div>
+          </div>;
+        })()}
+      </section>}
       {tab==='overview' && <>
         <section className="hero"><div><span className="hero-pill">NUQATI FLEET INTELLIGENCE</span><h2>{lang==='en'?'Smarter Driving, More Efficient Fleets.':'قيادة أذكى، أسطول أكثر كفاءة.'}</h2><p>{lang==='en'?'Safer driving and independent maintenance reminders based on odometer readings.':'قيادة آمنة وتذكيرات صيانة مستقلة بناءً على قراءات العداد.'}</p></div><div className="hero-icon"><Route size={54}/></div></section>
         <section className="stats">{[{label:label('companies','Companies','الشركات'),value:stats.companies,icon:Wrench},{label:label('vehicles','Vehicles','السيارات'),value:stats.vehicles,icon:CarFront},{label:label('drivers','Drivers','السائقون'),value:stats.drivers,icon:Users},{label:label('active_trips','Active trips','الرحلات النشطة'),value:stats.trips_active,icon:Route}].map(x=><article className="stat-card" key={x.label}><div className="stat-icon"><x.icon size={20}/></div><span>{x.label}</span><strong>{x.value}</strong></article>)}</section>
@@ -355,7 +365,7 @@ export default function App() {
       </>}
       {tab==='reports'&&selectedTripId!==null&&<>
         <div role="presentation" onClick={()=>{setSelectedTripId(null);setSelectedRoute(null)}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:1000}} />
-        <aside role="dialog" aria-modal="true" aria-label={lang==='en'?'Trip route details':'تفاصيل مسار الرحلة'} dir={lang==='ar'?'rtl':'ltr'} style={{position:'fixed',top:0,bottom:0,right:lang==='en'?0:undefined,left:lang==='ar'?0:undefined,width:'min(860px,96vw)',background:'#111d2b',border: '1px solid #334155',zIndex:1001,overflowY:'auto',padding:20,boxShadow:'0 0 30px rgba(0,0,0,.5)'}}>
+        <aside role="dialog" aria-modal="true" aria-label={lang==='en'?'Trip route details':'تفاصيل مسار الرحلة'} dir={lang==='ar'?'rtl':'ltr'} className="nuqati-trip-drawer">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><h3>{lang==='en'?'Trip route and GPS details':'مسار الرحلة وتفاصيل نقاط GPS'} #{selectedTripId}</h3><button type="button" className="refresh" onClick={()=>{setSelectedTripId(null);setSelectedRoute(null)}}>{lang==='en'?'Close ×':'إغلاق ×'}</button></div>
           {routeLoading&&<p>{lang==='en'?'Loading map...':'جار تحميل الخريطة...'}</p>}
           {selectedRoute&&selectedRoute.trip_id===selectedTripId&&<TripLiveMap route={selectedRoute} lang={lang}/>}
