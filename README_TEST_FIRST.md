@@ -1,29 +1,31 @@
-Nuqati offline tracking / driver notifications — TEST BUILD ONLY
+# Nuqati combined patch — TEST FIRST
 
-Replace the files at the matching paths in GitHub. This patch is based on the last source ZIP uploaded and the previous Android 16 notification patch; newer unshared GitHub changes may be overwritten.
+Source baseline: nuqati-main(20261027-151259).zip
 
-Changes:
-- Start Trip creates a local SQLite trip record without contacting the server.
-- Stop Trip marks it ended locally and does not require network.
-- The background service attempts to create the server trip, upload queued samples, and finish it in order.
-- Speeding, harsh braking and harsh acceleration trigger local Android notifications from the GPS background isolate (12-second cooldown). The thresholds are read from the last cached server driving policy, falling back to defaults.
-- Reconnection retries happen in the foreground service and on app resume.
+Modified files only:
+- backend/app/main.py
+- mobile/main.dart
 
-IMPORTANT LIMITATIONS — do not roll out to drivers yet:
-- This source has NOT been compiled or device-tested here.
-- The backend /trips/start endpoint does not yet support an idempotency key. If the server creates a trip but the response is lost, retries can create duplicate server trips. Backend idempotency must be added before production.
-- A previous active trip from the old app version may need to be finished on the server before testing this patch.
-- Notifications require Android notification permission; sound/vibration depend on user settings.
-- GPS-based acceleration is noisy; thresholds and filtering need real-road validation.
-- The current background service may remain active while waiting to sync; review battery and Android background policies.
-- If the device is rebooted or Android force-stops the service, automatic recovery is not guaranteed until app launch.
-- Background notifications are not the same as reliable violation scoring: backend scoring and local alerts may differ.
+## Included
+- Automatic trip detection in a foreground location service while Nuqati is not visible, after the driver has logged in and enabled tracking. Starts at GPS speed >5 km/h continuously for 5 seconds; stops at <1 km/h for 120 seconds. GPS accuracy must be <=35 m.
+- Driver UI Start/Stop Trip button replaced with Full Privacy Mode toggle. Privacy ON stops location capture, movement detection, and scoring. Only manually turning Privacy OFF restarts monitoring. Privacy setting is stored persistently.
+- Trip completion notification invites driver to open Nuqati to see score.
+- GPS trip distance added to the assigned vehicle odometer once, on server-side trip completion. A manual initial odometer is required; if no initial reading is set, it remains null. Odometer reading history records each trip.
+- Maintenance reminders for assigned vehicle: engine oil 1000 km left, 500 km left, due; spark plugs and gear oil 1000 km left, due, 1000 km overdue. One notice per schedule cycle and stage, persisted locally. Driver app checks API every 2 minutes while foreground monitoring service is running and connected.
+- No dashboard changes required for the existing maintenance schedule entry: next due km = last_service_km + interval_km. For first-ever service due at 60000, enter last_service_km=0 and interval_km=60000; after servicing update last_service_km and interval.
 
-TEST PLAN
-1. Backup the existing repository and app data. Do not uninstall the app if you have unsynced trips.
-2. Build with GitHub Actions, install on test phone, grant location and notification permissions.
-3. Start a trip with Wi-Fi and mobile data off; confirm local tracking notification and local GPS capture.
-4. Stop while offline; verify Stop succeeds. Restore connectivity and open app to trigger sync.
-5. Check server trip count, timestamps, samples and finish status; ensure no duplicate trip.
-6. Test alert notifications in controlled/safe conditions, not by intentionally driving dangerously.
-7. Repeat with screen locked, connectivity changes, and after app restart.
+## Deployment
+1. Back up PostgreSQL and save working APK. Do not uninstall app with pending offline trips.
+2. Replace these exact paths in your repo; redeploy backend first, then build Android APK.
+3. On Android allow notifications, precise location, **Allow all the time** location, and unrestricted battery usage. The existing GitHub Actions Android manifest already declares background location and foreground location service permissions.
+4. Sign in and confirm Privacy Mode OFF. Test automatic trip creation/stop, score notice, offline synchronization, and odometer increment exactly once.
+5. Test maintenance thresholds with a test vehicle. Check that toggling Privacy ON immediately stops location monitoring; turning OFF explicitly resumes it.
+
+## Known limitations / important
+- This patch has NOT been compiled with Flutter or tested on a phone; Python syntax validated only. Run CI and test in staging before production.
+- Android can stop background execution for battery policy, and a user force-stop prevents automatic restart until manually opened. Foreground service and boot restart do not guarantee tracking after force-stop. Starting a location foreground service from a background-only context is subject to Android version and permission restrictions.
+- While Full Privacy is ON, NO movement reminders are generated, by design. Maintenance notifications are also paused until tracking resumes.
+- Maintenance notifications are local, not server push; they require the monitoring service to be alive and connectivity for the reminder API.
+- This is an incremental source patch, not a signed APK or production certification.
+- Historical trips completed before this patch are not backfilled to odometer. A manually set starting odometer is required.
+- GPS distance is estimated, not a certified mechanical odometer; validate accuracy before using for critical maintenance decisions.
