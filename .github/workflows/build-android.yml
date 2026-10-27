@@ -1,0 +1,135 @@
+
+name: Build Nuqati Android APK (current source)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android Flutter project
+        run: flutter create --platforms=android --project-name nuqati_driver .
+
+      - name: Use updated driver application
+        run: |
+          test -s main.dart || (echo 'ERROR: mobile/main.dart missing' && exit 1)
+          mkdir -p lib
+          cp main.dart lib/main.dart
+          grep -q 'Iqama / Saudi ID number' lib/main.dart || (echo 'ERROR: Iqama login UI missing' && exit 1)
+          if grep -q 'Driver email' lib/main.dart; then
+            echo 'ERROR: old email login still present'
+            exit 1
+          fi
+
+      - name: Add Android permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          permissions = [
+              'android.permission.INTERNET',
+              'android.permission.ACCESS_FINE_LOCATION',
+              'android.permission.ACCESS_COARSE_LOCATION',
+              'android.permission.ACCESS_BACKGROUND_LOCATION',
+              'android.permission.FOREGROUND_SERVICE',
+              'android.permission.FOREGROUND_SERVICE_LOCATION',
+              'android.permission.POST_NOTIFICATIONS',
+              'android.permission.WAKE_LOCK'
+          ]
+          for perm in permissions:
+              if perm not in s:
+                  s = s.replace(
+                      '<application',
+                      f'<uses-permission android:name="{perm}"/>\n    <application',
+                      1
+                  )
+          # Android 14 requires the foreground service type and matching permission.
+          s=s.replace('<application', '<application android:usesCleartextTraffic="false"',1) if 'usesCleartextTraffic' not in s else s
+          if 'id.flutter.flutter_background_service.BackgroundService' not in s:
+              s=s.replace('</application>', '''<service android:name="id.flutter.flutter_background_service.BackgroundService" android:foregroundServiceType="location" android:exported="true"/>\n    </application>''' ,1)
+          p.write_text(s)
+          PY
+
+      - name: Provide explicit foreground service notification icon
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          cat > android/app/src/main/res/drawable/ic_bg_service_small.xml <<'XML'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp" android:height="24dp"
+              android:viewportWidth="24" android:viewportHeight="24">
+              <path android:fillColor="#FFFFFFFF"
+                  android:pathData="M12,2a10,10 0,1 0,0 20a10,10 0,1 0,0 -20zM12,6a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z"/>
+          </vector>
+          XML
+
+      - name: Resolve background service manifest conflict
+        run: |
+          python3 - <<'PYMANIFEST'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          android = 'http://schemas.android.com/apk/res/android'
+          tools = 'http://schemas.android.com/tools'
+          ET.register_namespace('android', android)
+          ET.register_namespace('tools', tools)
+          service_name = 'id.flutter.flutter_background_service.BackgroundService'
+          for flavor in ('main', 'debug', 'profile'):
+              path = Path(f'android/app/src/{flavor}/AndroidManifest.xml')
+              if not path.exists():
+                  continue
+              root = ET.parse(path).getroot()
+              application = root.find('application')
+              if application is None:
+                  if flavor == 'main':
+                      raise RuntimeError('Main Android manifest has no application element')
+                  application = ET.SubElement(root, 'application')
+              services = [node for node in application.findall('service')
+                          if node.get(f'{{{android}}}name') == service_name]
+              for duplicate in services[1:]:
+                  application.remove(duplicate)
+              service = services[0] if services else ET.SubElement(application, 'service')
+              service.set(f'{{{android}}}name', service_name)
+              service.set(f'{{{android}}}exported', 'true')
+              service.set(f'{{{android}}}foregroundServiceType', 'location')
+              service.set(f'{{{tools}}}replace', 'android:exported')
+              ET.ElementTree(root).write(path, encoding='unicode', xml_declaration=True)
+              print(f'Patched {path}: exported=true, tools:replace=android:exported')
+          PYMANIFEST
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Remove generated example test
+        run: rm -f test/widget_test.dart
+
+      - name: Build Android APK
+        run: flutter build apk --debug --dart-define=NUQATI_API=https://staging-nuqati.al-riadah.sa
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuqati-android-iqama-current
+          path: mobile/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
+
