@@ -1,0 +1,23 @@
+name: nuqati_driver
+description: Nuqati driver app starter for Solutions Workshop
+publish_to: 'none'
+version: 0.1.0+1
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.4
+  flutter_background_service: ^5.1.0
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+flutter:
+  uses-material-design: true
