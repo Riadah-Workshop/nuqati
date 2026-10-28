@@ -1,5 +1,13 @@
-# Nuqati — simplified staging starter (v2)
+# Nuqati – Harsh Cornering in Fleet Reports
 
-Driver safety and mileage-based preventive-maintenance reminders. No plate scanning, odometer photo recognition, or workshop integration. See `docs/PRODUCT_SCOPE_V2.md` for agreed scope and implementation status.
+Replace only `backend/app/main.py` and `web/src/App.tsx` with these files. This patch is based on the Phase 4 backend and the map-based simplified dashboard frontend.
 
-Deploy on Coolify using `/compose.staging.yml` (not the legacy `docker-compose.yml`), and follow `DEPLOY_COOLIFY.md`. Existing Postgres volume is retained when updating the same Coolify resource; back it up before changing deployments. The backend uses `create_all` for this starter and does not perform production database migrations. This is NOT production ready: no application authentication or company-level access isolation, no working mobile GPS or push notifications, and no live scoring. Use fictional staging data only behind gateway basic auth.
+Changes:
+- Adds `harsh_cornering` count to each driver's `violations` object returned by Fleet Reports API.
+- Adds a bilingual Harsh Cornering column to Fleet Reports.
+- Includes Harsh Cornering in CSV export.
+- Preserves the existing pilot score formula; does not silently change scores.
+
+Deployment: back up current working files and database; deploy backend first, then web. Generate Fleet Report for a period containing known cornering events and verify the count and CSV. Zero means no matching detected events for that driver/period.
+
+Validation: Python syntax checked. Full web build and runtime tests not performed. If your deployed GitHub version has changed since the provided patches, compare changes before replacing files.
