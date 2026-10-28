@@ -1,31 +1,35 @@
-# Nuqati combined patch — TEST FIRST
+# Nuqati – Offline sessions and separate offline trips
+Baseline: nuqati-main(20261028-044621).zip
 
-Source baseline: nuqati-main(20261027-151259).zip
-
-Modified files only:
+## Modified files
 - backend/app/main.py
 - mobile/main.dart
 
-## Included
-- Automatic trip detection in a foreground location service while Nuqati is not visible, after the driver has logged in and enabled tracking. Starts at GPS speed >5 km/h continuously for 5 seconds; stops at <1 km/h for 120 seconds. GPS accuracy must be <=35 m.
-- Driver UI Start/Stop Trip button replaced with Full Privacy Mode toggle. Privacy ON stops location capture, movement detection, and scoring. Only manually turning Privacy OFF restarts monitoring. Privacy setting is stored persistently.
-- Trip completion notification invites driver to open Nuqati to see score.
-- GPS trip distance added to the assigned vehicle odometer once, on server-side trip completion. A manual initial odometer is required; if no initial reading is set, it remains null. Odometer reading history records each trip.
-- Maintenance reminders for assigned vehicle: engine oil 1000 km left, 500 km left, due; spark plugs and gear oil 1000 km left, due, 1000 km overdue. One notice per schedule cycle and stage, persisted locally. Driver app checks API every 2 minutes while foreground monitoring service is running and connected.
-- No dashboard changes required for the existing maintenance schedule entry: next due km = last_service_km + interval_km. For first-ever service due at 60000, enter last_service_km=0 and interval_km=60000; after servicing update last_service_km and interval.
+## Deploy order
+1. Back up staging PostgreSQL and working Android APK. Do not uninstall the existing APK; SQLite pending trips are stored on-device.
+2. Replace backend/app/main.py and deploy API to Coolify; verify /api/v1/health.
+3. Replace mobile/main.dart and build APK through the existing GitHub Actions workflow.
+4. Install over the existing application, retaining app data.
 
-## Deployment
-1. Back up PostgreSQL and save working APK. Do not uninstall app with pending offline trips.
-2. Replace these exact paths in your repo; redeploy backend first, then build Android APK.
-3. On Android allow notifications, precise location, **Allow all the time** location, and unrestricted battery usage. The existing GitHub Actions Android manifest already declares background location and foreground location service permissions.
-4. Sign in and confirm Privacy Mode OFF. Test automatic trip creation/stop, score notice, offline synchronization, and odometer increment exactly once.
-5. Test maintenance thresholds with a test vehicle. Check that toggling Privacy ON immediately stops location monitoring; turning OFF explicitly resumes it.
+## Offline sign-in behavior
+- Complete one ONLINE login with Remember me selected before disconnecting.
+- The driver profile and access token are stored in encrypted storage.
+- When app restarts offline, it restores this saved session without calling the API first.
+- Fresh accounts, manual logout, or unremembered sessions cannot log in offline.
+- When access token expires/revoked, API synchronization requires online reauthentication. Local restoration does not bypass server authorization.
 
-## Known limitations / important
-- This patch has NOT been compiled with Flutter or tested on a phone; Python syntax validated only. Run CI and test in staging before production.
-- Android can stop background execution for battery policy, and a user force-stop prevents automatic restart until manually opened. Foreground service and boot restart do not guarantee tracking after force-stop. Starting a location foreground service from a background-only context is subject to Android version and permission restrictions.
-- While Full Privacy is ON, NO movement reminders are generated, by design. Maintenance notifications are also paused until tracking resumes.
-- Maintenance notifications are local, not server push; they require the monitoring service to be alive and connectivity for the reminder API.
-- This is an incremental source patch, not a signed APK or production certification.
-- Historical trips completed before this patch are not backfilled to odometer. A manually set starting odometer is required.
-- GPS distance is estimated, not a certified mechanical odometer; validate accuracy before using for critical maintenance decisions.
+## Test scenarios
+A. Online sign-in with Remember me; force-close normal app, disconnect internet, relaunch; confirm profile and auto monitoring appear.
+B. Remain offline. Drive Trip A, stop stationary for 2 min; drive Trip B, stop 2 min; repeat Trip C. Confirm 3 local trips; do not enable privacy during these tests.
+C. Restore internet; allow service to synchronize; confirm 3 separate dashboard trips, original start/end times, and odometer increases only once per completed trip.
+D. Interrupt internet during start request and reconnect. Confirm client trip ID prevents duplicate server trip creation.
+E. Enable Full Privacy Mode; confirm no GPS samples recorded, and disabling privacy resumes monitoring.
+F. Test revoked/expired token: device can show cached profile, but sync must fail until online login; do not assume server authentication remains valid.
+G. Confirm driver with no vehicle assigned cannot create server trips; backend returns 409.
+
+## Important known limitations
+- Android force-stop prevents background services until user launches the app again.
+- Existing legacy server active trips may need manual reconciliation; the API deliberately returns 409 rather than silently merging two offline journeys.
+- This patch does NOT implement new cornering, geofencing, road-specific speed-limit policies, or risk classification. Those need separate design and tests.
+- This patch is source-validated for Python only. Flutter toolchain and live PostgreSQL integration were unavailable; staging build and field validation are required.
+- Local remembered sessions should be paired with a device-lock policy for shared phones; a stolen unlocked device can expose cached driver data.
