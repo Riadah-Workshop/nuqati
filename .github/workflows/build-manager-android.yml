@@ -1,0 +1,60 @@
+name: Build Nuqati Manager Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'manager/**'
+      - '.github/workflows/build-manager-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: manager
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create isolated manager Android project
+        run: flutter create --platforms=android --project-name nuqati_manager --org sa.alriadah .
+      - name: Install Nuqati Manager source
+        run: |
+          test -s main.dart
+          test -s assets/nuqati_icon.png
+          mkdir -p lib
+          cp main.dart lib/main.dart
+      - name: Set Android Internet permission
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          text=p.read_text()
+          permission='<uses-permission android:name="android.permission.INTERNET" />'
+          if 'android.permission.INTERNET' not in text:
+              text=text.replace('<application',permission+'\n    <application',1)
+          p.write_text(text)
+          PY
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate Android-only launcher icon
+        run: dart run flutter_launcher_icons
+      - name: Analyze Dart application
+        run: flutter analyze --no-fatal-infos
+      - name: Remove generated example test
+        run: rm -f test/widget_test.dart
+      - name: Build Nuqati Manager APK
+        run: flutter build apk --debug --dart-define=NUQATI_API=https://staging-nuqati.al-riadah.sa
+      - name: Upload Manager APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuqati-manager-debug-apk
+          path: manager/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
