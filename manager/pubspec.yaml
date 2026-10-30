@@ -1,0 +1,24 @@
+name: nuqati_manager
+publish_to: none
+description: Nuqati Manager for company administrators, by Al-Riadah Workshop.
+version: 0.1.0+1
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  flutter_secure_storage: ^9.2.4
+  flutter_local_notifications: ^17.2.4
+  flutter_launcher_icons: ^0.13.1
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/nuqati_icon.png
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/nuqati_icon.png
+  min_sdk_android: 21
