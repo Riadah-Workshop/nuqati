@@ -1,0 +1,729 @@
+import FleetPositionMap from './FleetPositionMap';
+import { Fragment, useEffect, useState } from 'react';
+import TripLiveMap from './TripLiveMap';
+import GeofenceMapPicker from './GeofenceMapPicker';
+import { Activity, CarFront, Users, Route, Gauge, Wrench, Plus, RefreshCw, ShieldCheck, LogOut, Building2, UserCog, Trash2, Shield } from 'lucide-react';
+
+const API = import.meta.env.VITE_API_BASE_URL ?? '';
+type Vehicle = {id:number; company_id:number; plate_number:string; make_model:string; year:number|null; odometer_km:number|null; assigned_driver_id?:number|null};
+type Driver = {id:number; company_id:number; full_name:string; phone:string; status:string};
+type Company = {id:number; name:string};
+type Me = {id:number;email:string;full_name:string;role:string;company_id:number|null};
+
+type OverviewSeries={key:string;label:string;color:string};
+function OverviewBars({title,rows,series}:{title:string;rows:any[];series:OverviewSeries[]}){
+ const max=Math.max(1,...rows.map(r=>series.reduce((sum,s)=>sum+Math.max(0,Number(r[s.key]||0)),0)));
+ return <article className="nuqati-chart-card"><h3>{title}</h3><div className="nuqati-chart-legend">{series.map(s=><span key={s.key}><i style={{background:s.color}}/>{s.label}</span>)}</div><div className="nuqati-chart-bars">{rows.map((r,i)=><div key={r.date||i} className="nuqati-bar-column" title={`${r.date}: ${series.map(s=>`${s.label} ${Number(r[s.key]||0).toFixed(1)}`).join(' · ')}`}><div className="nuqati-bar-track">{series.map(s=><div key={s.key} style={{height:`${100*Math.max(0,Number(r[s.key]||0))/max}%`,background:s.color}}/>)}</div><small>{String(r.date||'').slice(5)}</small></div>)}</div></article>;
+}
+
+export default function App() {
+  const [lang,setLang]=useState<'en'|'ar'>(()=>localStorage.getItem('nuqati_lang')==='en'?'en':'ar');
+  const [branding,setBranding]=useState<{logo_data:string;labels:Record<string,Record<string,string>>}>({logo_data:'',labels:{}});
+  const [defaults,setDefaults]=useState<Record<string,Record<string,string>>>({});
+  const [inviteToken]=useState(()=>new URLSearchParams(window.location.search).get('invite')||'');
+  const [invitePassword,setInvitePassword]=useState('');
+  const [inviteStatus,setInviteStatus]=useState('');
+  const [invite,setInvite]=useState({email:'',full_name:'',role:'company_admin',company_id:''});
+  const label=(key:string,en:string,ar:string)=>(lang==='en'?((branding.labels[key]?.en && !/[\u0600-\u06FF]/.test(branding.labels[key].en))?branding.labels[key].en:en):(branding.labels[key]?.ar||defaults[key]?.ar||ar));
+  const logo=branding.logo_data||'/solutions-logo.png';
+  useEffect(()=>{fetch(`${API}/api/v1/public/branding`).then(r=>r.json()).then(setBranding).catch(()=>{});fetch(`${API}/api/v1/public/label-defaults`).then(r=>r.json()).then(setDefaults).catch(()=>{});},[]);
+  useEffect(()=>{document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';},[lang]);
+  function switchLang(next:'en'|'ar'){setLang(next);localStorage.setItem('nuqati_lang',next);document.documentElement.lang=next;document.documentElement.dir=next==='ar'?'rtl':'ltr';}
+  async function acceptInvite(e:React.FormEvent){e.preventDefault();try{const r=await fetch(`${API}/api/v1/invitations/accept`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:inviteToken,password:invitePassword})});const d=await r.json();if(!r.ok)throw Error(d.detail||'Activation failed');setInviteStatus('Account activated. Return to the login page.');setInvitePassword('');}catch(err){setInviteStatus(String(err));}}
+  async function sendInvite(e:React.FormEvent){e.preventDefault();try{await request('/api/v1/invitations',{method:'POST',body:JSON.stringify({...invite,company_id:invite.role==='workshop_staff'?null:Number(invite.company_id)})});setMessage('Invitation sent.');setInvite({...invite,email:'',full_name:''});await loadUsers();}catch(err){setMessage(String(err));}}
+  async function resendInvite(id:number){try{await request(`/api/v1/invitations/${id}/resend`,{method:'POST'});setMessage('Invitation resent.');}catch(err){setMessage(String(err));}}
+  async function saveBranding(){try{await request('/api/v1/admin/branding',{method:'PUT',body:JSON.stringify(branding)});setMessage('Branding saved.');}catch(err){setMessage(String(err));}}
+  async function chooseLogo(file:File|undefined){if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>220000){setMessage('Choose PNG, JPEG or WebP under 220 KB');return;}const reader=new FileReader();reader.onload=()=>setBranding(b=>({...b,logo_data:String(reader.result)}));reader.readAsDataURL(file);}
+  const [token,setToken]=useState(()=>sessionStorage.getItem('nuqati_token')||'');
+  const [me,setMe]=useState<Me|null>(null);
+  const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
+  const [loginError,setLoginError]=useState('');
+  const [newUser,setNewUser]=useState({email:'',full_name:'',password:'',role:'company_admin',company_id:''});
+  const [users,setUsers]=useState<(Me&{is_active:boolean})[]>([]);
+  const [selectedInviteUserId,setSelectedInviteUserId]=useState('');
+  const [accountForm,setAccountForm]=useState({full_name:'',email:'',role:'company_admin',company_id:'',password:''});
+  const [editingUserId,setEditingUserId]=useState<number|null>(null);
+  const [userEditForm,setUserEditForm]=useState({full_name:'',role:'company_admin',company_id:'',is_active:true});
+
+  const [selectedCompany,setSelectedCompany]=useState('');
+  async function signIn(e:React.FormEvent){e.preventDefault();try{
+    const r=await fetch(`${API}/api/v1/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data=await r.json();if(!r.ok)throw new Error(data.detail||'Login failed');
+    sessionStorage.setItem('nuqati_token',data.access_token);setToken(data.access_token);setMe(data.user);setPassword('');setLoginError('');
+  }catch(err){setLoginError(String(err));}}
+  function signOut(){sessionStorage.removeItem('nuqati_token');setToken('');setMe(null);setCompanies([]);setDrivers([]);setVehicles([]);}
+
+  const [tab,setTab] = useState<'overview'|'vehicles'|'drivers'|'odometer'|'maintenance'|'companies'|'users'|'reports'|'settings'|'privacy-audit'|'safety'|'assistance'|'trips'|'live-tracking'|'historical-tracking'>('overview');
+  const [companies,setCompanies] = useState<Company[]>([]);
+  const [vehicles,setVehicles] = useState<Vehicle[]>([]);
+  const [drivers,setDrivers] = useState<Driver[]>([]);
+  const [driverDetails,setDriverDetails]=useState<Record<string,{id_number:string;site_name:string;vehicle_id:number|null}>>({});
+  const [driverLogins,setDriverLogins]=useState<Record<string,string>>({});
+  const [editingDriver,setEditingDriver]=useState<number|null>(null);
+  const [driverEditForm,setDriverEditForm]=useState({full_name:'',phone:'',status:'active',id_number:'',site_name:'',vehicle_id:''});
+  async function loadDriverExtras(){
+    try{const [details,acks]=await Promise.all([request('/api/v1/drivers/details'),request('/api/v1/drivers/login-acknowledgments')]);setDriverDetails(details.drivers||{});setDriverLogins(acks.last_logins||{});}catch(err){setMessage(String(err));}
+  }
+  function beginDriverEdit(d:Driver){const meta=driverDetails[String(d.id)];setEditingDriver(d.id);setDriverEditForm({full_name:d.full_name,phone:d.phone,status:d.status,id_number:meta?.id_number||'',site_name:meta?.site_name||'',vehicle_id:meta?.vehicle_id?String(meta.vehicle_id):''});}
+  async function saveDriverEdit(){if(editingDriver===null)return;try{
+    await request(`/api/v1/drivers/${editingDriver}`,{method:'PATCH',body:JSON.stringify({...driverEditForm,vehicle_id:driverEditForm.vehicle_id?Number(driverEditForm.vehicle_id):null})});
+    setEditingDriver(null);await load();await loadDriverExtras();setMessage('Driver updated successfully');
+  }catch(err){setMessage(String(err));}}
+
+  const [listSearch,setListSearch]=useState('');
+  const [listCompany,setListCompany]=useState('all');
+  const [listStatus,setListStatus]=useState('all');
+  const [inlineEdit,setInlineEdit]=useState<{kind:'users'|'companies'|'drivers'|'vehicles';id:number;field:string;value:string}|null>(null);
+  const [overviewDays,setOverviewDays]=useState(7);
+  const [overviewCompany,setOverviewCompany]=useState('');
+  const [overviewData,setOverviewData]=useState<any>(null);
+  const [overviewError,setOverviewError]=useState('');
+  type AssistTicket={id:number;company_id:number;driver_name:string;plate_number:string|null;category:string;description:string;latitude:number|null;longitude:number|null;status:string;resolution_note:string;created_at:string};
+  const [assistTickets,setAssistTickets]=useState<AssistTicket[]>([]);
+  const [assistPhones,setAssistPhones]=useState({manager:'',mechanic:'',electrician:'',towing:''});
+  const [assistSearch,setAssistSearch]=useState('');
+  const [assistStatus,setAssistStatus]=useState('all');
+  async function loadAssistance(){try{const [tickets,phones]=await Promise.all([request('/api/v1/workshop/assistance/requests'),request('/api/v1/workshop/assistance/contacts')]);setAssistTickets(tickets);setAssistPhones(phones);}catch(e){setMessage(String(e));}}
+  async function saveAssistPhones(){try{setAssistPhones(await request('/api/v1/workshop/assistance/contacts',{method:'PUT',body:JSON.stringify(assistPhones)}));setMessage('Workshop contacts saved');}catch(e){setMessage(String(e));}}
+  async function updateAssistTicket(ticket:AssistTicket){try{await request(`/api/v1/workshop/assistance/requests/${ticket.id}`,{method:'PATCH',body:JSON.stringify({status:ticket.status,resolution_note:ticket.resolution_note})});setMessage('Request updated');await loadAssistance();}catch(e){setMessage(String(e));}}
+  useEffect(()=>{if(tab==='assistance'&&me)void loadAssistance();},[tab,me?.id]);
+  const [stats,setStats] = useState({companies:0,drivers:0,vehicles:0,trips_active:0});
+  const [message,setMessage] = useState('');
+  const [monthlyReport,setMonthlyReport]=useState<any>(null);
+  const [reportMonth,setReportMonth]=useState(()=>new Date().toISOString().slice(0,7));
+  const [monthlyBusy,setMonthlyBusy]=useState(false);
+  const [reportPeriod,setReportPeriod]=useState('daily');
+  const [reportDriver,setReportDriver]=useState('');
+  const [reportCompany,setReportCompany]=useState('');
+  const [report,setReport]=useState<any>(null);
+  const [selectedRoute,setSelectedRoute]=useState<any>(null);
+  const [selectedTripId,setSelectedTripId]=useState<number|null>(null);
+  const [routeLoading,setRouteLoading]=useState(false);
+  const [tripSearch,setTripSearch]=useState('');
+  const [tripFrom,setTripFrom]=useState('');
+  const [tripTo,setTripTo]=useState('');
+  const [preciseTrips,setPreciseTrips]=useState<any[]|null>(null);
+  const [rangePlaying,setRangePlaying]=useState(false);
+  const [rangeQueue,setRangeQueue]=useState<number[]>([]);
+  const [rangeCursor,setRangeCursor]=useState(0);
+  const [rangeSearching,setRangeSearching]=useState(false);
+  const [fleetDriverSearch,setFleetDriverSearch]=useState('');
+  const [fleetVehicleSearch,setFleetVehicleSearch]=useState('');
+  const [trackingList,setTrackingList]=useState<'vehicles'|'drivers'>('vehicles');
+  const [fleetDriverFocus,setFleetDriverFocus]=useState('');
+  const [tripStatusFilter,setTripStatusFilter]=useState('all');
+  const [companyLogos,setCompanyLogos]=useState<Record<number,string>>({});
+  const [expandedCompany,setExpandedCompany]=useState<number|null>(null);
+  const [editingCompany,setEditingCompany]=useState<number|null>(null);
+  const [companyEditName,setCompanyEditName]=useState('');
+  const [logoCompanyId,setLogoCompanyId]=useState('');
+  const [editingCompanyVehicle,setEditingCompanyVehicle]=useState<number|null>(null);
+  const [companyVehicleForm,setCompanyVehicleForm]=useState({plate_number:'',make_model:'',year:'',odometer_km:''});
+  function openCompanyEdit(c:Company){setExpandedCompany(c.id);setEditingCompany(c.id);setCompanyEditName(c.name);}
+  async function saveCompanyName(){if(editingCompany===null||!companyEditName.trim())return;try{await request(`/api/v1/companies/${editingCompany}`,{method:'PATCH',body:JSON.stringify({name:companyEditName.trim()})});await load();setEditingCompany(null);setMessage('Company name saved');}catch(e){setMessage(String(e));}}
+  function beginCompanyVehicleEdit(v:Vehicle){setEditingCompanyVehicle(v.id);setCompanyVehicleForm({plate_number:v.plate_number,make_model:v.make_model,year:v.year==null?'':String(v.year),odometer_km:v.odometer_km==null?'':String(v.odometer_km)});}
+  async function saveCompanyVehicle(){if(editingCompanyVehicle===null)return;try{await request(`/api/v1/vehicles/${editingCompanyVehicle}`,{method:'PATCH',body:JSON.stringify({plate_number:companyVehicleForm.plate_number,make_model:companyVehicleForm.make_model,year:companyVehicleForm.year?Number(companyVehicleForm.year):null,odometer_km:companyVehicleForm.odometer_km?Number(companyVehicleForm.odometer_km):null})});await load();setEditingCompanyVehicle(null);setMessage('Vehicle saved');}catch(e){setMessage(String(e));}}
+
+  async function loadPreciseTrips(){
+    if(!tripFrom||!tripTo||new Date(tripTo)<=new Date(tripFrom)){setMessage('Choose a valid From and To date/time');return;}
+    setRangeSearching(true);
+    try{
+      const q=new URLSearchParams({start_at:new Date(tripFrom).toISOString(),end_at:new Date(tripTo).toISOString(),limit:'1000'});
+      if(me?.role==='super_admin')q.set('company_id',reportCompany);
+      const result=await request(`/api/v1/fleet/trips/search?${q}`);
+      setPreciseTrips(result.trips);setSelectedTripId(null);setSelectedRoute(null);setRangePlaying(false);
+      if(result.truncated)setMessage('Showing first 1000 trips; narrow the date range');
+    }catch(e){setMessage(String(e));}finally{setRangeSearching(false)}
+  }
+  async function startRangePlayback(ids:number[]){
+    if(!ids.length)return;
+    setRangeQueue(ids);setRangeCursor(0);setRangePlaying(true);await viewTripRoute(ids[0]);
+  }
+  function stopRangePlayback(){setRangePlaying(false);setRangeQueue([]);setRangeCursor(0);}
+  async function nextRangeTrip(){
+    if(!rangePlaying)return;
+    const next=rangeCursor+1;
+    if(next>=rangeQueue.length){stopRangePlayback();return;}
+    setRangeCursor(next);await viewTripRoute(rangeQueue[next]);
+  }
+  async function viewTripRoute(id:number){setSelectedTripId(id);setRouteLoading(true);try{setSelectedRoute(await request(`/api/v1/fleet/trips/${id}/route`));}catch(e){setMessage(String(e));}finally{setRouteLoading(false);}}
+  useEffect(()=>{if(tab!=='historical-tracking'||!selectedTripId||selectedRoute?.status!=='active')return;
+    let alive=true;const refresh=async()=>{try{const r=await request(`/api/v1/fleet/trips/${selectedTripId}/route`);if(alive)setSelectedRoute(r);}catch{/* keep last known route */}};
+    const timer=window.setInterval(refresh,15000);return()=>{alive=false;window.clearInterval(timer)};
+  },[tab,selectedTripId,selectedRoute?.status]);
+  async function loadCompanyLogo(id:number){try{const r=await request(`/api/v1/companies/${id}/driver-logo`);setCompanyLogos(old=>({...old,[id]:r.logo_data||''}));}catch(e){setMessage(String(e));}}
+  async function uploadCompanyLogo(id:number,file?:File){if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>220000){setMessage('PNG/JPEG/WebP only, maximum 220 KB');return;}const reader=new FileReader();reader.onload=async()=>{try{const logo_data=String(reader.result);await request(`/api/v1/companies/${id}/driver-logo`,{method:'PUT',body:JSON.stringify({logo_data})});setCompanyLogos(old=>({...old,[id]:logo_data}));setMessage('Company driver logo saved');}catch(e){setMessage(String(e));}};reader.readAsDataURL(file);}
+
+  const [reportLoading,setReportLoading]=useState(false);
+  const [speedThreshold,setSpeedThreshold]=useState('100');
+  const [accelThreshold,setAccelThreshold]=useState('3');
+  const [brakeThreshold,setBrakeThreshold]=useState('3');
+  type EventCondition = {event_type:string;max_gps_age_seconds:number;max_hdop:number|null;min_satellites:number|null;max_accuracy_m:number;gps_age_operator?:string;hdop_operator?:string;satellites_operator?:string;accuracy_operator?:string};
+  const eventKinds=['speeding','harsh_acceleration','harsh_braking','harsh_cornering','geofence_entry','geofence_exit','geofence_restricted'];
+  const [eventConditions,setEventConditions]=useState<EventCondition[]>([]);
+  const [openEvent,setOpenEvent]=useState<string|null>(null);
+  const [eventPolicy,setEventPolicy]=useState<{enabled:Record<string,boolean>;enforce_gps_conditions:boolean}>({enabled:{speeding:true,harsh_acceleration:true,harsh_braking:true,harsh_cornering:true,geofence_entry:true,geofence_exit:true,geofence_restricted:true},enforce_gps_conditions:true});
+  type GeoZone = {id:string;name:string;latitude:number;longitude:number;radius_m:number;mode:string;speed_limit_kmh:number|null};
+  type RiskDriver = {driver_id:number;driver_name:string;distance_km:number;score:number|null;risk:string;event_count:number};
+  const [phase4Zones,setPhase4Zones]=useState<GeoZone[]>([]);
+  const [phase4Risk,setPhase4Risk]=useState<RiskDriver[]>([]);
+  const [policyAcks,setPolicyAcks]=useState<{driver_id:number;driver_name:string;status:string;received_at:string|null}[]>([]);
+  const [scorePolicy,setScorePolicy]=useState<any>(null);
+  const [scorePolicyCompany,setScorePolicyCompany]=useState('');
+  const [phase4Settings,setPhase4Settings]=useState({cornering_ms2:3.5,min_cornering_speed_kmh:20,risk_medium_below:85,risk_high_below:70,risk_critical_below:50});
+  const [phase4Company,setPhase4Company]=useState('');
+  const [phase4Period,setPhase4Period]=useState('weekly');
+  const [zoneForm,setZoneForm]=useState({name:'',latitude:'',longitude:'',radius_m:'200',mode:'restricted',speed_limit_kmh:''});
+  const phase4Cid=me?.role==='super_admin'?(tab==='configuration'?reportCompany:phase4Company):String(me?.company_id||'');
+  async function loadPhase4(){if(!phase4Cid)return;try{
+    const [config,risk]=await Promise.all([request(`/api/v1/fleet/phase4?company_id=${phase4Cid}`),request(`/api/v1/fleet/phase4/risk?company_id=${phase4Cid}&period=${phase4Period}`)]);
+    setPhase4Zones(config.zones||[]);setPhase4Settings(config.settings);setPhase4Risk(risk.drivers||[]);
+  }catch(e){setMessage(String(e));}}
+  async function addZone(e:React.FormEvent){e.preventDefault();if(!phase4Cid)return;try{
+    if (!zoneForm.latitude || !zoneForm.longitude || !Number.isFinite(Number(zoneForm.latitude)) || !Number.isFinite(Number(zoneForm.longitude))) throw Error(lang==='ar'?'حدد موقع المنطقة على الخريطة أولًا':'Select a location on the map first');
+    await request(`/api/v1/fleet/phase4/zones?company_id=${phase4Cid}`,{method:'POST',body:JSON.stringify({name:zoneForm.name,latitude:Number(zoneForm.latitude),longitude:Number(zoneForm.longitude),radius_m:Number(zoneForm.radius_m),mode:zoneForm.mode,speed_limit_kmh:zoneForm.speed_limit_kmh?Number(zoneForm.speed_limit_kmh):null})});
+    setZoneForm({...zoneForm,name:''});await loadPhase4();
+  }catch(e){setMessage(String(e));}}
+  async function deleteZone(id:string){if(!phase4Cid)return;try{await request(`/api/v1/fleet/phase4/zones/${id}?company_id=${phase4Cid}`,{method:'DELETE'});await loadPhase4();}catch(e){setMessage(String(e));}}
+  async function savePhase4Settings(){if(!phase4Cid)return;try{await request(`/api/v1/fleet/phase4/settings?company_id=${phase4Cid}`,{method:'PUT',body:JSON.stringify(phase4Settings)});await loadPhase4();setMessage(lang==='en'?'Safety policy saved':'تم حفظ سياسة السلامة');}catch(e){setMessage(String(e));}}
+  useEffect(()=>{if(tab==='safety'&&phase4Cid)void loadPhase4();},[tab,phase4Cid,phase4Period]);
+  async function loadEventPolicy(cid:string|number){if(!cid)return;try{setEventPolicy(await request('/api/v1/fleet/event-policy?company_id='+cid));}catch(e){setMessage(String(e));}}
+  const configCid=String(me?.role==='super_admin'?reportCompany:(me?.company_id||''));
+  async function loadConfiguration(){
+    if(!configCid)return;
+    try{
+      const [settings,policyAck,phase]=await Promise.all([
+        request('/api/v1/fleet/settings?company_id='+configCid),
+        request('/api/v1/fleet/driving-policy/ack?company_id='+configCid),
+        request('/api/v1/fleet/phase4?company_id='+configCid)]);
+      setSpeedThreshold(String(settings.speeding_kmh));
+      setAccelThreshold(String(Number((Number(settings.harsh_accel_ms2)*3.6).toFixed(2))));
+      setBrakeThreshold(String(Number((Number(settings.harsh_brake_ms2)*3.6).toFixed(2))));
+      setPolicyAcks(policyAck.drivers||[]);
+      setPhase4Settings(phase.settings);
+      await Promise.all([loadEventPolicy(configCid),loadScorePolicy(configCid),loadEventConditions(configCid)]);
+    }catch(e){setMessage(String(e));}
+  }
+  useEffect(()=>{if(tab==='configuration'&&configCid)void loadConfiguration();},[tab,configCid]);
+  useEffect(()=>{
+    if(tab!=='configuration'||!configCid)return;
+    const refresh=()=>{void request('/api/v1/fleet/driving-policy/ack?company_id='+configCid).then((r:any)=>setPolicyAcks(r.drivers||[])).catch(()=>{});};
+    const interval=window.setInterval(refresh,30000);
+    return ()=>window.clearInterval(interval);
+  },[tab,configCid]);
+  async function loadScorePolicy(cid:string){if(!cid)return;try{const p=await request('/api/v1/fleet/safety-score/policy?company_id='+cid);setScorePolicy(p);setScorePolicyCompany(cid);}catch(e){setMessage(String(e));}}
+  async function saveScorePolicy(){try{const cid=String(me?.role==='super_admin'?reportCompany:(me?.company_id||''));if(!cid||!scorePolicy)throw Error('Select company and load policy');const weights=scorePolicy.weights; if(Object.values(weights).reduce((a:number,b:any)=>a+Number(b),0)!==100)throw Error('Weights must total 100%');await request('/api/v1/fleet/safety-score/policy?company_id='+cid,{method:'PUT',body:JSON.stringify({weights,excessive_speed_margin_kmh:Number(scorePolicy.excessive_speed_margin_kmh),events_per_100km_full_penalty:Number(scorePolicy.events_per_100km_full_penalty),minimum_distance_km:Number(scorePolicy.minimum_distance_km)})});setMessage(lang==='en'?'Safety score policy saved':'تم حفظ سياسة نقاط السلامة');await fetchReport();}catch(e){setMessage(String(e));}}
+  async function saveEventPolicy(){try{const cid=me?.role==='super_admin'?reportCompany:me?.company_id;if(!cid)throw Error('Select company');await request('/api/v1/fleet/event-policy?company_id='+cid,{method:'PUT',body:JSON.stringify({enabled:eventPolicy.enabled,enforce_gps_conditions:eventPolicy.enforce_gps_conditions})});setMessage(lang==='en'?'Event policy saved':'تم حفظ سياسة الأحداث');await loadEventPolicy(cid);}catch(e){setMessage(String(e));}}
+
+  async function loadEventConditions(cid:string|number){
+    if(!cid)return;
+    try{const r=await request('/api/v1/fleet/event-conditions?company_id='+cid);setEventConditions(r.events||[]);}catch(e){setMessage(String(e));}
+  }
+  function editCondition(kind:string,key:keyof EventCondition,value:any){setEventConditions(old=>old.map(c=>c.event_type===kind?{...c,[key]:value}:c));}
+  async function saveEventCondition(c:EventCondition){
+    try{const cid=me?.role==='super_admin'?reportCompany:me?.company_id;if(!cid)throw Error('Select company');
+      await request('/api/v1/fleet/event-conditions/'+c.event_type+'?company_id='+cid,{method:'PUT',body:JSON.stringify({max_gps_age_seconds:Number(c.max_gps_age_seconds),max_hdop:c.max_hdop===null?null:Number(c.max_hdop),min_satellites:c.min_satellites===null?null:Number(c.min_satellites),max_accuracy_m:Number(c.max_accuracy_m),gps_age_operator:c.gps_age_operator||'<',hdop_operator:c.hdop_operator||'<',satellites_operator:c.satellites_operator||'>',accuracy_operator:c.accuracy_operator||'<'})});
+      setMessage(lang==='en'?'Event conditions saved':'تم حفظ شروط الحدث');await loadEventConditions(cid);
+    }catch(e){setMessage(String(e));}
+  }
+  const [driverLinks,setDriverLinks]=useState<{driver_id:number;user_id:number;email:string;vehicle_id:number|null}[]>([]);
+  const [linkSelection,setLinkSelection]=useState<Record<number,{user_id:string;vehicle_id:string}>>({});
+  const [driverAccount,setDriverAccount]=useState({driver_id:'',email:'',full_name:'',password:''});
+  async function fetchReport(period=reportPeriod,driver=reportDriver,company=reportCompany){
+    setReportLoading(true);try{
+      const cid=me?.role==='super_admin'?(company||companies[0]?.id):me?.company_id;
+      if(!cid)throw new Error('Select a company');
+      const qs=new URLSearchParams({period,company_id:String(cid)});if(driver)qs.set('driver_id',driver);
+      const data=await request('/api/v1/fleet/report?'+qs);setReport(data);await loadEventPolicy(cid);setMessage('');
+      const settings=await request('/api/v1/fleet/settings?company_id='+cid);setSpeedThreshold(String(settings.speeding_kmh));setAccelThreshold(String(Number((Number(settings.harsh_accel_ms2)*3.6).toFixed(2))));setBrakeThreshold(String(Number((Number(settings.harsh_brake_ms2)*3.6).toFixed(2))));
+    }catch(err){setMessage(String(err));}finally{setReportLoading(false);}
+  }
+  useEffect(()=>{if((tab==='live-tracking'||tab==='historical-tracking')&&me&&(me.role!=='super_admin'||reportCompany))void fetchReport(tab==='live-tracking'?'daily':reportPeriod,'',reportCompany);},[tab,reportCompany,me?.id]);
+  async function loadMonthlyReport(){
+    setMonthlyBusy(true);
+    try{
+      const cid=me?.role==='super_admin'?reportCompany:me?.company_id;
+      if(!cid)throw Error('Select a company first');
+      const [year,month]=reportMonth.split('-').map(Number);
+      const params=new URLSearchParams({company_id:String(cid),year:String(year),month:String(month)});
+      if(reportDriver)params.set('driver_id',reportDriver);
+      setMonthlyReport(await request('/api/v1/fleet/monthly-reports?'+params));setMessage('');
+    }catch(err){setMessage(String(err));}finally{setMonthlyBusy(false);}
+  }
+  async function downloadMonthlyReport(kind:string,format:'pdf'|'csv'|'xlsx'){
+    try{
+      const cid=me?.role==='super_admin'?reportCompany:me?.company_id;
+      if(!cid)throw Error('Select a company first');
+      const [year,month]=reportMonth.split('-').map(Number);
+      const params=new URLSearchParams({company_id:String(cid),year:String(year),month:String(month),kind,format});
+      if(reportDriver)params.set('driver_id',reportDriver);
+      const res=await fetch(`${API}/api/v1/fleet/monthly-reports/export?${params}`,{headers:{Authorization:`Bearer ${token}`}});
+      if(!res.ok)throw Error(`Export failed (${res.status}): ${await res.text()}`);
+      const blob=await res.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');
+      a.href=url;a.download=`nuqati-${kind}-${reportMonth}.${format}`;document.body.appendChild(a);a.click();a.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),2000);
+    }catch(err){setMessage(String(err));}
+  }
+  async function createDriverAccount(e:React.FormEvent){e.preventDefault();try{
+    await request('/api/v1/driver-accounts',{method:'POST',body:JSON.stringify({...driverAccount,driver_id:Number(driverAccount.driver_id)})});
+    setDriverAccount({driver_id:'',email:'',full_name:'',password:''});setMessage('Driver app account created. Give credentials to the driver securely.');
+  }catch(err){setMessage(String(err));}}
+  async function saveSpeed(){try{const cid=me?.role==='super_admin'?reportCompany:me?.company_id;if(!cid)throw Error('Select company');const speed=Number(speedThreshold),accel=Number(accelThreshold),brake=Number(brakeThreshold);if(!Number.isFinite(speed)||speed<20||speed>200||!Number.isFinite(accel)||accel<3.6||accel>36||!Number.isFinite(brake)||brake<3.6||brake>36)throw Error('Speed: 20–200 km/h; acceleration and braking: 3.6–36 km/h/s');await request('/api/v1/fleet/settings?company_id='+cid,{method:'PUT',body:JSON.stringify({speeding_kmh:speed,harsh_accel_ms2:accel/3.6,harsh_brake_ms2:brake/3.6})});setMessage('Driving policy saved for selected company');}catch(err){setMessage(String(err));}}
+  function exportReport(){if(!report)return;const lines=[['Driver','Trips','Score','Speeding','Harsh braking','Harsh acceleration','Harsh cornering'],...report.drivers.map((d:any)=>[d.driver_name,d.trips,d.score??'',d.violations.speeding,d.violations.harsh_braking,d.violations.harsh_acceleration,d.violations.harsh_cornering??0])];const csv=lines.map(r=>r.map((v:any)=>'"'+String(v).replace(/ /g,'_')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`nuqati-${report.period}-${report.company_id}.csv`;a.click();URL.revokeObjectURL(a.href);}
+
+  const [companyName,setCompanyName] = useState('حلول الريادة - تجربة');
+  const [plate,setPlate] = useState('أ ب ج 1234');
+  const [model,setModel] = useState('Toyota Camry');
+  const [vehicleYear,setVehicleYear] = useState('');
+  const [vehicleOdometer,setVehicleOdometer] = useState('');
+  const [driverName,setDriverName] = useState('سائق تجريبي');
+  const [driverPhone,setDriverPhone] = useState('');
+  const [driverIdNumber,setDriverIdNumber]=useState('');const [driverSite,setDriverSite]=useState('');const [driverVehicle,setDriverVehicle]=useState('');const [driverInitialPassword,setDriverInitialPassword]=useState('');
+  const [readingVehicle,setReadingVehicle] = useState('');
+  type OdometerRecord = {id:number;company_id:number;vehicle_id:number;reading_km:number;source:string;note:string;created_at:string};
+  const [odometerRecords,setOdometerRecords]=useState<OdometerRecord[]>([]);
+  type PrivacyAuditRow = {event_id:string;company_id:number;driver_id:number;vehicle_id:number|null;privacy_enabled:boolean;selected_at:string;received_at:string};
+  type NotificationAuditRow = {event_id:string;company_id:number;driver_id:number;vehicle_id:number|null;notifications_enabled:boolean;selected_at:string;received_at:string};
+  type SafetyObservationRow = {event_id:string;company_id:number;driver_id:number;vehicle_id:number|null;event_type:string;speed_kmh:number|null;observed_at:string;received_at:string};
+  const [safetyObservations,setSafetyObservations]=useState<SafetyObservationRow[]>([]);
+  const [notificationAudit,setNotificationAudit]=useState<NotificationAuditRow[]>([]);
+  const [privacyAudit,setPrivacyAudit]=useState<PrivacyAuditRow[]>([]);
+  const [privacyLoading,setPrivacyLoading]=useState(false);
+  const [privacyError,setPrivacyError]=useState('');
+  const [privacyCompany,setPrivacyCompany]=useState('all');
+  const [privacyDriver,setPrivacyDriver]=useState('all');
+  const [privacyAction,setPrivacyAction]=useState('all');
+  async function loadPrivacyAudit(){
+    setPrivacyLoading(true);setPrivacyError('');
+    try{const [rows,notifications,safety]=await Promise.all([request('/api/v1/privacy-audit?limit=500'),request('/api/v1/notification-audit?limit=500'),request('/api/v1/safety-observations?limit=500')]);setPrivacyAudit(Array.isArray(rows)?rows:[]);setNotificationAudit(Array.isArray(notifications)?notifications:[]);setSafetyObservations(Array.isArray(safety)?safety:[]);}
+    catch(err){setPrivacyError(String(err));setPrivacyAudit([]);setNotificationAudit([]);}
+    finally{setPrivacyLoading(false);}
+  }
+  useEffect(()=>{if(tab==='privacy-audit'&&me)void loadPrivacyAudit();},[tab,me?.id]);
+  const privacyVisible=privacyAudit.filter(r=>(privacyCompany==='all'||String(r.company_id)===privacyCompany)&&(privacyDriver==='all'||String(r.driver_id)===privacyDriver)&&(privacyAction==='all'||(privacyAction==='enabled')===r.privacy_enabled));
+  function exportPrivacyAudit(){
+    const headers=['Event ID','Company ID','Driver ID','Vehicle ID','Action','Selected at','Received at'];
+    const cells=privacyVisible.map(r=>[r.event_id,r.company_id,r.driver_id,r.vehicle_id??'',r.privacy_enabled?'Enabled':'Disabled',r.selected_at,r.received_at]);
+    const csv=[headers,...cells].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='nuqati-privacy-audit.csv';link.click();URL.revokeObjectURL(url);
+  }
+
+  const [odometerHistoryVehicle,setOdometerHistoryVehicle]=useState('all');
+  const [odometerHistoryLoading,setOdometerHistoryLoading]=useState(false);
+  async function loadOdometerHistory(){setOdometerHistoryLoading(true);try{const rows=await request('/api/v1/odometer-readings');setOdometerRecords(Array.isArray(rows)?rows:[]);}catch(err){setMessage('Could not load odometer history: '+String(err));}finally{setOdometerHistoryLoading(false);}}
+  useEffect(()=>{if(tab==='odometer'&&me)void loadOdometerHistory();},[tab,me?.id]);
+  const [reading,setReading] = useState('');
+  const [source,setSource] = useState('MANUAL');
+  type Schedule = {id:number;vehicle_id:number;service_type:string;interval_km:number;last_service_km:number;next_due_km:number;current_odometer_km:number|null;remaining_km:number|null;status:string};
+  const [schedules,setSchedules] = useState<Schedule[]>([]);
+  const [serviceType,setServiceType] = useState('ENGINE_OIL');
+  const [interval,setInterval] = useState('5000');
+  const [lastService,setLastService] = useState('0');
+  const [warningBefore,setWarningBefore] = useState('500');
+  async function request(path:string, options?:RequestInit) {
+    const r = await fetch(`${API}${path}`, {headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`} : {}),...(options?.headers||{})},...options});
+    if(!r.ok) { const body = await r.json().catch(()=>({})); throw new Error(body.detail || `HTTP ${r.status}`); }
+    return r.json();
+  }
+  async function load() {
+    try {
+      const [s,c,v,d,m] = await Promise.all([request('/api/v1/dashboard'),request('/api/v1/companies'),request('/api/v1/vehicles'),request('/api/v1/drivers'),request('/api/v1/maintenance-schedules')]);
+      setStats(s); setCompanies(c); setVehicles(v); setDrivers(d); setSchedules(m); if(me?.role==='super_admin'||me?.role==='company_admin'||me?.role==='fleet_manager'){loadDriverLinks();loadUsers();} setMessage('');
+      if(!readingVehicle && v[0]) setReadingVehicle(String(v[0].id));
+    } catch(err) { setMessage(String(err)); }
+  }
+  useEffect(()=>{if(!token)return;request('/api/v1/auth/me').then(setMe).then(()=>load()).catch(()=>signOut());},[token]);
+  async function loadUsers(){try{setUsers(await request('/api/v1/users'));}catch(err){setMessage(String(err));}}
+  async function loadDriverLinks(){try{setDriverLinks(await request('/api/v1/driver-accounts'));}catch(err){setMessage(String(err));}}
+  async function linkDriver(driverId:number){
+    const selection=linkSelection[driverId];if(!selection?.user_id){setMessage('Select a driver login account');return;}
+    try{await request(`/api/v1/drivers/${driverId}/account-link`,{method:'PUT',body:JSON.stringify({user_id:Number(selection.user_id),vehicle_id:selection.vehicle_id?Number(selection.vehicle_id):null})});await load();await loadDriverLinks();setMessage('Driver login linked. Reopen the Android app.');}catch(err){setMessage(String(err));}
+  }
+
+  async function submitAccount(e:React.FormEvent){
+    e.preventDefault();
+    try{
+      const data={full_name:accountForm.full_name.trim(),email:accountForm.email.trim(),role:accountForm.role,company_id:Number(accountForm.company_id)};
+      await request('/api/v1/invitations',{method:'POST',body:JSON.stringify(data)});
+      setAccountForm({full_name:'',email:'',role:'company_admin',company_id:'',password:''});
+      await loadUsers();
+      setMessage('User created and invitation email sent. The user must set a password to activate the account.');
+    }catch(err){setMessage(String(err));}
+  }
+  async function sendSelectedUserEmail(){
+    if(!selectedInviteUserId){setMessage('Choose a user first.');return;}
+    try{
+      const result=await request(`/api/v1/invitations/${Number(selectedInviteUserId)}/resend`,{method:'POST'});
+      setMessage(result.status==='reminder_sent'?'Sign-in reminder sent to the active user.':'Invitation sent to the selected user.');
+      await loadUsers();
+    }catch(err){setMessage(String(err));}
+  }
+  function beginUserEdit(u:Me&{is_active:boolean}){
+    setEditingUserId(u.id);
+    setUserEditForm({full_name:u.full_name,role:u.role,company_id:String(u.company_id??''),is_active:u.is_active});
+  }
+  async function saveUserEdit(){
+    if(editingUserId===null)return;
+    try{
+      await request(`/api/v1/users/${editingUserId}`,{method:'PATCH',body:JSON.stringify({
+        full_name:userEditForm.full_name.trim(),role:userEditForm.role,
+        company_id:userEditForm.role==='super_admin'?null:Number(userEditForm.company_id),
+        is_active:userEditForm.is_active
+      })});
+      setEditingUserId(null);await loadUsers();setMessage('User changes saved.');
+    }catch(err){setMessage(String(err));}
+  }
+  async function addUser(e:React.FormEvent){e.preventDefault();try{await request('/api/v1/users',{method:'POST',body:JSON.stringify({...newUser,company_id:Number(newUser.company_id)||null})});await loadUsers();setMessage(lang==='en'?'User created':'تم إنشاء المستخدم');setNewUser({...newUser,email:'',full_name:'',password:''});}catch(err){setMessage(String(err));}}
+  async function deactivate(id:number){if(!window.confirm('Deactivate this user?'))return;try{await request(`/api/v1/users/${id}/deactivate`,{method:'PATCH'});await loadUsers();}catch(err){setMessage(String(err));}}
+  function adminEdit(kind:'users'|'companies'|'drivers'|'vehicles',id:number,field:string,current:string|number|null){
+    setInlineEdit({kind,id,field,value:String(current??'')});
+  }
+  async function saveInlineEdit(){
+    if(!inlineEdit)return;
+    const {kind,id,field,value}=inlineEdit;
+    const data:Record<string,string|number|null|boolean>={};
+    data[field]=['company_id','assigned_driver_id','year'].includes(field)?(value?Number(value):null):field==='is_active'?value.toLowerCase()==='true':value;
+    try{await request(`/api/v1/${kind}/${id}`,{method:'PATCH',body:JSON.stringify(data)});setInlineEdit(null);await load();if(kind==='users')await loadUsers();setMessage('Updated successfully');}
+    catch(err){setMessage(String(err));}
+  }
+  const searchMatches=(...parts:unknown[])=>parts.some(v=>String(v??'').toLocaleLowerCase().includes(listSearch.trim().toLocaleLowerCase()));
+  const visibleVehicles=vehicles.filter(v=>(listCompany==='all'||String(v.company_id)===listCompany)&&searchMatches(v.plate_number,v.make_model,v.year,v.odometer_km,companies.find(c=>c.id===v.company_id)?.name,drivers.find(d=>d.id===v.assigned_driver_id)?.full_name)&& (listStatus==='all'||(listStatus==='assigned'?!!v.assigned_driver_id:!v.assigned_driver_id)));
+  const visibleDrivers=drivers.filter(d=>(listCompany==='all'||String(d.company_id)===listCompany)&&(listStatus==='all'||d.status===listStatus)&&searchMatches(d.full_name,d.phone,d.status,companies.find(c=>c.id===d.company_id)?.name,vehicles.find(v=>v.assigned_driver_id===d.id)?.plate_number));
+  const visibleSchedules=schedules.filter(m=>(listCompany==='all'||String(vehicles.find(v=>v.id===m.vehicle_id)?.company_id)===listCompany)&&(listStatus==='all'||m.status===listStatus)&&searchMatches(m.service_type,m.status,vehicles.find(v=>v.id===m.vehicle_id)?.plate_number,companies.find(c=>c.id===vehicles.find(v=>v.id===m.vehicle_id)?.company_id)?.name));
+  async function loadOverview(){
+    try{const q=new URLSearchParams({days:String(overviewDays)});if(overviewCompany)q.set('company_id',overviewCompany);const result=await request(`/api/v1/fleet/overview/daily?${q}`);setOverviewData(result);setOverviewError('');}catch(e){setOverviewError(String(e));}
+  }
+  useEffect(()=>{if(token&&me&&tab==='overview')void loadOverview();},[token,me?.id,tab,overviewDays,overviewCompany,stats.trips_active]);
+  async function adminDelete(kind:'users'|'drivers'|'vehicles'|'maintenance-schedules',id:number){
+    if(!window.confirm(`Delete ${kind} #${id}? Historical trip records cannot be deleted individually; archive the driver or permanently delete the company if needed.`))return;
+    try{await request(`/api/v1/${kind}/${id}`,{method:'DELETE'});await load();if(kind==='users')await loadUsers();setMessage('Deleted successfully');}catch(err){setMessage(String(err));}
+  }
+  async function removeCompany(id:number){try{
+    const preview=await request(`/api/v1/companies/${id}/deletion-preview`);
+    const counts=Object.entries(preview.counts).map(([key,value])=>`${key}: ${value}`).join('\n');
+    const confirmedName=window.prompt(`PERMANENTLY DELETE company #${id}: ${preview.company_name}\n\nALL linked records will be erased.\n\n${counts}\n\nFirst: type the exact company name:`);
+    if(confirmedName===null)return;
+    if(confirmedName!==preview.company_name){setMessage('Name did not match. Nothing deleted.');return;}
+    const word=window.prompt('Second: type DELETE in uppercase to confirm irreversible deletion:');
+    if(word!=='DELETE'){setMessage('Deletion cancelled.');return;}
+    let backupReference: string | null = null;
+    if(preview.requires_backup){
+      backupReference=window.prompt('Third: enter the exact verified OFF-SERVER database backup reference configured by the operator in Coolify:');
+      if(!backupReference){setMessage('Backup reference required. Nothing deleted.');return;}
+    }else{
+      if(!window.confirm('STAGING ONLY: No verified backup is required. Deletion is permanent and recovery may be impossible. Continue?'))return;
+    }
+    if(!window.confirm(`FINAL WARNING: Permanently delete ${preview.company_name} and ALL associated data?`))return;
+    await request(`/api/v1/companies/${id}/permanent-delete`,{method:'POST',body:JSON.stringify({confirm_name:confirmedName,confirm_word:word,backup_reference:backupReference})});
+    await load();await loadUsers();setMessage('Company permanently deleted. Audit entry recorded.');
+  }catch(err){setMessage(String(err));}}
+
+  async function addCompany(e:React.FormEvent) { e.preventDefault(); try { await request('/api/v1/companies',{method:'POST',body:JSON.stringify({name:companyName})}); await load(); setMessage(lang==='en'?'Company added.':'تمت إضافة الشركة.'); } catch(err) {setMessage(String(err));} }
+  async function addVehicle(e:React.FormEvent) { e.preventDefault(); if(!selectedCompany && !companies[0]) {setMessage(lang==='en'?'Add a company first.':'أضف شركة أولًا.'); return;} try { await request('/api/v1/vehicles',{method:'POST',body:JSON.stringify({company_id:Number(selectedCompany||companies[0].id),plate_number:plate.trim(),make_model:model.trim(),year:vehicleYear?Number(vehicleYear):null,odometer_km:vehicleOdometer?Number(vehicleOdometer):null})}); await load(); setVehicleYear('');setVehicleOdometer('');setMessage(lang==='en'?'Vehicle added.':'تمت إضافة السيارة.'); } catch(err) {setMessage(String(err));} }
+  useEffect(()=>{if(tab==='drivers'&&me)void loadDriverExtras();},[tab,me?.id]);
+  async function addDriver(e:React.FormEvent){e.preventDefault();try{
+    const companyId=Number(me?.role==='super_admin'?(selectedCompany||companies[0]?.id):me?.company_id);
+    if(!companyId||!driverVehicle)throw Error('Select a company and an available vehicle');
+    await request('/api/v1/drivers/onboard',{method:'POST',body:JSON.stringify({company_id:companyId,full_name:driverName,phone:driverPhone,id_number:driverIdNumber,site_name:driverSite,vehicle_id:Number(driverVehicle),initial_password:driverInitialPassword})});
+    setDriverName('');setDriverPhone('');setDriverIdNumber('');setDriverSite('');setDriverVehicle('');setDriverInitialPassword('');await load();setMessage('Driver, phone login and vehicle assignment created together. Share the private temporary password securely.');
+  }catch(err){setMessage(String(err));}}
+  async function addReading(e:React.FormEvent) { e.preventDefault(); if(!readingVehicle || !vehicles.length) {setMessage(lang==='en'?'Add a vehicle first.':'أضف سيارة أولًا.'); return;} const v=vehicles.find(x=>x.id===Number(readingVehicle)); if(!v) return; try { await request('/api/v1/odometer-readings',{method:'POST',body:JSON.stringify({company_id:v.company_id,vehicle_id:v.id,reading_km:Number(reading),source,note:'Entered from Nuqati dashboard'})}); await load(); await loadOdometerHistory(); setMessage(lang==='en'?'Odometer reading saved.':'تم حفظ قراءة العداد.'); setReading(''); } catch(err) {setMessage(String(err));} }
+  async function saveSchedule(e:React.FormEvent) { e.preventDefault(); const v=vehicles.find(x=>x.id===Number(readingVehicle)); if(!v) {setMessage(lang==='en'?'Choose a vehicle first.':'اختر سيارة أولًا.');return;} try {await request('/api/v1/maintenance-schedules',{method:'PUT',body:JSON.stringify({company_id:v.company_id,vehicle_id:v.id,service_type:serviceType,interval_km:Number(interval),last_service_km:Number(lastService),warning_before_km:Number(warningBefore)})});await load();setMessage(lang==='en'?'Maintenance schedule saved.':'تم حفظ جدول الصيانة.');}catch(err){setMessage(String(err));}}
+  useEffect(()=>{if(tab!=='live-tracking'||!me||(me.role==='super_admin'&&!reportCompany))return;
+    const tick=window.setInterval(()=>{void fetchReport('daily','',reportCompany);},30000);
+    return ()=>window.clearInterval(tick);
+  },[tab,me?.id,reportCompany]);
+  const nav = [{id:'overview',label:label('overview','Overview','نظرة عامة'),icon:Activity},{id:'companies',label:label('companies','Companies','الشركات'),icon:Building2},{id:'users',label:label('users','Users & Access','المستخدمون والصلاحيات'),icon:UserCog},{id:'vehicles',label:label('vehicles','Vehicles','السيارات'),icon:CarFront},{id:'drivers',label:label('drivers','Drivers','السائقون'),icon:Users},{id:'live-tracking',label:label('live-tracking','Live Tracking','التتبع المباشر'),icon:CarFront},{id:'historical-tracking',label:label('historical-tracking','Historical Tracking','التتبع التاريخي'),icon:Route},{id:'odometer',label:label('odometer','Odometer','قراءة العداد'),icon:Gauge},{id:'assistance',label:label('assistance','Workshop Requests','طلبات الورشة'),icon:Wrench},{id:'maintenance',label:label('maintenance','Maintenance Alerts','تنبيهات الصيانة'),icon:Wrench},{id:'safety',label:label('safety','Safety & Geofences','السلامة والمناطق'),icon:ShieldCheck},{id:'configuration',label:label('configuration','Configuration','الإعدادات'),icon:ShieldCheck},{id:'privacy-audit',label:label('privacy-audit','Privacy Audit','سجل وضع الخصوصية'),icon:Shield},{id:'reports',label:label('reports','Fleet Reports','تقارير الأسطول'),icon:Route},{id:'settings',label:label('settings','Branding & Language','الهوية واللغة'),icon:UserCog}] as const;
+  if(inviteToken) return <div className="login-screen"><form className="login-card" onSubmit={acceptInvite}><img src={logo} alt="Nuqati"/><h2>Nuqati by Al-Riadah Workshop</h2><p>{lang==='en'?'Activate account':'تفعيل الحساب'}</p><label>New password (12+ characters)<input type="password" minLength={12} required value={invitePassword} onChange={e=>setInvitePassword(e.target.value)}/></label><button className="primary">Activate account</button><div className="notice">{inviteStatus}</div>{inviteStatus.startsWith('Account activated')&&<a href="/">Go to login</a>}</form></div>;
+  if(!token || !me) return <div className="login-screen"><form className="login-card" onSubmit={signIn}><img src={logo} alt="Solutions Workshop"/><h1>{lang==='en'?'NUQATI':'نقاطي'}</h1><p>Secure Fleet Management</p><label>{lang==='en'?'Email':'البريد الإلكتروني'}<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>{loginError&&<div className="notice">{loginError}</div>}<button className="primary">Sign in</button><small>{lang==='en'?'Nuqati by Al-Riadah Workshop':'نقاطي من ورشة حلول الريادة'}</small><button type="button" className="refresh" onClick={()=>switchLang(lang==='en'?'ar':'en')}>{lang==='en'?'العربية':'English'}</button></form></div>;
+  const canManage=me.role==='super_admin';
+  const canCreateUsers=me.role==='super_admin';
+  return <div className="app-shell" dir={lang==='ar'?'rtl':'ltr'}>
+    <aside className="sidebar"><div className="brand"><img className="brand-logo" src={logo} alt="Solutions Workshop"/><div><strong>{lang==='en'?'Nuqati':'نقاطي | Nuqati'}</strong><small>Al-Riadah Workshop</small></div></div>
+      {([['overview'],['companies','vehicles','drivers','live-tracking','historical-tracking'],['safety','configuration','privacy-audit'],['odometer','maintenance','assistance'],['reports'],['users','settings']] as const).map((ids,index)=>{
+        const groupNames=[lang==='en'?'Home':'الرئيسية',lang==='en'?'Fleet':'الأسطول',lang==='en'?'Safety':'السلامة',lang==='en'?'Maintenance':'الصيانة',lang==='en'?'Reports':'التقارير',lang==='en'?'Administration':'الإدارة'];
+        const allowed=nav.filter(n=>ids.some(id=>id===n.id)&&(n.id!=='companies'||me.role==='super_admin')&&(n.id!=='users'||canCreateUsers)&&(n.id!=='settings'||canCreateUsers));
+        if(!allowed.length)return null;
+        return <details key={index} open={ids.some(id=>id===tab)} className="nuqati-nav-group"><summary style={{padding:'10px 12px',cursor:'pointer',fontWeight:600}}>{groupNames[index]}</summary>{allowed.map(n=><button key={n.id} className={`nav-item ${tab===n.id?'active':''}`} onClick={()=>setTab(n.id)}><n.icon size={18}/>{n.label}</button>)}</details>;
+      })}
+      <div className="sidebar-bottom"><ShieldCheck size={18}/><span>{lang==='en'?'Staging version':'نسخة تجريبية'}</span></div>
+    </aside>
+    <main className="main"><header className="topbar"><div><span className="eyebrow">{lang==='en'?'Driver Performance Platform':'منصة أداء السائقين'}</span><h1>{nav.find(n=>n.id===tab)?.label}</h1></div><div className="header-actions">{(tab==='live-tracking'||tab==='historical-tracking')&&me.role==='super_admin'&&<label className="nuqati-top-company">{lang==='en'?'Company':'الشركة'} <select aria-label={lang==='en'?'Select company':'اختر الشركة'} value={reportCompany} onChange={e=>{setReportCompany(e.target.value);setReportDriver('');setReport(null);setSelectedTripId(null);setSelectedRoute(null);setPreciseTrips(null);setFleetDriverFocus('');}}><option value="">{lang==='en'?'Select company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}<span className="user-chip">{me.full_name} · {me.role}</span><button className="refresh" onClick={()=>switchLang(lang==='en'?'ar':'en')}>{lang==='en'?'العربية':'English'}</button><button className="refresh" onClick={()=>void load()}><RefreshCw size={16}/> {label('refresh','Refresh','تحديث')}</button><button className="refresh" onClick={signOut}><LogOut size={16}/> {label('logout','Log out','خروج')}</button></div></header>
+      {message && <div className="notice" role="status">{message}</div>}
+      {['vehicles','drivers','odometer','maintenance','reports'].includes(tab)&&<section className="nuqati-filter-bar" aria-label="Fleet list filters">
+        <label>{lang==='en'?'Search':'بحث'}<input value={listSearch} onChange={e=>{setListSearch(e.target.value);if(tab==='reports')setTripSearch(e.target.value);}} placeholder={lang==='en'?'Name, plate, phone, status or service':'الاسم أو اللوحة أو الهاتف أو الحالة'}/></label>
+        <label>{lang==='en'?'Company':'الشركة'}<select value={listCompany} onChange={e=>setListCompany(e.target.value)}><option value="all">{lang==='en'?'All companies':'كل الشركات'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+        {tab!=='reports'&&tab!=='odometer'&&<label>{lang==='en'?'Status':'الحالة'}<select value={listStatus} onChange={e=>setListStatus(e.target.value)}><option value="all">{lang==='en'?'All statuses':'كل الحالات'}</option>{(tab==='vehicles'?['assigned','unassigned']:tab==='drivers'?['active','inactive','archived']:['OK','DUE_SOON','OVERDUE','UNKNOWN']).map(x=><option value={x} key={x}>{x}</option>)}</select></label>}
+        <button type="button" className="refresh" onClick={()=>{setListSearch('');setListCompany('all');setListStatus('all');}}>{lang==='en'?'Clear':'مسح'}</button>
+      </section>}
+      {inlineEdit&&<section className="nuqati-filter-bar" aria-label="Inline field editor"><strong>{inlineEdit.kind} #{inlineEdit.id} · {inlineEdit.field}</strong><input aria-label={inlineEdit.field} value={inlineEdit.value} onChange={e=>setInlineEdit({...inlineEdit,value:e.target.value})}/><button type="button" className="primary" onClick={saveInlineEdit}>{lang==='en'?'Save':'حفظ'}</button><button type="button" className="refresh" onClick={()=>setInlineEdit(null)}>{lang==='en'?'Cancel':'إلغاء'}</button></section>}
+
+      {tab==='settings' && me.role==='super_admin' && <section className="panel"><h3>{lang==='en'?'Branding & Language':'الهوية واللغة'}</h3><p>{lang==='en'?'Global settings: only Super Admin can publish changes.':'الإعدادات العامة: يستطيع المدير العام وحده نشر التغييرات.'}</p><div className="entry-form"><label>{lang==='en'?'Dashboard logo (PNG, JPEG or WebP; under 220 KB)':'شعار لوحة التحكم (صورة بحجم أقل من ٢٢٠ كيلوبايت)'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>chooseLogo(e.target.files?.[0])}/></label><img src={logo} alt="Current logo" style={{maxWidth:160,maxHeight:100,objectFit:'contain'}}/><button className="refresh" onClick={()=>setBranding(b=>({...b,logo_data:''}))}>{lang==='en'?'Restore default logo':'استعادة الشعار الافتراضي'}</button></div><h3>{lang==='en'?'Editable navigation and core labels':'تعديل تسميات القائمة والعناصر الأساسية'}</h3><div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Key':'المفتاح'}</th><th>{lang==='en'?'English':'الإنجليزية'}</th><th>{lang==='en'?'Arabic':'العربية'}</th></tr></thead><tbody>{Object.entries(defaults).map(([key,values])=><tr key={key}><td>{key}</td>{(['en','ar'] as const).map(language=><td key={language}><input style={{width:'100%',minWidth:200}} maxLength={120} value={branding.labels[key]?.[language]??values[language]??''} onChange={e=>setBranding(b=>({...b,labels:{...b.labels,[key]:{...(b.labels[key]||{}),[language]:e.target.value}}}))}/></td>)}</tr>)}</tbody></table></div><button className="primary" onClick={saveBranding}>{lang==='en'?'Save branding and labels':'حفظ الهوية والتسميات'}</button></section>}
+      {tab==='companies' && me.role==='super_admin' && <section className="panel"><h3>{lang==='en'?'Client Companies':'الشركات العميلة'}</h3><form onSubmit={addCompany} className="entry-form"><label>{lang==='en'?'Company name':'اسم الشركة'}<input required value={companyName} onChange={e=>setCompanyName(e.target.value)}/></label><button className="primary">{lang==='en'?'Add company':'إضافة شركة'}</button></form><div className="table-wrap"><table><thead><tr><th>ID</th><th>{lang==='en'?'Company':'الشركة'}</th><th>{lang==='en'?'Drivers':'السائقون'}</th><th>{lang==='en'?'Vehicles':'السيارات'}</th><th>{lang==='en'?'Users':'المستخدمون'}</th><th>{lang==='en'?'Actions':'الإجراءات'}</th></tr></thead><tbody>{companies.map(c=><Fragment key={c.id}><tr><td>{c.id}</td><td>{c.name}</td><td>{drivers.filter(d=>d.company_id===c.id).length}</td><td>{vehicles.filter(v=>v.company_id===c.id).length}</td><td>{users.filter(u=>u.company_id===c.id).length}</td><td><button type="button" className="refresh" onClick={()=>{setExpandedCompany(expandedCompany===c.id?null:c.id);setEditingCompany(null);setEditingCompanyVehicle(null);loadUsers();loadDriverExtras();}}>{expandedCompany===c.id?'Hide details':'View / Edit details'}</button> <button type="button" className="refresh" onClick={()=>removeCompany(c.id)}><Trash2 size={14}/> Permanently delete company + linked data</button></td></tr>{expandedCompany===c.id&&<tr><td colSpan={6}><div style={{padding:16,display:'grid',gap:18}}><div><h3>{lang==='en'?'Company details':'تفاصيل الشركة'}</h3>{editingCompany===c.id?<div className="entry-form"><label>{lang==='en'?'Company name':'اسم الشركة'}<input value={companyEditName} onChange={e=>setCompanyEditName(e.target.value)}/></label><button type="button" className="primary" onClick={saveCompanyName}>{lang==='en'?'Save company':'حفظ الشركة'}</button><button type="button" className="refresh" onClick={()=>setEditingCompany(null)}>{lang==='en'?'Cancel':'إلغاء'}</button></div>:<button type="button" className="refresh" onClick={()=>openCompanyEdit(c)}>{lang==='en'?'Edit company name inline':'تعديل اسم الشركة هنا'}</button>}</div><div><h3>{lang==='en'?'Drivers':'السائقون'} ({drivers.filter(d=>d.company_id===c.id).length})</h3>{drivers.filter(d=>d.company_id===c.id).map(d=><div key={d.id} style={{padding:8,borderBottom:'1px solid #345'}}>{d.full_name} — {d.phone} — {lang==='en'?d.status:({active:'نشط',inactive:'غير نشط',archived:'مؤرشف'} as Record<string,string>)[d.status]||d.status} <button type="button" className="refresh" onClick={()=>{beginDriverEdit(d);setTab('drivers');}}>{lang==='en'?'Edit driver fields':'تعديل بيانات السائق'}</button></div>)}{!drivers.some(d=>d.company_id===c.id)&&<p>{lang==='en'?'No drivers':'لا يوجد سائقون'}</p>}</div><div><h3>{lang==='en'?'Vehicles':'السيارات'} ({vehicles.filter(v=>v.company_id===c.id).length})</h3>{vehicles.filter(v=>v.company_id===c.id).map(v=><div key={v.id} style={{padding:8,borderBottom:'1px solid #345'}}>{editingCompanyVehicle===v.id?<div className="entry-form"><label>{lang==='en'?'Plate':'اللوحة'}<input value={companyVehicleForm.plate_number} onChange={e=>setCompanyVehicleForm({...companyVehicleForm,plate_number:e.target.value})}/></label><label>{lang==='en'?'Model':'الموديل'}<input value={companyVehicleForm.make_model} onChange={e=>setCompanyVehicleForm({...companyVehicleForm,make_model:e.target.value})}/></label><label>{lang==='en'?'Year':'السنة'}<input type="number" value={companyVehicleForm.year} onChange={e=>setCompanyVehicleForm({...companyVehicleForm,year:e.target.value})}/></label><label>{lang==='en'?'Odometer (km)':'العداد (كم)'}<input type="number" value={companyVehicleForm.odometer_km} onChange={e=>setCompanyVehicleForm({...companyVehicleForm,odometer_km:e.target.value})}/></label><button type="button" className="primary" onClick={saveCompanyVehicle}>{lang==='en'?'Save vehicle':'حفظ السيارة'}</button><button type="button" className="refresh" onClick={()=>setEditingCompanyVehicle(null)}>{lang==='en'?'Cancel':'إلغاء'}</button></div>:<>{v.plate_number} — {v.make_model} <button type="button" className="refresh" onClick={()=>beginCompanyVehicleEdit(v)}>{lang==='en'?'Edit fields':'تعديل الحقول'}</button></>}</div>)}{!vehicles.some(v=>v.company_id===c.id)&&<p>{lang==='en'?'No vehicles':'لا توجد سيارات'}</p>}</div><div><h3>{lang==='en'?'Users':'المستخدمون'} ({users.filter(u=>u.company_id===c.id).length})</h3>{users.filter(u=>u.company_id===c.id).map(u=><div key={u.id} style={{padding:8,borderBottom:'1px solid #345'}}>{u.full_name} — {lang==='en'?u.role:({super_admin:'المدير العام',company_admin:'مدير الشركة',fleet_manager:'مدير الأسطول',driver:'سائق',representative:'ممثل',workshop_staff:'موظف الورشة'} as Record<string,string>)[u.role]||u.role} — {u.email} <button type="button" className="refresh" onClick={()=>{beginUserEdit(u);setTab('users');}}>Edit user fields</button></div>)}{!users.some(u=>u.company_id===c.id)&&<p>{lang==='en'?'No users':'لا يوجد مستخدمون'}</p>}</div></div></td></tr>}</Fragment>)}</tbody></table></div></section>}
+      {tab==='companies'&&<section className="panel"><h3>{lang==='en'?'Company logo for Android driver app':'شعار الشركة لتطبيق السائق'}</h3><div className="entry-form"><label>{lang==='en'?'Select company':'اختر الشركة'}<select value={logoCompanyId} onChange={e=>setLogoCompanyId(e.target.value)}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>{logoCompanyId&&<div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',padding:12}}><strong>{companies.find(c=>c.id===Number(logoCompanyId))?.name}</strong><button type="button" className="refresh" onClick={()=>loadCompanyLogo(Number(logoCompanyId))}>{lang==='en'?'View logo':'عرض الشعار'}</button>{companyLogos[Number(logoCompanyId)]&&<img src={companyLogos[Number(logoCompanyId)]} alt="Company logo" style={{width:90,height:90,objectFit:'contain'}}/>}{(me.role==='super_admin'||me.role==='company_admin')&&<input aria-label="Upload selected company logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>uploadCompanyLogo(Number(logoCompanyId),e.target.files?.[0])}/>}</div>}</section>}
+      {tab==='users' && canCreateUsers && <section className="panel">
+        <h3>{lang==='en'?'Users & Access':'المستخدمون والصلاحيات'}</h3>
+        <details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'Create a user and automatically send an activation invitation. Select any existing user below to resend an invitation or send a sign-in reminder. All edits stay inline.':'إنشاء مستخدم وإرسال دعوة تفعيل تلقائيًا. يمكنك اختيار مستخدم مسجل لإعادة إرسال الدعوة أو تذكير الدخول. جميع التعديلات ضمن الصفحة.'}</p></details>
+        <form className="entry-form" onSubmit={submitAccount}>
+          <label>{lang==='en'?'Full name':'الاسم الكامل'}<input required minLength={2} value={accountForm.full_name} onChange={e=>setAccountForm({...accountForm,full_name:e.target.value})}/></label>
+          <label>{lang==='en'?'Email':'البريد الإلكتروني'}<input type="email" required value={accountForm.email} onChange={e=>setAccountForm({...accountForm,email:e.target.value})}/></label>
+          <label>{lang==='en'?'Role':'الدور'}<select value={accountForm.role} onChange={e=>setAccountForm({...accountForm,role:e.target.value})}>{(me.role==='super_admin'?['company_admin','fleet_manager']:['fleet_manager']).map(r=><option key={r} value={r}>{lang==='en'?r:({company_admin:'مدير الشركة',fleet_manager:'مدير الأسطول'} as Record<string,string>)[r]||r}</option>)}</select></label>
+          <label>{lang==='en'?'Company':'الشركة'}<select required value={accountForm.company_id} onChange={e=>setAccountForm({...accountForm,company_id:e.target.value})}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <button className="primary">{lang==='en'?'Create user + Send invitation':'إنشاء مستخدم وإرسال الدعوة'}</button>
+        </form>
+        <h3>{lang==='en'?'Registered users':'المستخدمون المسجلون'}</h3>
+        <div className="entry-form">
+          <label>Select user to email
+            <select value={selectedInviteUserId} onChange={e=>setSelectedInviteUserId(e.target.value)}>
+              <option value="">{lang==='en'?'Choose registered user':'اختر مستخدمًا مسجلًا'}</option>
+              {users.filter(u=>u.role!=='driver' && !u.email.endsWith('@login.nuqati.invalid')).map(u=><option key={u.id} value={u.id}>{u.full_name} — {u.email} — {u.is_active?(lang==='en'?'Active':'نشط'):(lang==='en'?'Pending':'بانتظار التفعيل')}</option>)}
+            </select>
+          </label>
+          <button type="button" className="primary" disabled={!selectedInviteUserId} onClick={sendSelectedUserEmail}>{lang==='en'?'Send invitation / Reminder':'إرسال دعوة / تذكير'}</button>
+          <button type="button" className="refresh" onClick={loadUsers}>{lang==='en'?'Refresh users':'تحديث المستخدمين'}</button>
+        </div>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Name':'الاسم'}</th><th>{lang==='en'?'Email':'البريد الإلكتروني'}</th><th>{lang==='en'?'Role':'الدور'}</th><th>{lang==='en'?'Company':'الشركة'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Actions':'الإجراءات'}</th></tr></thead><tbody>
+          {users.map(u=><tr key={u.id}>
+            <td>{u.full_name}</td><td>{u.email}</td><td>{lang==='en'?u.role:({super_admin:'المدير العام',company_admin:'مدير الشركة',fleet_manager:'مدير الأسطول',driver:'سائق',representative:'ممثل',workshop_staff:'موظف الورشة'} as Record<string,string>)[u.role]||u.role}</td><td>{companies.find(c=>c.id===u.company_id)?.name||(lang==='en'?'Workshop':'الورشة')}</td><td>{u.is_active?(lang==='en'?'Active':'نشط'):(lang==='en'?'Disabled / Pending':'معطل / بانتظار التفعيل')}</td>
+            <td>{me.role==='super_admin'&&<button type="button" className="refresh" onClick={()=>beginUserEdit(u)}>{lang==='en'?'Edit details':'تعديل التفاصيل'}</button>}{!u.is_active&&<button type="button" className="refresh" onClick={()=>resendInvite(u.id)}>{lang==='en'?'Resend invitation':'إعادة إرسال الدعوة'}</button>}{u.id!==me.id&&<button type="button" className="refresh" onClick={()=>deactivate(u.id)}>{lang==='en'?'Deactivate':'تعطيل'}</button>}{me.role==='super_admin'&&u.id!==me.id&&<button type="button" className="refresh" onClick={()=>adminDelete('users',u.id)}>{lang==='en'?'Delete':'حذف'}</button>}</td>
+          </tr>)}
+        </tbody></table></div>
+        {editingUserId!==null&&<div className="panel" style={{marginTop:16}}>
+          <h3>{lang==='en'?'Edit user #':'تعديل المستخدم رقم '}{editingUserId}</h3>
+          <div className="entry-form">
+            <label>{lang==='en'?'Full name':'الاسم الكامل'}<input required value={userEditForm.full_name} onChange={e=>setUserEditForm({...userEditForm,full_name:e.target.value})}/></label>
+            <label>{lang==='en'?'Role':'الدور'}<select value={userEditForm.role} onChange={e=>setUserEditForm({...userEditForm,role:e.target.value})}>{['super_admin','company_admin','fleet_manager','representative','driver','workshop_staff'].map(r=><option key={r} value={r}>{lang==='en'?r:({company_admin:'مدير الشركة',fleet_manager:'مدير الأسطول'} as Record<string,string>)[r]||r}</option>)}</select></label>
+            {userEditForm.role!=='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select value={userEditForm.company_id} onChange={e=>setUserEditForm({...userEditForm,company_id:e.target.value})}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+            <label>{lang==='en'?'Status':'الحالة'}<select value={userEditForm.is_active?'active':'inactive'} onChange={e=>setUserEditForm({...userEditForm,is_active:e.target.value==='active'})}><option value="active">{lang==='en'?'Active':'نشط'}</option><option value="inactive">{lang==='en'?'Inactive':'غير نشط'}</option></select></label>
+            <button type="button" className="primary" onClick={saveUserEdit}>{lang==='en'?'Save changes':'حفظ التغييرات'}</button>
+            <button type="button" className="refresh" onClick={()=>setEditingUserId(null)}>{lang==='en'?'Cancel':'إلغاء'}</button>
+          </div><details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'Email and password are not editable through this endpoint; invitation and password reset remain separate secure flows.':'لا يمكن تعديل البريد الإلكتروني وكلمة المرور من هنا؛ تتم الدعوات وإعادة تعيين كلمة المرور بصورة منفصلة وآمنة.'}</p></details>
+        </div>}
+      </section>}
+      {tab==='safety'&&<section className="panel">
+        <h3>{lang==='en'?'Safety policies, geofences and driver risk':'سياسات السلامة والمناطق الجغرافية ومخاطر السائقين'}</h3>
+        <p>{lang==='en'?'GPS-based estimates; validate thresholds with controlled testing. Privacy Mode never records location.':'تقديرات معتمدة على GPS، ويجب التحقق من الحدود بالتجارب الآمنة. لا يتم تسجيل الموقع أثناء وضع الخصوصية.'}</p>
+        <div className="entry-form">
+          {me.role==='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select value={phase4Company} onChange={e=>setPhase4Company(e.target.value)}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+          <label>{lang==='en'?'Risk period':'فترة تقييم المخاطر'}<select value={phase4Period} onChange={e=>setPhase4Period(e.target.value)}><option value="daily">{lang==='en'?'24 hours':'٢٤ ساعة'}</option><option value="weekly">{lang==='en'?'7 days':'٧ أيام'}</option><option value="monthly">{lang==='en'?'30 days':'٣٠ يومًا'}</option></select></label>
+          <button type="button" className="refresh" onClick={loadPhase4}>{lang==='en'?'Refresh':'تحديث'}</button>
+        </div>
+        <h3>{lang==='en'?'Geofences (circular)':'المناطق الجغرافية (دائرية)'}</h3>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Name':'الاسم'}</th><th>{lang==='en'?'Coordinates':'الإحداثيات'}</th><th>{lang==='en'?'Radius (m)':'نصف القطر (م)'}</th><th>{lang==='en'?'Mode':'الوضع'}</th><th>{lang==='en'?'Speed limit':'حد السرعة'}</th><th>{lang==='en'?'Action':'إجراء'}</th></tr></thead><tbody>{phase4Zones.map(z=><tr key={z.id}><td>{z.name}</td><td>{z.latitude.toFixed(5)}, {z.longitude.toFixed(5)}</td><td>{z.radius_m}</td><td>{z.mode}</td><td>{z.speed_limit_kmh??'—'}</td><td>{(me.role==='super_admin'||me.role==='company_admin')&&<button className="refresh" onClick={()=>deleteZone(z.id)}>{lang==='en'?'Delete':'حذف'}</button>}</td></tr>)}</tbody></table></div>
+        {(me.role==='super_admin'||me.role==='company_admin')&&<><h3>{lang==='en'?'Add geofence':'إضافة منطقة'}</h3><form className="entry-form" onSubmit={addZone}>
+          <label>{lang==='en'?'Zone name':'اسم المنطقة'}<input required value={zoneForm.name} onChange={e=>setZoneForm({...zoneForm,name:e.target.value})}/></label>
+          <div style={{gridColumn:'1 / -1', minWidth:0}}><GeofenceMapPicker language={lang} latitude={zoneForm.latitude?Number(zoneForm.latitude):null} longitude={zoneForm.longitude?Number(zoneForm.longitude):null} radius={Number(zoneForm.radius_m)||200} onSelect={(latitude,longitude)=>setZoneForm(prev=>({...prev,latitude:latitude.toFixed(6),longitude:longitude.toFixed(6)}))}/><small>{zoneForm.latitude && zoneForm.longitude ? `${Number(zoneForm.latitude).toFixed(5)}, ${Number(zoneForm.longitude).toFixed(5)}` : (lang==='en'?'No location selected':'لم يتم اختيار موقع')}</small></div>
+          <label>{lang==='en'?'Radius (m)':'نصف القطر بالمتر'}<input required type="number" min="50" max="20000" value={zoneForm.radius_m} onChange={e=>setZoneForm({...zoneForm,radius_m:e.target.value})}/></label>
+          <label>{lang==='en'?'Mode':'نوع المنطقة'}<select value={zoneForm.mode} onChange={e=>setZoneForm({...zoneForm,mode:e.target.value})}><option value="restricted">Restricted</option><option value="monitor">Monitor</option></select></label>
+          <label>{lang==='en'?'Speed limit (km/h, optional)':'حد السرعة (اختياري)'}<input type="number" min="10" max="200" value={zoneForm.speed_limit_kmh} onChange={e=>setZoneForm({...zoneForm,speed_limit_kmh:e.target.value})}/></label>
+          <button className="primary" disabled={!phase4Cid}>{lang==='en'?'Add zone':'إضافة المنطقة'}</button>
+        </form></>}
+      </section>}
+      {tab==='assistance' && <section className="panel"><h3>{lang==='en'?'Workshop Assistance Requests':'طلبات المساعدة من الورشة'}</h3><p>{lang==='en'?'Driver reports, phone advice, technician and towing dispatch. Coordinates appear only if the driver explicitly shared them.':'بلاغات السائقين والاستشارات والإصلاح والسطحات. الموقع يظهر بموافقة السائق فقط.'}</p>
+      {me.role==='super_admin'&&<div className="entry-form">{(['manager','mechanic','electrician','towing'] as const).map(k=><label key={k}>{k}<input value={assistPhones[k]} onChange={e=>setAssistPhones({...assistPhones,[k]:e.target.value})} placeholder="+966..."/></label>)}<button type="button" className="primary" onClick={saveAssistPhones}>{lang==='en'?'Save workshop phones':'حفظ أرقام الورشة'}</button></div>}
+      <div className="entry-form"><label>{lang==='en'?'Search driver, plate, issue':'بحث السائق أو اللوحة أو المشكلة'}<input value={assistSearch} onChange={e=>setAssistSearch(e.target.value)}/></label><label>{lang==='en'?'Status':'الحالة'}<select value={assistStatus} onChange={e=>setAssistStatus(e.target.value)}>{['all','new','assigned','in_progress','awaiting_parts','at_workshop','resolved','cancelled'].map(k=><option key={k} value={k}>{k}</option>)}</select></label><button type="button" className="refresh" onClick={loadAssistance}>Refresh</button></div>
+      <div className="table-wrap"><table><thead><tr><th>ID / Date</th><th>Driver / Vehicle</th><th>Issue</th><th>GPS location</th><th>Status</th><th>Advice / resolution</th><th>Save</th></tr></thead><tbody>{assistTickets.filter(t=>(assistStatus==='all'||t.status===assistStatus)&&`${t.driver_name} ${t.plate_number||''} ${t.description} ${t.category}`.toLowerCase().includes(assistSearch.toLowerCase())).map(t=><tr key={t.id}><td>#{t.id}<br/>{new Date(t.created_at).toLocaleString()}</td><td>{t.driver_name}<br/>{t.plate_number||'—'}</td><td><strong>{t.category}</strong><br/>{t.description}</td><td>{t.latitude!=null&&t.longitude!=null?<a target="_blank" rel="noopener noreferrer" href={`https://www.google.com/maps?q=${t.latitude},${t.longitude}`}>View shared GPS</a>:'Not shared'}</td><td><select value={t.status} onChange={e=>setAssistTickets(all=>all.map(x=>x.id===t.id?{...x,status:e.target.value}:x))}>{['new','assigned','in_progress','awaiting_parts','at_workshop','resolved','cancelled'].map(v=><option key={v}>{v}</option>)}</select></td><td><textarea rows={2} value={t.resolution_note} onChange={e=>setAssistTickets(all=>all.map(x=>x.id===t.id?{...x,resolution_note:e.target.value}:x))}/></td><td><button type="button" className="refresh" onClick={()=>updateAssistTicket(t)}>Save</button></td></tr>)}</tbody></table></div></section>}
+      {tab==='privacy-audit' && <section className="panel">
+        <div className="panel-heading"><div><h3>{lang==='en'?'Privacy Mode Audit':'سجل تفعيل وإيقاف وضع الخصوصية'}</h3><p>{lang==='en'?'Driver privacy selections, without location or route information.':'سجل اختيارات السائق لوضع الخصوصية دون حفظ الموقع أو مسار الرحلة.'}</p></div></div>
+        <div className="entry-form">
+          {me.role==='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select value={privacyCompany} onChange={e=>setPrivacyCompany(e.target.value)}><option value="all">{lang==='en'?'All companies':'جميع الشركات'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+          <label>{lang==='en'?'Driver':'السائق'}<select value={privacyDriver} onChange={e=>setPrivacyDriver(e.target.value)}><option value="all">{lang==='en'?'All drivers':'جميع السائقين'}</option>{drivers.filter(d=>privacyCompany==='all'||String(d.company_id)===privacyCompany).map(d=><option key={d.id} value={d.id}>{d.full_name}</option>)}</select></label>
+          <label>{lang==='en'?'Action':'الإجراء'}<select value={privacyAction} onChange={e=>setPrivacyAction(e.target.value)}><option value="all">{lang==='en'?'All actions':'جميع الإجراءات'}</option><option value="enabled">{lang==='en'?'Privacy enabled':'تفعيل الخصوصية'}</option><option value="disabled">{lang==='en'?'Privacy disabled':'إيقاف الخصوصية'}</option></select></label>
+          <button type="button" className="refresh" disabled={privacyLoading} onClick={loadPrivacyAudit}><RefreshCw size={16}/>{privacyLoading?(lang==='en'?'Loading…':'جارٍ التحميل…'):(lang==='en'?'Refresh':'تحديث')}</button>
+          <button type="button" className="refresh" disabled={!privacyVisible.length} onClick={exportPrivacyAudit}>{lang==='en'?'Export CSV':'تصدير CSV'}</button>
+        </div>
+        {privacyError&&<div className="notice" role="alert">{lang==='en'?'Unable to load privacy audit: ':'تعذر تحميل سجل الخصوصية: '}{privacyError}</div>}
+        <p>{lang==='en'?`Showing ${privacyVisible.length} records (up to 500 latest from server).`:`عرض ${privacyVisible.length} سجل (حتى آخر 500 سجل من الخادم).`}</p>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Vehicle':'السيارة'}</th><th>{lang==='en'?'Company':'الشركة'}</th><th>{lang==='en'?'Action':'الإجراء'}</th><th>{lang==='en'?'Selected on phone':'وقت الاختيار على الهاتف'}</th><th>{lang==='en'?'Received by server':'وقت الاستلام بالخادم'}</th><th>{lang==='en'?'Event ID':'معرّف الحدث'}</th></tr></thead><tbody>{privacyVisible.map(r=><tr key={r.event_id}><td>{drivers.find(d=>d.id===r.driver_id)?.full_name||`#${r.driver_id}`}</td><td>{r.vehicle_id==null?'—':vehicles.find(v=>v.id===r.vehicle_id)?.plate_number||`#${r.vehicle_id}`}</td><td>{companies.find(c=>c.id===r.company_id)?.name||`#${r.company_id}`}</td><td><span className="status">{r.privacy_enabled?(lang==='en'?'Privacy ON':'الخصوصية مفعّلة'):(lang==='en'?'Privacy OFF':'الخصوصية متوقفة')}</span></td><td>{new Date(r.selected_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td><td>{new Date(r.received_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td><td title={r.event_id}>{r.event_id.slice(0,14)}…</td></tr>)}</tbody></table>{!privacyLoading&&!privacyError&&!privacyVisible.length&&<div className="empty">{lang==='en'?'No privacy events found.':'لا توجد أحداث خصوصية.'}</div>}</div>
+        <h3 style={{marginTop:24}}>{lang==='en'?'Driving notification settings audit':'سجل إعدادات إشعارات القيادة'}</h3>
+        <p>{lang==='en'?'Most recent changes submitted by drivers (offline changes appear after synchronization).':'آخر تغييرات الإشعارات المرسلة من السائقين (تظهر التغييرات دون اتصال بعد المزامنة).'}</p>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Vehicle':'السيارة'}</th><th>{lang==='en'?'Company':'الشركة'}</th><th>{lang==='en'?'Notifications':'الإشعارات'}</th><th>{lang==='en'?'Selected on phone':'وقت الاختيار'}</th><th>{lang==='en'?'Received':'وقت الاستلام'}</th></tr></thead><tbody>{notificationAudit.filter(r=>(privacyCompany==='all'||String(r.company_id)===privacyCompany)&&(privacyDriver==='all'||String(r.driver_id)===privacyDriver)).map(r=><tr key={r.event_id}><td>{drivers.find(d=>d.id===r.driver_id)?.full_name||`#${r.driver_id}`}</td><td>{r.vehicle_id==null?'—':vehicles.find(v=>v.id===r.vehicle_id)?.plate_number||`#${r.vehicle_id}`}</td><td>{companies.find(c=>c.id===r.company_id)?.name||`#${r.company_id}`}</td><td><span className="status">{r.notifications_enabled?(lang==='en'?'Enabled':'مفعّلة'):(lang==='en'?'Disabled':'متوقفة')}</span></td><td>{new Date(r.selected_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td><td>{new Date(r.received_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td></tr>)}</tbody></table>{notificationAudit.length===0&&<div className="empty">{lang==='en'?'No notification preference events yet.':'لا توجد تغييرات مسجلة لإعدادات الإشعارات.'}</div>}</div>
+        <h4>{lang==='en'?'Driving camera activity observations':'ملاحظات نشاط الكاميرا أثناء القيادة'}</h4>
+        <p>{lang==='en'?'Camera busy is not proof of a video call. No camera frames, photos or audio are uploaded.':'انشغال الكاميرا لا يثبت إجراء مكالمة فيديو. لا يتم رفع صور أو فيديو أو صوت.'}</p>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Vehicle':'السيارة'}</th><th>{lang==='en'?'Observation':'الملاحظة'}</th><th>{lang==='en'?'Speed km/h':'السرعة كم/س'}</th><th>{lang==='en'?'Time':'الوقت'}</th></tr></thead><tbody>{safetyObservations.filter(r=>(privacyCompany==='all'||String(r.company_id)===privacyCompany)&&(privacyDriver==='all'||String(r.driver_id)===privacyDriver)).map(r=><tr key={r.event_id}><td>{drivers.find(d=>d.id===r.driver_id)?.full_name||`#${r.driver_id}`}</td><td>{vehicles.find(v=>v.id===r.vehicle_id)?.plate_number||'—'}</td><td>{lang==='en'?'Possible camera use':'احتمال استخدام الكاميرا'}</td><td>{r.speed_kmh?.toFixed(0)??'—'}</td><td>{new Date(r.observed_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td></tr>)}</tbody></table></div>
+        <div className="tip">{lang==='en'?'Audit entries record privacy selection only. No private-trip GPS positions are stored in this audit.':'يسجل هذا السجل اختيار وضع الخصوصية فقط ولا يخزن مواقع GPS للرحلات الخاصة.'}</div>
+      </section>}
+      {tab==='configuration'&&<section className="panel">
+        <h3>{lang==='en'?'Company Safety Configuration':'إعدادات سلامة الشركة'}</h3>
+        <p>{lang==='en'?'Driver apps download policies periodically; acknowledgment confirms the saved policy version.':'تستلم تطبيقات السائقين الإعدادات دورياً ويؤكد الاستلام النسخة المحفوظة.'}</p>
+        {me.role==='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select value={reportCompany} onChange={e=>setReportCompany(e.target.value)}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+        <button className="refresh" disabled={!configCid} onClick={()=>void loadConfiguration()}>{lang==='en'?'Refresh settings & acknowledgments':'تحديث الإعدادات والتأكيدات'}</button>
+        {(me.role==='super_admin'||me.role==='company_admin')&&<div className="entry-form"><label>{lang==='en'?'Speeding threshold (km/h)':'حد السرعة (كم/ساعة)'}<input type="number" min="20" max="200" step="1" value={speedThreshold} onChange={e=>setSpeedThreshold(e.target.value)}/></label><label>{lang==='en'?'Harsh acceleration threshold (km/h/s)':'حد التسارع العنيف (كم/ساعة/ثانية)'}<input type="number" min="3.6" max="36" step="0.1" value={accelThreshold} onChange={e=>setAccelThreshold(e.target.value)}/></label><label>{lang==='en'?'Harsh braking threshold (km/h/s)':'حد الفرملة العنيفة (كم/ساعة/ثانية)'}<input type="number" min="3.6" max="36" step="0.1" value={brakeThreshold} onChange={e=>setBrakeThreshold(e.target.value)}/></label><button className="refresh" disabled={me.role==='super_admin'&&!reportCompany} onClick={saveSpeed}>{lang==='en'?'Save company policy':'حفظ سياسة الشركة'}</button><small>Settings apply only to the selected company. Generate report to load its current policy.</small></div>}
+        {(me.role==='super_admin'||me.role==='company_admin')&&<details style={{margin:'14px 0',padding:14,border:'1px solid #35495a',borderRadius:10}}><summary style={{cursor:'pointer',fontWeight:700}}>{lang==='en'?'Driver Safety Score · Configurable weights':'نقاط سلامة السائق · أوزان قابلة للتعديل'}</summary><button className="refresh" style={{marginTop:10}} onClick={()=>loadScorePolicy(String(me.role==='super_admin'?reportCompany:me.company_id||''))}>{lang==='en'?'Load scoring policy':'تحميل سياسة التقييم'}</button>{scorePolicy&&scorePolicyCompany===String(me.role==='super_admin'?reportCompany:me.company_id||'')&&<div className="entry-form" style={{marginTop:12}}>{(['harsh_acceleration','harsh_braking','harsh_cornering','speeding','excessive_speeding'] as const).map(k=><label key={k}>{({harsh_acceleration:lang==='en'?'Harsh acceleration %':'التسارع العنيف %',harsh_braking:lang==='en'?'Harsh braking %':'الفرملة العنيفة %',harsh_cornering:lang==='en'?'Harsh cornering %':'الانعطاف الحاد %',speeding:lang==='en'?'Speeding %':'تجاوز السرعة %',excessive_speeding:lang==='en'?'Excessive speeding %':'تجاوز السرعة الشديد %'} as Record<string,string>)[k]}<input type="number" min="0" max="100" step="1" value={scorePolicy.weights[k]} onChange={e=>setScorePolicy((v:any)=>({...v,weights:{...v.weights,[k]:Number(e.target.value)}}))}/></label>)}<label>{lang==='en'?'Excessive speed margin (km/h)':'هامش تجاوز السرعة الشديد (كم/ساعة)'}<input type="number" min="5" max="100" value={scorePolicy.excessive_speed_margin_kmh} onChange={e=>setScorePolicy((v:any)=>({...v,excessive_speed_margin_kmh:Number(e.target.value)}))}/></label><label>{lang==='en'?'Events per 100 km for full category penalty':'الأحداث لكل ١٠٠ كم للخصم الكامل'}<input type="number" min="1" max="100" value={scorePolicy.events_per_100km_full_penalty} onChange={e=>setScorePolicy((v:any)=>({...v,events_per_100km_full_penalty:Number(e.target.value)}))}/></label><strong>{lang==='en'?'Total':'المجموع'}: {Object.values(scorePolicy.weights).reduce((a:number,b:any)=>a+Number(b),0)}%</strong><button className="primary" onClick={saveScorePolicy}>{lang==='en'?'Save score policy':'حفظ سياسة التقييم'}</button></div>}</details>}
+        {(me.role==='super_admin'||me.role==='company_admin')&&<div style={{marginTop:18,marginBottom:18}}>
+          <h3>{lang==='en'?'Driving event controls':'التحكم بأحداث القيادة'}</h3>
+          <div style={{border:'1px solid #35495a',borderRadius:12,padding:16,marginBottom:18}}>
+            {eventKinds.map(kind=><label key={kind} style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}><input type="checkbox" checked={eventPolicy.enabled[kind]!==false} onChange={e=>setEventPolicy(old=>({...old,enabled:{...old.enabled,[kind]:e.target.checked}}))}/><span>{kind==='speeding'?(lang==='en'?'Detect speeding':'رصد تجاوز السرعة'):kind==='harsh_acceleration'?(lang==='en'?'Detect harsh acceleration':'رصد التسارع العنيف'):kind==='harsh_braking'?(lang==='en'?'Detect harsh braking':'رصد الفرملة العنيفة'):kind==='harsh_cornering'?(lang==='en'?'Detect harsh cornering':'رصد الانعطاف الحاد'):kind==='geofence_entry'?(lang==='en'?'Detect geofence entry':'رصد دخول المنطقة'):kind==='geofence_exit'?(lang==='en'?'Detect geofence exit':'رصد الخروج من المنطقة'):(lang==='en'?'Detect restricted geofence':'رصد المنطقة المحظورة')}</span></label>)}
+            <label style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}><input type="checkbox" checked={eventPolicy.enforce_gps_conditions} onChange={e=>setEventPolicy(old=>({...old,enforce_gps_conditions:e.target.checked}))}/><span>{lang==='en'?'Require additional GPS event conditions':'اشتراط شروط GPS الإضافية'}</span></label>
+            <p style={{fontSize:13,opacity:.8}}>{lang==='en'?'Turning off GPS conditions bypasses age/HDOP/satellite/accuracy event gates, but does not disable GPS collection or its basic accuracy filter. Turning off event detection never stops GPS tracking.':'تعطيل شروط GPS يتجاوز شروط عمر القراءة والأقمار والدقة الإضافية للأحداث فقط، ولا يوقف تسجيل الموقع أو فلتر الدقة الأساسي. تعطيل الأحداث لا يوقف التتبع.'}</p>
+            <button className="primary" onClick={saveEventPolicy}>{lang==='en'?'Save event switches':'حفظ إعدادات الأحداث'}</button>
+          </div>
+          <h3>{lang==='en'?'GPS event conditions':'شروط أحداث نظام تحديد المواقع'}</h3>
+          <button className="refresh" onClick={()=>loadEventConditions(String(me.role==='super_admin'?reportCompany:me.company_id||''))}>{lang==='en'?'Load event conditions':'تحميل شروط الأحداث'}</button>
+          {eventKinds.map(kind=>{const c=eventConditions.find(x=>x.event_type===kind);const label=({speeding:lang==='en'?'Overspeeding':'تجاوز السرعة',harsh_acceleration:lang==='en'?'Harsh acceleration':'التسارع العنيف',harsh_braking:lang==='en'?'Harsh braking':'الفرملة العنيفة',harsh_cornering:lang==='en'?'Harsh cornering':'الانعطاف الحاد',geofence_entry:lang==='en'?'Geofence entry':'دخول المنطقة',geofence_exit:lang==='en'?'Geofence exit':'الخروج من المنطقة',geofence_restricted:lang==='en'?'Restricted geofence':'منطقة محظورة'} as Record<string,string>)[kind];return <div key={kind} style={{border:'1px solid #35495a',borderRadius:10,padding:12,marginTop:10}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}><strong>{label} — {kind==='speeding'?speedThreshold+' km/h':(kind==='harsh_acceleration'?accelThreshold:brakeThreshold)+' km/h/s'}</strong><button className="refresh" onClick={()=>{setOpenEvent(openEvent===kind?null:kind);if(!c)loadEventConditions(String(me.role==='super_admin'?reportCompany:me.company_id||''));}}>{openEvent===kind?(lang==='en'?'Hide conditions':'إخفاء الشروط'):(lang==='en'?'Edit conditions':'تعديل الشروط')}</button></div>
+            {openEvent===kind&&c&&<div style={{marginTop:12,padding:12,borderRadius:8,background:'rgba(120,160,160,.08)'}}>
+              <p style={{margin:'0 0 10px'}}>{lang==='en'?'Event occurs only when ALL conditions are met:':'يُسجّل الحدث فقط عند تحقق جميع الشروط:'}</p>
+              <div style={{padding:12,borderLeft:'3px solid #a6d84d',borderRadius:8}}>
+                <div style={{fontWeight:700,marginBottom:8}}>{label} {kind==='speeding'?' > '+speedThreshold+' km/h':kind==='harsh_acceleration'?' > '+accelThreshold+' km/h/s':' > '+brakeThreshold+' km/h/s'}</div>
+                <div style={{paddingLeft:12}}>(
+                  {([
+                    ['max_gps_age_seconds','gps_age_operator',lang==='en'?'GPS age (seconds)':'عمر قراءة الموقع (ثانية)',0.1,60,0.1],
+                    ['max_hdop','hdop_operator',lang==='en'?'GPS HDOP':'تشتت دقة الموقع',0.1,50,0.1],
+                    ['min_satellites','satellites_operator',lang==='en'?'GPS satellites':'عدد الأقمار الصناعية',1,50,1],
+                    ['max_accuracy_m','accuracy_operator',lang==='en'?'GPS accuracy (meters)':'خطأ الموقع (متر)',1,500,1]
+                  ] as const).map(([field,operator,title,min,max,step],idx)=><div key={field} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',padding:'6px 0'}}>
+                    <span style={{minWidth:180}}>{title}</span>
+                    <select aria-label={title+' operator'} style={{width:85}} value={(c as any)[operator]||(operator==='satellites_operator'?'>':'<')} onChange={e=>editCondition(kind,operator,e.target.value)}>{['<','<=','=','>=','>'].map(op=><option key={op} value={op}>{op}</option>)}</select>
+                    <input aria-label={title+' value'} type="number" min={min} max={max} step={step} style={{width:115}} placeholder={lang==='en'?'Disabled':'معطل'} value={(c as any)[field]??''} onChange={e=>editCondition(kind,field,e.target.value===''&&field!=='max_gps_age_seconds'&&field!=='max_accuracy_m'?null:e.target.value)}/>
+                    {idx<3&&<strong style={{color:'#a6d84d'}}>AND</strong>}
+                  </div>)}
+                )</div>
+              </div>
+              <button className="primary" style={{marginTop:12}} onClick={()=>saveEventCondition(c)}>{lang==='en'?'Save event conditions':'حفظ شروط الحدث'}</button>
+              <details style={{marginTop:10}}><summary>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p>{lang==='en'?'All enabled conditions must pass. Blank HDOP or satellite fields disable that specific check. Missing required GPS metrics reject events.':'يجب تحقق جميع الشروط المفعلة. ترك قيمة تشتت الدقة أو الأقمار فارغة يعطل ذلك الشرط. نقص بيانات الموقع المطلوبة يمنع تسجيل المخالفة.'}</p></details>
+            </div>}
+          </div>})}
+        </div>}
+
+        <h3>{lang==='en'?'Cornering and risk thresholds':'حدود الانعطاف والمخاطر'}</h3>
+        <div className="entry-form">{(['cornering_ms2','min_cornering_speed_kmh','risk_medium_below','risk_high_below','risk_critical_below'] as const).map(k=><label key={k}>{k.replaceAll('_',' ')}<input type="number" step="any" value={phase4Settings[k]} onChange={e=>setPhase4Settings(v=>({...v,[k]:Number(e.target.value)}))}/></label>)}<button className="primary" disabled={!phase4Cid} onClick={savePhase4Settings}>{lang==='en'?'Save policy':'حفظ السياسة'}</button></div>
+        <h3>{lang==='en'?'Policy delivery acknowledgment':'تأكيد استلام سياسة القيادة'}</h3>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Received at':'وقت الاستلام'}</th></tr></thead><tbody>{policyAcks.map(a=><tr key={a.driver_id}><td>{a.driver_name}</td><td>{a.status==='received'?(lang==='en'?'Received':'تم الاستلام'):(lang==='en'?'Pending':'معلق')}</td><td>{a.received_at?new Date(a.received_at).toLocaleString():'—'}</td></tr>)}</tbody></table></div>
+      </section>}
+      {tab==='reports' && <section className="panel"><h3>{lang==='en'?'Fleet Intelligence · Driver Reports':'تحليلات الأسطول · تقارير السائقين'}</h3><details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'Company administrators see only their own drivers. Select a driver for individual trip and violation details. Latest location is not necessarily live.':'يرى مديرو الشركات سائقي شركاتهم فقط. اختر سائقًا لعرض الرحلات والمخالفات. قد لا يكون آخر موقع مسجل مباشرًا.'}</p></details>
+        <div className="entry-form">{me.role==='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select value={reportCompany} onChange={e=>{const cid=e.target.value;setReportCompany(cid);setReport(null);if(cid){loadEventConditions(cid);loadEventPolicy(cid);}setReportDriver('');if(cid)request('/api/v1/fleet/settings?company_id='+cid).then(settings=>{setSpeedThreshold(String(settings.speeding_kmh));setAccelThreshold(String(Number((Number(settings.harsh_accel_ms2)*3.6).toFixed(2))));setBrakeThreshold(String(Number((Number(settings.harsh_brake_ms2)*3.6).toFixed(2))));}).catch(err=>setMessage(String(err)));}}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+        <label>{lang==='en'?'Period':'الفترة'}<select value={reportPeriod} onChange={e=>setReportPeriod(e.target.value)}>{['daily','weekly','monthly','yearly'].map(x=><option key={x} value={x}>{lang==='en'?x:({daily:'يومي',weekly:'أسبوعي',monthly:'شهري',yearly:'سنوي'} as Record<string,string>)[x]}</option>)}</select></label>
+        <label>{lang==='en'?'Driver':'السائق'}<select value={reportDriver} onChange={e=>setReportDriver(e.target.value)}><option value="">{lang==='en'?'All drivers':'جميع السائقين'}</option>{drivers.filter(d=>d.company_id===Number(me.role==='super_admin'?(reportCompany||companies[0]?.id):me.company_id)).map(d=><option key={d.id} value={d.id}>{d.full_name}</option>)}</select></label>
+        <button className="primary" disabled={reportLoading} onClick={()=>fetchReport()}>{reportLoading?'Loading...':'Generate report'}</button><button className="refresh" disabled={!report} onClick={exportReport}>{lang==='en'?'Export CSV':'تصدير CSV'}</button></div>
+        <details open style={{margin:'16px 0',padding:16,border:'1px solid #35495a',borderRadius:12}}>
+          <summary style={{fontWeight:700,cursor:'pointer'}}>{lang==='en'?'Monthly Reports Center — PDF / CSV / Excel':'مركز التقارير الشهرية — PDF / CSV / Excel'}</summary>
+          <div className="entry-form" style={{marginTop:12}}>
+            <label>{lang==='en'?'Report month':'شهر التقرير'}<input type="month" value={reportMonth} onChange={e=>{setReportMonth(e.target.value);setMonthlyReport(null);}}/></label>
+            <button className="primary" disabled={monthlyBusy||!reportMonth} onClick={loadMonthlyReport}>{monthlyBusy?'Loading…':lang==='en'?'Generate monthly reports':'إنشاء التقارير الشهرية'}</button>
+          </div>
+          <small>{lang==='en'?'Uses the company and driver filters above. Leave driver as All drivers for company-wide reports.':'يستخدم فلتر الشركة والسائق أعلاه. اختر جميع السائقين للحصول على تقارير الشركة كاملة.'}</small>
+          {monthlyReport&&<>
+            <div className="stats" style={{marginTop:12}}><article className="stat-card"><span>{lang==='en'?'Vehicles':'المركبات'}</span><strong>{monthlyReport.vehicles.length}</strong></article><article className="stat-card"><span>{lang==='en'?'Drivers':'السائقون'}</span><strong>{monthlyReport.drivers.length}</strong></article></div>
+            {(['vehicles','utilization','rag','violations'] as const).map(kind=><div key={kind} style={{padding:'12px 0',borderBottom:'1px solid #35495a',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+              <strong>{({vehicles:lang==='en'?'Vehicles & assigned drivers':'المركبات والسائقون المعينون',utilization:lang==='en'?'Driver utilization by vehicle':'استخدام السائق لكل مركبة',rag:lang==='en'?'Monthly RAG score':'تصنيف السائقين الشهري',violations:lang==='en'?'Monthly driver violations':'مخالفات السائقين الشهرية'} as Record<string,string>)[kind]}</strong>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{(['pdf','csv','xlsx'] as const).map(fmt=><button key={fmt} className="refresh" onClick={()=>downloadMonthlyReport(kind,fmt)}>{fmt==='xlsx'?'Excel':fmt.toUpperCase()}</button>)}</div>
+            </div>)}
+            <div className="table-wrap" style={{marginTop:14}}><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Trips':'الرحلات'}</th><th>km</th><th>{lang==='en'?'Hours':'الساعات'}</th><th>{lang==='en'?'Score':'النقاط'}</th><th>RAG</th><th>{lang==='en'?'Total violations':'مجموع المخالفات'}</th></tr></thead><tbody>{monthlyReport.drivers.map((d:any)=><tr key={d.driver_id}><td>{d.driver_name}</td><td>{d.trip_count}</td><td>{d.distance_km}</td><td>{d.driving_hours}</td><td>{d.score??'—'}</td><td style={{fontWeight:700,color:d.rag==='Green'?'#22c55e':d.rag==='Amber'?'#eab308':d.rag==='Red'?'#ef4444':'inherit'}}>{d.rag}</td><td>{d.total_violations}</td></tr>)}</tbody></table></div>
+            <small>{lang==='en'?'Excessive speeding is included within speeding totals. Driving hours represent completed-trip duration. No data means insufficient distance for scoring.':'تجاوز السرعة الشديد جزء من مجموع تجاوز السرعة. ساعات القيادة هي مدة الرحلات المكتملة. عدم وجود نقاط يعني عدم كفاية المسافة.'}</small>
+          </>}
+        </details>
+        {report&&<><div className="stats"><article className="stat-card"><span>{lang==='en'?'Drivers':'السائقون'}</span><strong>{report.driver_count}</strong></article><article className="stat-card"><span>{lang==='en'?'Trips':'الرحلات'}</span><strong>{report.trip_count}</strong></article><article className="stat-card"><span>{lang==='en'?'Average score':'متوسط التقييم'}</span><strong>{report.average_score??'No data'}</strong></article></div>
+        <div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Trips':'الرحلات'}</th><th>{lang==='en'?'Score /100':'التقييم / ١٠٠'}</th><th>{lang==='en'?'Risk':'المخاطر'}</th><th>{lang==='en'?'Speeding':'تجاوز السرعة'}</th><th>{lang==='en'?'Harsh braking':'الفرملة العنيفة'}</th><th>{lang==='en'?'Harsh acceleration':'التسارع العنيف'}</th><th>{lang==='en'?'Harsh cornering':'الانعطاف الحاد'}</th><th>{lang==='en'?'Last GPS':'آخر موقع GPS'}</th></tr></thead><tbody>{report.drivers.map((d:any)=><tr key={d.driver_id}><td>{d.driver_name}</td><td>{d.trips}</td><td>{d.score??'—'}</td><td>{d.risk??'—'}</td><td>{d.violations.speeding}</td><td>{d.violations.harsh_braking}</td><td>{d.violations.harsh_acceleration}</td><td>{d.violations.harsh_cornering??0}</td><td>{d.latest_location?<><a href={`https://www.openstreetmap.org/?mlat=${d.latest_location.latitude}&mlon=${d.latest_location.longitude}#map=15/${d.latest_location.latitude}/${d.latest_location.longitude}`} target="_blank" rel="noreferrer">{lang==='en'?'View map':'عرض الخريطة'}</a><small> {new Date(d.latest_location.recorded_at).toLocaleString()}</small></>:(lang==='en'?'No GPS data':'لا توجد بيانات موقع')}</td></tr>)}</tbody></table></div>
+
+      </>}
+      </section>}
+      {tab==='live-tracking'&&<section className="panel nuqati-tracking-page">
+        <div className="nuqati-tracking-heading"><div><h2>{lang==='en'?'Live Tracking':'التتبع المباشر'}</h2><p>{lang==='en'?'Latest reported positions · automatically refreshed every 30 seconds':'آخر المواقع المسجلة · تحديث كل ٣٠ ثانية'}</p></div><button type="button" className="primary" disabled={reportLoading||(!reportCompany&&me.role==='super_admin')} onClick={()=>fetchReport('daily','',reportCompany)}><RefreshCw size={15}/> {lang==='en'?'Refresh positions':'تحديث المواقع'}</button></div>
+        {report? <div className="nuqati-tracking-workspace" dir={lang==='ar'?'rtl':'ltr'}>
+              <div className="nuqati-tracking-list"><div className="nuqati-tracking-tabs"><button type="button" className={trackingList==='vehicles'?'selected':''} onClick={()=>setTrackingList('vehicles')}>{lang==='en'?'Vehicles':'المركبات'}</button><button type="button" className={trackingList==='drivers'?'selected':''} onClick={()=>setTrackingList('drivers')}>{lang==='en'?'Drivers':'السائقون'}</button></div>
+              {trackingList==='vehicles'?<>              <aside className="nuqati-map-side nuqati-vehicle-side"><h3>{lang==='en'?'Vehicles':'المركبات'} ({vehicles.filter(v=>v.company_id===Number(reportCompany||me.company_id)).length})</h3>
+                <input aria-label="Search vehicles" placeholder={lang==='en'?'Search plate / model':'ابحث برقم اللوحة أو الطراز'} value={fleetVehicleSearch} onChange={e=>setFleetVehicleSearch(e.target.value)}/>
+                <div className="nuqati-side-scroll">{vehicles.filter(v=>v.company_id===Number(reportCompany||me.company_id)).filter(v=>`${v.plate_number} ${v.make_model}`.toLowerCase().includes(fleetVehicleSearch.toLowerCase())).map(v=>{const assigned=drivers.find(d=>d.id===v.assigned_driver_id)||drivers.find(d=>driverDetails[String(d.id)]?.vehicle_id===v.id);return <button key={v.id} type="button" className={'nuqati-side-item '+(fleetDriverFocus===String(assigned?.id||'')?'selected':'')} onClick={()=>{if(assigned)setFleetDriverFocus(String(assigned.id));else setFleetDriverFocus('');}}><strong>🚗 {v.plate_number}</strong><small>{v.make_model}</small><small>{assigned?.full_name||(lang==='en'?'No assigned driver':'دون سائق مخصص')}</small></button>})}</div>
+              </aside></>:<>              <aside className="nuqati-map-side nuqati-driver-side"><h3>{lang==='en'?'Assigned drivers':'السائقون والمركبات'}</h3><input aria-label="Search drivers" placeholder={lang==='en'?'Search driver / plate':'ابحث عن سائق أو لوحة'} value={fleetDriverSearch} onChange={e=>setFleetDriverSearch(e.target.value)}/><button className="refresh" type="button" onClick={()=>setFleetDriverFocus('')}>{lang==='en'?'Show all drivers':'عرض جميع السائقين'}</button>
+                <div className="nuqati-side-scroll">{report.drivers.filter((d:any)=>{const v=vehicles.find(v=>v.assigned_driver_id===d.driver_id||driverDetails[String(d.driver_id)]?.vehicle_id===v.id);return `${d.driver_name} ${v?.plate_number||''}`.toLowerCase().includes(fleetDriverSearch.toLowerCase())}).map((d:any)=>{const v=vehicles.find(v=>v.assigned_driver_id===d.driver_id||driverDetails[String(d.driver_id)]?.vehicle_id===v.id);return <button key={d.driver_id} type="button" className={'nuqati-side-item '+(fleetDriverFocus===String(d.driver_id)?'selected':'')} onClick={()=>setFleetDriverFocus(String(d.driver_id))}><strong>👤 {d.driver_name}</strong><small>{v?.plate_number||'—'} · {d.trips} {lang==='en'?'trips':'رحلات'}</small><small>{d.latest_location?new Date(d.latest_location.recorded_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB',{timeZone:'Asia/Riyadh'}):(lang==='en'?'No GPS':'لا توجد بيانات موقع')}</small></button>})}</div>
+              </aside>
+</>}</div>
+              <div className="nuqati-fleet-map-center"><FleetPositionMap lang={lang} drivers={report.drivers.filter((d:any)=>!fleetDriverFocus||String(d.driver_id)===fleetDriverFocus).map((d:any)=>({...d,plate:vehicles.find(v=>v.assigned_driver_id===d.driver_id||driverDetails[String(d.driver_id)]?.vehicle_id===v.id)?.plate_number||''}))}/><small>{lang==='en'?'Markers show last recorded GPS, not guaranteed live positions.':'العلامات تعرض آخر موقع GPS مسجل، وليس بالضرورة موقعًا مباشرًا.'}</small></div>
+
+        </div> : <div className="empty">{lang==='en'?'Select a company in the top bar and refresh positions.':'اختر الشركة من القائمة العلوية ثم حدّث المواقع.'}</div>}
+        <div className="nuqati-tracking-disclaimer">{lang==='en'?'GPS markers represent last uploaded positions, not guaranteed live telemetry. Vehicles with no position or offline drivers may be absent.':'علامات GPS تعرض آخر موقع تم رفعه، وليست تتبعاً حياً مضموناً. قد لا تظهر المركبات أو السائقون غير المتصلين.'}</div>
+      </section>}
+      {tab==='historical-tracking'&&<section className="panel nuqati-trips-page"><div className="panel-heading"><div><h3>{lang==='en'?'Historical Tracking':'التتبع التاريخي'}</h3><p>{lang==='en'?'Search recorded trips, review routes and violations':'ابحث في الرحلات المسجلة وراجع المسارات والمخالفات'}</p></div><div className="nuqati-trip-filters"><select aria-label="Period" value={reportPeriod} onChange={e=>setReportPeriod(e.target.value)}>{['daily','weekly','monthly','yearly'].map(x=><option key={x} value={x}>{x}</option>)}</select><button className="primary" disabled={reportLoading||(!reportCompany&&me.role==='super_admin')} onClick={()=>fetchReport(reportPeriod,'',reportCompany)}>{reportLoading?'Loading…':lang==='en'?'Refresh trips':'تحديث الرحلات'}</button></div></div>
+      {(report||preciseTrips)?(()=>{
+          const trips=preciseTrips??(report?.drivers||[]).flatMap((d:any)=>(d.trip_details||[]).map((t:any)=>({...t,driver_name:d.driver_name,driver_id:d.driver_id})));
+          const shown=trips.filter((t:any)=>(tripStatusFilter==='all'||t.status===tripStatusFilter)&&(!tripSearch||`${t.id} ${t.driver_name}`.toLowerCase().includes(tripSearch.toLowerCase()))).sort((a:any,b:any)=>new Date(b.started_at).getTime()-new Date(a.started_at).getTime());
+          const totalKm=trips.reduce((sum:number,t:any)=>sum+Number(t.distance_km||0),0);
+          const totalMinutes=trips.reduce((sum:number,t:any)=>sum+Math.max(0,(new Date(t.ended_at||Date.now()).getTime()-new Date(t.started_at).getTime())/60000),0);
+          const maxSpeed=Math.max(0,...trips.map((t:any)=>Number(t.max_speed_kmh||0)));
+          const violationCount=trips.reduce((sum:number,t:any)=>sum+(t.violations?.length||0),0);
+          const saDate=(v:string)=>new Date(v).toLocaleString(lang==='ar'?'ar-SA':'en-GB',{timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+          const duration=(t:any)=>{const mins=Math.max(0,Math.floor((new Date(t.ended_at||Date.now()).getTime()-new Date(t.started_at).getTime())/60000));return `${Math.floor(mins/60)}h ${mins%60}m`};
+          return <div className="nuqati-trips">
+            <div className="nuqati-trip-filters" style={{marginBottom:14,display:'flex',gap:9,flexWrap:'wrap',alignItems:'end'}}>
+              <label>{lang==='ar'?'من التاريخ والوقت':'From date/time'}<input type="datetime-local" value={tripFrom} onChange={e=>setTripFrom(e.target.value)}/></label>
+              <label>{lang==='ar'?'إلى التاريخ والوقت':'To date/time'}<input type="datetime-local" value={tripTo} onChange={e=>setTripTo(e.target.value)}/></label>
+              <button className="primary" disabled={rangeSearching||(!reportCompany&&me.role==='super_admin')} onClick={()=>void loadPreciseTrips()}>{rangeSearching?'Searching…':lang==='ar'?'تصفية الرحلات':'Filter dates'}</button>
+              <button className="refresh" onClick={()=>{setPreciseTrips(null);setTripFrom('');setTripTo('');stopRangePlayback()}}>{lang==='ar'?'مسح التصفية':'Clear range'}</button>
+              <button className="primary" disabled={!shown.length||routeLoading} onClick={()=>rangePlaying?stopRangePlayback():void startRangePlayback([...shown].sort((a:any,b:any)=>new Date(a.started_at).getTime()-new Date(b.started_at).getTime()).map((t:any)=>t.id))}>{rangePlaying?(lang==='ar'?'■ إيقاف':'■ Stop'):(lang==='ar'?'▶ تشغيل جميع الرحلات بالتتابع':'▶ Play filtered trips in sequence')}</button>
+              {rangePlaying&&<span>{rangeCursor+1} / {rangeQueue.length}</span>}
+            </div>
+            <div className="nuqati-historical-workspace" dir={lang==='ar'?'rtl':'ltr'}>
+              <aside className="nuqati-historical-list">
+                <div className="nuqati-historical-search"><h3>{lang==='en'?'Recorded trips':'الرحلات المسجلة'}</h3><input aria-label={lang==='en'?'Filter trips by driver or vehicle':'بحث حسب السائق أو المركبة'} placeholder={lang==='en'?'Search driver / trip':'ابحث عن سائق أو رحلة'} value={tripSearch} onChange={e=>setTripSearch(e.target.value)}/></div>
+                <div className="nuqati-historical-scroll">{shown.map((t:any)=><button type="button" key={t.id} className={'nuqati-side-item '+(selectedTripId===t.id?'selected':'')} onClick={()=>viewTripRoute(t.id)}><strong>#{t.id} · {t.driver_name}</strong><small>{saDate(t.started_at)}</small><small>{Number(t.distance_km||0).toFixed(2)} km · {(t.violations?.length||0)} {lang==='en'?'events':'مخالفة'}</small></button>)}{shown.length===0&&<div className="empty">{lang==='en'?'No trips for this selection':'لا توجد رحلات مطابقة'}</div>}</div>
+              </aside>
+              <div className="nuqati-historical-map">
+                <div className="nuqati-historical-map-heading"><strong>{selectedTripId?`#${selectedTripId}`:(lang==='en'?'Select a trip to see its route':'اختر رحلة لعرض المسار')}</strong>{selectedTripId&&<button type="button" className="refresh" onClick={()=>{setSelectedTripId(null);setSelectedRoute(null)}}>{lang==='en'?'Clear':'إلغاء'}</button>}</div>
+                {routeLoading?<div className="empty">{lang==='en'?'Loading route...':'جار تحميل المسار...'}</div>:selectedRoute&&selectedRoute.trip_id===selectedTripId?<TripLiveMap route={selectedRoute} lang={lang} autoPlay={rangePlaying} onPlaybackEnded={nextRangeTrip}/>:<div className="nuqati-historical-empty"><Route size={52}/><p>{lang==='en'?'Choose a recorded trip from the list to display its GPS path on this map.':'اختر رحلة مسجلة من القائمة لعرض مسار GPS على الخريطة.'}</p></div>}
+              </div>
+            </div>
+            <div className="nuqati-trip-heading"><div><h3>{lang==='en'?'Trip intelligence':'تحليل الرحلات'}</h3><p>{lang==='en'?'GPS trip records and route history':'سجل الرحلات والمسارات المسجلة بنظام تحديد المواقع'}</p></div><span className="nuqati-trip-count">{trips.length} {lang==='en'?'trips':'رحلة'}</span></div>
+            <div className="nuqati-trip-kpis">
+              {[[lang==='en'?'Total trips':'إجمالي الرحلات',String(trips.length),'◈'],[lang==='en'?'Distance':'المسافة الإجمالية',`${totalKm.toFixed(2)} km`,'↗'],[lang==='en'?'Driving time':'مدة القيادة',`${Math.floor(totalMinutes/60)}h ${Math.floor(totalMinutes%60)}m`,'◷'],[lang==='en'?'Top recorded speed':'أعلى سرعة مسجلة',`${maxSpeed.toFixed(1)} km/h`,'◉'],[lang==='en'?'Violations':'المخالفات',String(violationCount),'⚠']].map(([name,value,symbol])=><div className="nuqati-trip-kpi" key={name}><span className="nuqati-kpi-icon">{symbol}</span><small>{name}</small><strong>{value}</strong></div>)}
+            </div>
+            <div className="nuqati-trip-table-card"><div className="nuqati-trip-toolbar"><h3>{lang==='en'?'Trip history':'سجل الرحلات'}</h3><div className="nuqati-trip-filters"><input aria-label={lang==='en'?'Search trips':'بحث الرحلات'} placeholder={lang==='en'?'Search trip or driver':'ابحث عن رحلة أو سائق'} value={tripSearch} onChange={e=>setTripSearch(e.target.value)}/><select aria-label={lang==='en'?'Trip status':'حالة الرحلة'} value={tripStatusFilter} onChange={e=>setTripStatusFilter(e.target.value)}><option value="all">{lang==='en'?'All statuses':'جميع الحالات'}</option><option value="active">{lang==='en'?'Active':'جارية'}</option><option value="completed">{lang==='en'?'Completed':'مكتملة'}</option></select></div></div>
+              <div className="table-wrap nuqati-trip-table-wrap"><table className="nuqati-trip-table"><thead><tr><th>#</th><th>{lang==='en'?'Driver':'السائق'}</th><th>{lang==='en'?'Start · Saudi time':'البداية · السعودية'}</th><th>{lang==='en'?'Stop · Saudi time':'النهاية · السعودية'}</th><th>{lang==='en'?'Duration':'المدة'}</th><th>{lang==='en'?'Distance':'المسافة'}</th><th>{lang==='en'?'Max speed':'السرعة القصوى'}</th><th>{lang==='en'?'Violations':'المخالفات'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Details':'التفاصيل'}</th></tr></thead><tbody>{shown.map((t:any)=><tr key={t.id} className={selectedTripId===t.id?'nuqati-trip-selected':''}><td><strong>#{t.id}</strong></td><td>{t.driver_name}</td><td>{saDate(t.started_at)}</td><td>{t.ended_at?saDate(t.ended_at):(lang==='en'?'In progress':'جارية')}</td><td>{duration(t)}</td><td>{Number(t.distance_km||0).toFixed(2)} km</td><td>{t.max_speed_kmh==null?'—':Number(t.max_speed_kmh).toFixed(1)+' km/h'}</td><td><span className={(t.violations?.length||0)>0?'nuqati-violation-count is-alert':'nuqati-violation-count'}>{t.violations?.length||0}</span></td><td><span className={'nuqati-trip-status '+(t.status==='active'?'is-active':'is-completed')}>{t.status==='active'?(lang==='en'?'● Active':'● جارية'):(lang==='en'?'✓ Completed':'✓ مكتملة')}</span></td><td><button type="button" className="nuqati-map-button" onClick={()=>viewTripRoute(t.id)}>{lang==='en'?'View route ↗':'عرض المسار ↗'}</button></td></tr>)}</tbody></table>{shown.length===0&&<div className="empty">{lang==='en'?'No matching trips':'لا توجد رحلات مطابقة'}</div>}</div>
+            </div>
+          </div>;
+        })():<div className="empty">{lang==='en'?'Select a company above and refresh to view trips.':'اختر الشركة من الأعلى ثم حدّث لعرض الرحلات.'}</div>}
+      </section>}
+      {tab==='overview' && <>
+        <section className="hero"><div><span className="hero-pill">NUQATI FLEET INTELLIGENCE</span><h2>{lang==='en'?'Smarter Driving, More Efficient Fleets.':'قيادة أذكى، أسطول أكثر كفاءة.'}</h2><p>{lang==='en'?'Safer driving and independent maintenance reminders based on odometer readings.':'قيادة آمنة وتذكيرات صيانة مستقلة بناءً على قراءات العداد.'}</p><div className="hero-branding">{lang==='en'?'By Al-Riadah Workshop':'من ورشة حلول الريادة'}</div></div><div className="hero-icon"><Route size={54}/></div></section>
+        <section className="driver-first-banner">
+          <div className="driver-first-copy">
+            <span className="hero-pill">NUQATI · DRIVER FIRST</span>
+            <h3>{lang==='en'?'Safer drivers. Smarter fleets.':'سائقون أكثر أمانًا. أساطيل أكثر ذكاءً.'}</h3>
+            <p>{lang==='en'?'A driver-first experience by Al-Riadah Workshop.':'تجربة تركّز على السائق من ورشة حلول الريادة.'}</p>
+            <div className="driver-first-bilingual">
+              <strong>NUQATI · DRIVER FIRST</strong>
+              <span>Safer drivers. Smarter fleets.</span>
+              <strong>نقاطي · السائق أولاً</strong>
+              <span>سائقون أكثر أمانًا. أساطيل أكثر ذكاءً.</span>
+            </div>
+          </div>
+          <div className="driver-first-visual" aria-hidden="true">
+            <div className="driver-pulse driver-pulse-a"></div>
+            <div className="driver-pulse driver-pulse-b"></div>
+            <div className="driver-pulse driver-pulse-c"></div>
+            <div className="driver-pulse-core">💚</div>
+          </div>
+        </section>
+        <section className="nuqati-overview-dashboard">
+          <div className="nuqati-overview-toolbar"><div><h2>{lang==='en'?'Fleet utilisation & driver performance':'استخدام الأسطول وأداء السائقين'}</h2><small>{lang==='en'?'Recorded trips and violations · UTC days':'الرحلات والمخالفات المسجلة · أيام UTC'}</small></div><div><select aria-label="Days" value={overviewDays} onChange={e=>setOverviewDays(Number(e.target.value))}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option></select><select aria-label="Company" value={overviewCompany} onChange={e=>setOverviewCompany(e.target.value)}><option value="">{lang==='en'?'All permitted companies':'كل الشركات المسموح بها'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button type="button" className="refresh" onClick={loadOverview}><RefreshCw size={15}/></button></div></div>
+          {overviewError&&<p className="notice">{overviewError}</p>}
+          {overviewData&&<>
+            <div className="nuqati-overview-kpis">{[
+              [lang==='en'?'Distance (km)':'المسافة (كم)',overviewData.totals.distance_km],
+              [lang==='en'?'Trips':'الرحلات',overviewData.totals.trips],
+              [lang==='en'?'Drivers with trips':'سائقون لديهم رحلات',overviewData.totals.drivers_active],
+              [lang==='en'?'Recorded violations':'المخالفات المسجلة',overviewData.totals.violations]
+            ].map(([name,value])=><article key={String(name)}><small>{name}</small><strong>{Number(value).toLocaleString()}</strong></article>)}</div>
+            <div className="nuqati-overview-grid">
+              <OverviewBars title={lang==='en'?'Daily distance driven (km)':'المسافة اليومية (كم)'} rows={overviewData.days} series={[{key:'distance_km',label:lang==='en'?'Km':'كم',color:'#5b9de3'}]}/>
+              <OverviewBars title={lang==='en'?'Daily trips & driver activity':'الرحلات ونشاط السائقين يومياً'} rows={overviewData.days} series={[{key:'trips',label:lang==='en'?'Trips':'رحلات',color:'#5b9de3'},{key:'drivers_active',label:lang==='en'?'Active drivers':'سائقون نشطون',color:'#a5d84c'}]}/>
+              <OverviewBars title={lang==='en'?'Daily driving violations':'المخالفات اليومية للسائقين'} rows={overviewData.days} series={[{key:'speeding',label:lang==='en'?'Speeding':'السرعة',color:'#ef7777'},{key:'harsh_braking',label:lang==='en'?'Braking':'فرملة',color:'#e6ab57'},{key:'harsh_acceleration',label:lang==='en'?'Acceleration':'تسارع',color:'#5baee2'},{key:'harsh_cornering',label:lang==='en'?'Cornering':'انعطاف',color:'#ab87e3'}]}/>
+              <OverviewBars title={lang==='en'?'Daily vehicle utilization (% with trips)':'استخدام المركبات اليومي (% لديها رحلات)'} rows={(overviewData.days||[]).map((d:any)=>({...d,utilization_pct:overviewData.vehicle_count>0?Math.round(1000*Number(d.vehicles_with_trips||0)/Number(overviewData.vehicle_count))/10:0}))} series={[{key:'utilization_pct',label:lang==='en'?'Utilization %':'نسبة الاستخدام %',color:'#a5d84c'}]}/>
+              <OverviewBars title={lang==='en'?'Vehicles with trips vs without trips':'سيارات لديها رحلات مقابل دون رحلات'} rows={overviewData.days} series={[{key:'vehicles_with_trips',label:lang==='en'?'With trips':'لديها رحلات',color:'#5b9de3'},{key:'vehicles_without_trips',label:lang==='en'?'No trips':'دون رحلات',color:'#95a2b1'}]}/>
+            </div><p className="nuqati-chart-note">{lang==='en'?'Vehicle utilization = vehicles with recorded trips ÷ company vehicles × 100. “No trips” does not prove a vehicle was parked; it may have been offline. Driver activity means at least one recorded trip that day.':'عدم وجود رحلة لا يثبت أن السيارة متوقفة؛ ربما كانت غير متصلة أو لا ترسل بيانات. نشاط السائق يعني تسجيل رحلة واحدة على الأقل في اليوم.'}</p>
+          </>}
+        </section>
+
+
+
+
+      </>}
+      {tab==='vehicles' && <section className="panel"><div className="panel-heading"><div><h3>{lang==='en'?'Vehicle Management':'إدارة السيارات'}</h3><p>{lang==='en'?'Select the company to which the vehicle belongs.':'تُضاف السيارة إلى أول شركة مسجلة في النسخة التجريبية.'}</p></div></div><form onSubmit={addVehicle} className="entry-form" style={{display:canManage?undefined:'none'}}><label>{lang==='en'?'Company':'الشركة'}<select value={selectedCompany} onChange={e=>setSelectedCompany(e.target.value)}><option value="">{lang==='en'?'Select company':'اختر الشركة'}</option>{companies.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label><label>{lang==='en'?'Plate number':'رقم اللوحة'}<input value={plate} onChange={e=>setPlate(e.target.value)} required/></label><label>{lang==='en'?'Make and model':'الماركة والموديل / Make and model'}<input value={model} onChange={e=>setModel(e.target.value)} maxLength={120} required placeholder="Toyota Camry"/></label><label>{lang==='en'?'Model year':'سنة الموديل / Model year'}<input type="number" min="1900" max="2100" step="1" value={vehicleYear} onChange={e=>setVehicleYear(e.target.value)} placeholder="2024"/></label><label>{lang==='en'?'Current odometer (km)':'قراءة العداد الحالية (كم) / Odometer (km)'}<input type="number" min="0" step="0.1" value={vehicleOdometer} onChange={e=>setVehicleOdometer(e.target.value)} placeholder="85000"/></label><button className="primary"><Plus size={16}/> {lang==='en'?'Add vehicle':'إضافة سيارة'}</button></form><div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Plate':'اللوحة'}</th><th>{lang==='en'?'Vehicle':'المركبة'}</th><th>{lang==='en'?'Odometer':'قراءة العداد'}</th><th>{lang==='en'?'Company':'الشركة'}</th>{me.role==='super_admin'&&<th>{lang==='en'?'Actions':'الإجراءات'}</th>}</tr></thead><tbody>{visibleVehicles.map(v=><tr key={v.id}><td>{v.plate_number}</td><td>{v.make_model||'—'}{v.year?` (${v.year})`: ''}</td><td>{v.odometer_km==null?(lang==='en'?'Not recorded':'غير مسجل'):`${v.odometer_km.toLocaleString('en-US')} ${lang==='en'?'km':'كم'}`}</td><td>{companies.find(c=>c.id===v.company_id)?.name||`#${v.company_id}`}</td>{me.role==='super_admin'&&<td><button className="refresh" onClick={()=>adminEdit('vehicles',v.id,'plate_number',v.plate_number)}>{lang==='en'?'Edit plate':'تعديل اللوحة'}</button><button className="refresh" onClick={()=>adminEdit('vehicles',v.id,'make_model',v.make_model)}>{lang==='en'?'Edit model':'تعديل الموديل'}</button><button className="refresh" onClick={()=>adminDelete('vehicles',v.id)}>{lang==='en'?'Delete':'حذف'}</button></td>}</tr>)}</tbody></table>{!vehicles.length&&<div className="empty">{lang==='en'?'No vehicles yet.':'لا توجد سيارات حتى الآن.'}</div>}</div></section>}
+      {tab==='drivers' && <section className="panel"><h3>{lang==='en'?'Add Driver + Enable Login':'إضافة سائق ومنحه صلاحية الدخول'}</h3><details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'One action creates the driver, phone login and vehicle assignment. No driver email is needed. Use a private temporary password (12+ characters); the plate is visible publicly and must not be used as a permanent password.':'إجراء واحد لإنشاء السائق وتفعيل الدخول بالهاتف وتعيين السيارة. لا يلزم بريد إلكتروني للسائق. استخدم كلمة مرور مؤقتة خاصة لا تقل عن ١٢ حرفًا، ولا تستخدم رقم اللوحة كلمة مرور.'}</p></details><form onSubmit={addDriver} className="entry-form">{me.role==='super_admin'&&<label>{lang==='en'?'Company':'الشركة'}<select required value={selectedCompany} onChange={e=>{setSelectedCompany(e.target.value);setDriverVehicle('')}}><option value="">{lang==='en'?'Choose company':'اختر الشركة'}</option>{companies.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label>}<label>{lang==='en'?'Full name':'الاسم الكامل'}<input required value={driverName} onChange={e=>setDriverName(e.target.value)}/></label><label>{lang==='en'?'Mobile number (+966...)':'رقم الجوال (+966...)'}<input required type="tel" value={driverPhone} onChange={e=>setDriverPhone(e.target.value)} placeholder="+9665XXXXXXXX"/></label><label>{lang==='en'?'ID / Iqama number':'رقم الهوية / الإقامة'}<input required value={driverIdNumber} onChange={e=>setDriverIdNumber(e.target.value)}/></label><label>{lang==='en'?'Site / Branch':'الموقع / الفرع'}<input required value={driverSite} onChange={e=>setDriverSite(e.target.value)}/></label><label>{lang==='en'?'Assign available vehicle':'تعيين سيارة متاحة'}<select required value={driverVehicle} onChange={e=>setDriverVehicle(e.target.value)}><option value="">{lang==='en'?'Choose available vehicle':'اختر سيارة متاحة'}</option>{vehicles.filter(v=>v.company_id===Number(me.role==='super_admin'?(selectedCompany||companies[0]?.id):me.company_id)&&!drivers.some(d=>driverLinks.some(l=>l.driver_id===d.id&&l.vehicle_id===v.id))).map(v=><option key={v.id} value={v.id}>{v.plate_number} — {v.make_model}</option>)}</select></label><label>{lang==='en'?'Private temporary password (12+ characters)':'كلمة مرور مؤقتة خاصة (١٢ حرفًا على الأقل)'}<input type="password" required minLength={12} value={driverInitialPassword} onChange={e=>setDriverInitialPassword(e.target.value)}/></label><button className="primary">{lang==='en'?'Create Driver & Enable Login':'إنشاء سائق وتفعيل الدخول'}</button></form><h3>{lang==='en'?'Registered drivers':'السائقون المسجلون'}</h3><button type="button" className="refresh" onClick={loadDriverExtras}>{lang==='en'?'Refresh app login acknowledgments':'تحديث سجلات دخول التطبيق'}</button><div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Name':'الاسم'}</th><th>{lang==='en'?'Phone':'الهاتف'}</th><th>{lang==='en'?'Company':'الشركة'}</th><th>{lang==='en'?'Status':'الحالة'}</th><th>{lang==='en'?'Vehicle':'السيارة'}</th><th>{lang==='en'?'App login acknowledgment (UTC)':'تأكيد دخول التطبيق (بالتوقيت العالمي)'}</th>{me.role==='super_admin'&&<th>{lang==='en'?'Actions':'الإجراءات'}</th>}</tr></thead><tbody>{visibleDrivers.map(d=><tr key={d.id}><td>{d.full_name}</td><td>{d.phone}</td><td>{companies.find(c=>c.id===d.company_id)?.name}</td><td>{lang==='en'?d.status:({active:'نشط',inactive:'غير نشط',archived:'مؤرشف'} as Record<string,string>)[d.status]||d.status}</td><td>{vehicles.find(v=>v.assigned_driver_id===d.id)?.plate_number||(lang==='en'?'Not assigned':'غير معيّن')}</td><td>{driverLogins[String(d.id)]?new Date(driverLogins[String(d.id)]).toLocaleString(lang==='ar'?'ar-SA':'en-GB'):(lang==='en'?'Never acknowledged':'لم يتم تأكيد الدخول')}</td>{me.role==='super_admin'&&<td><button type="button" className="refresh" onClick={()=>beginDriverEdit(d)}>{lang==='en'?'Edit all fields':'تعديل جميع الحقول'}</button><button type="button" className="refresh" onClick={()=>adminDelete('drivers',d.id)}>{lang==='en'?'Delete':'حذف'}</button></td>}</tr>)}</tbody></table></div>{editingDriver!==null&&<div className="panel" style={{marginTop:20}}><h3>{lang==='en'?'Edit Driver #':'تعديل السائق رقم '}{editingDriver} {lang==='en'?'(inline)':'(داخل الصفحة)'}</h3><div className="entry-form"><label>{lang==='en'?'Full name':'الاسم الكامل'}<input value={driverEditForm.full_name} onChange={e=>setDriverEditForm({...driverEditForm,full_name:e.target.value})}/></label><label>Mobile<input value={driverEditForm.phone} onChange={e=>setDriverEditForm({...driverEditForm,phone:e.target.value})}/></label><label>ID / Iqama<input value={driverEditForm.id_number} onChange={e=>setDriverEditForm({...driverEditForm,id_number:e.target.value})}/></label><label>{lang==='en'?'Site / Branch':'الموقع / الفرع'}<input value={driverEditForm.site_name} onChange={e=>setDriverEditForm({...driverEditForm,site_name:e.target.value})}/></label><label>{lang==='en'?'Status':'الحالة'}<select value={driverEditForm.status} onChange={e=>setDriverEditForm({...driverEditForm,status:e.target.value})}><option value="active">{lang==='en'?'Active':'نشط'}</option><option value="inactive">{lang==='en'?'Inactive':'غير نشط'}</option><option value="archived">{lang==='en'?'Archived':'مؤرشف'}</option></select></label><label>{lang==='en'?'Assigned vehicle':'السيارة المخصصة'}<select value={driverEditForm.vehicle_id} onChange={e=>setDriverEditForm({...driverEditForm,vehicle_id:e.target.value})}><option value="">{lang==='en'?'Unassigned':'غير مخصص'}</option>{vehicles.filter(v=>v.company_id===drivers.find(d=>d.id===editingDriver)?.company_id&&(!v.assigned_driver_id||v.assigned_driver_id===editingDriver)).map(v=><option key={v.id} value={v.id}>{v.plate_number} — {v.make_model}</option>)}</select></label><button type="button" className="primary" onClick={saveDriverEdit}>{lang==='en'?'Save changes':'حفظ التغييرات'}</button><button type="button" className="refresh" onClick={()=>setEditingDriver(null)}>{lang==='en'?'Cancel':'إلغاء'}</button></div><details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'Company reassignment is intentionally blocked to protect cross-company records. Password reset remains a separate secure operation.':'لا يسمح بنقل السائق بين الشركات لحماية السجلات. إعادة تعيين كلمة المرور عملية منفصلة وآمنة.'}</p></details></div>}</section>}
+      {tab==='odometer' && <section className="panel"><div className="panel-heading"><div><h3>{lang==='en'?'Record Odometer Reading':'تسجيل قراءة العداد'}</h3><p>{lang==='en'?'GPS distance is an estimate and does not replace the vehicle odometer.':'قراءة GPS تقديرية وليست بديلًا عن عداد السيارة الفعلي.'}</p></div></div><form onSubmit={addReading} className="entry-form" style={{display:canManage?undefined:'none'}}><label>{lang==='en'?'Vehicle':'السيارة'}<select value={readingVehicle} onChange={e=>setReadingVehicle(e.target.value)} required><option value="">{lang==='en'?'Choose vehicle':'اختر السيارة'}</option>{vehicles.map(v=><option value={v.id} key={v.id}>{v.plate_number} — {v.make_model}</option>)}</select></label><label>{lang==='en'?'Reading (km)':'القراءة (كم)'}<input type="number" min="0" step="0.1" value={reading} onChange={e=>setReading(e.target.value)} required/></label><label>{lang==='en'?'Source':'المصدر'}<select value={source} onChange={e=>setSource(e.target.value)}><option value="MANUAL">{lang==='en'?'Manual entry':'إدخال يدوي'}</option><option value="GPS">{lang==='en'?'GPS estimate':'تقدير GPS'}</option></select></label><button className="primary"><Plus size={16}/> {lang==='en'?'Save reading':'حفظ القراءة'}</button></form><div style={{marginTop:22,display:'grid',gap:14}}><h3>{lang==='ar'?'سجل قراءات العداد لجميع السيارات':'Odometer history for all vehicles'}</h3><div className="entry-form"><label>{lang==='ar'?'عرض سجلات السيارة':'Filter records by vehicle'}<select value={odometerHistoryVehicle} onChange={e=>setOdometerHistoryVehicle(e.target.value)}><option value="all">{lang==='ar'?'جميع السيارات':'All vehicles'}</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.plate_number} — {v.make_model} ({companies.find(c=>c.id===v.company_id)?.name||'#'+v.company_id})</option>)}</select></label><button type="button" className="refresh" onClick={loadOdometerHistory} disabled={odometerHistoryLoading}><RefreshCw size={15}/>{odometerHistoryLoading?'Loading...':(lang==='ar'?'تحديث السجل':'Refresh records')}</button></div><h4>{lang==='ar'?'العداد الحالي لكل سيارة':'Current odometer for every vehicle'}</h4><div className="table-wrap"><table><thead><tr><th>{lang==='ar'?'السيارة':'Vehicle'}</th><th>{lang==='ar'?'الشركة':'Company'}</th><th>{lang==='ar'?'العداد الحالي (كم)':'Current odometer (km)'}</th></tr></thead><tbody>{visibleVehicles.map(v=><tr key={v.id}><td>{v.plate_number} — {v.make_model}</td><td>{companies.find(c=>c.id===v.company_id)?.name||'#'+v.company_id}</td><td>{v.odometer_km==null?'—':v.odometer_km.toLocaleString('en-US')}</td></tr>)}</tbody></table>{vehicles.length===0&&<div className="empty">{lang==='en'?'No vehicles':'لا توجد سيارات'}</div>}</div><h4>{lang==='ar'?'جميع القراءات المحفوظة':'Saved reading records'}</h4><div className="table-wrap"><table><thead><tr><th>{lang==='ar'?'التاريخ':'Date'}</th><th>{lang==='ar'?'السيارة':'Vehicle'}</th><th>{lang==='ar'?'الشركة':'Company'}</th><th>{lang==='ar'?'القراءة (كم)':'Reading (km)'}</th><th>{lang==='ar'?'المصدر':'Source'}</th><th>{lang==='ar'?'ملاحظات':'Notes'}</th></tr></thead><tbody>{odometerRecords.filter(r=>(listCompany==='all'||String(r.company_id)===listCompany)&&searchMatches(r.reading_km,r.source,r.note,vehicles.find(v=>v.id===r.vehicle_id)?.plate_number)&&(odometerHistoryVehicle==='all'||String(r.vehicle_id)===odometerHistoryVehicle)).map(r=>{const v=vehicles.find(v=>v.id===r.vehicle_id);return <tr key={r.id}><td>{new Date(r.created_at).toLocaleString(lang==='ar'?'ar-SA':'en-GB')}</td><td>{v?`${v.plate_number} — ${v.make_model}`:`#${r.vehicle_id}`}</td><td>{companies.find(c=>c.id===r.company_id)?.name||'#'+r.company_id}</td><td>{r.reading_km.toLocaleString('en-US')}</td><td>{lang==='en'?({MANUAL:'Manual',GPS:'GPS estimate'} as Record<string,string>)[r.source]||r.source:({MANUAL:'يدوي',GPS:'تقدير GPS'} as Record<string,string>)[r.source]||r.source}</td><td>{r.note==='تم الإدخال من لوحة نقاطي'?(lang==='en'?'Entered from Nuqati dashboard':r.note):r.note||'—'}</td></tr>;})}</tbody></table>{odometerRecords.filter(r=>(listCompany==='all'||String(r.company_id)===listCompany)&&searchMatches(r.reading_km,r.source,r.note,vehicles.find(v=>v.id===r.vehicle_id)?.plate_number)&&(odometerHistoryVehicle==='all'||String(r.vehicle_id)===odometerHistoryVehicle)).length===0&&<div className="empty">{lang==='ar'?'لا توجد قراءات محفوظة':'No saved readings'}</div>}</div><p style={{opacity:.75,fontSize:12}}>{lang==='ar'?'يعرض السجل آخر 500 قراءة كحد أقصى وفق واجهة الخادم الحالية.':'The current server API returns up to 500 most recent readings.'}</p></div><div className="tip">{lang==='en'?'Readings are saved with source and date. Editing or deleting historical readings is not supported in this version.':'تُحفظ القراءات بسجل مستقل مع المصدر والتاريخ. لا تدعم النسخة الحالية تصحيح القراءات السابقة أو حذفها من الواجهة.'}</div></section>}
+      {tab==='maintenance' && <section className="panel"><div className="panel-heading"><div><h3>{lang==='en'?'Odometer-Based Maintenance Reminders':'تذكيرات الصيانة حسب العداد'}</h3><details className="nuqati-help" style={{margin:"8px 0 14px"}}><summary style={{cursor:"pointer",color:"#b5d86c",fontWeight:600}}>★ {lang==='en'?'More details':'المزيد من التفاصيل'}</summary><p style={{marginTop:8}}>{lang==='en'?'Select a vehicle, enter the last service odometer and service interval. Reminders are estimates and require checking the actual odometer.':'لا حاجة لربط نظام ورشة أو تصوير اللوحة. اختر السيارة وسجل آخر صيانة والفاصل بالكيلومتر. التنبيهات تقديرية وتحتاج مراجعة العداد الفعلي.'}</p></details></div></div><form onSubmit={saveSchedule} className="entry-form" style={{display:canManage?undefined:'none'}}><label>{lang==='en'?'Vehicle':'السيارة'}<select value={readingVehicle} onChange={e=>setReadingVehicle(e.target.value)} required><option value="">{lang==='en'?'Choose vehicle':'اختر السيارة'}</option>{vehicles.map(v=><option value={v.id} key={v.id}>{v.plate_number} — {v.make_model}</option>)}</select></label><label>{lang==='en'?'Service':'الخدمة'}<select value={serviceType} onChange={e=>{setServiceType(e.target.value);setInterval(e.target.value==='ENGINE_OIL'?'5000':e.target.value==='SPARK_PLUGS'||e.target.value==='TYRES'?'60000':'80000')}}><option value="ENGINE_OIL">{lang==='en'?'Engine oil':'زيت المحرك'}</option><option value="SPARK_PLUGS">{lang==='en'?'Spark plugs':'البواجي'}</option><option value="TRANSMISSION_OIL">{lang==='en'?'Transmission oil':'زيت القير'}</option><option value="TYRES">{lang==='en'?'Tyre replacement (60,000 km / 1 year)':'تغيير الإطارات (٦٠٬٠٠٠ كم / سنة)'}</option></select></label><label>{lang==='en'?'Interval (km)':'الفاصل (كم)'}<input type="number" min="1" value={interval} onChange={e=>setInterval(e.target.value)} required/></label><label>{lang==='en'?'Last service odometer (km)':'عداد آخر صيانة (كم)'}<input type="number" min="0" value={lastService} onChange={e=>setLastService(e.target.value)} required/></label><label>{lang==='en'?'Notify before due (km)':'التنبيه قبل الموعد (كم)'}<input type="number" min="0" value={warningBefore} onChange={e=>setWarningBefore(e.target.value)} required/></label><button className="primary"><Plus size={16}/> {lang==='en'?'Save / Update Reminder':'حفظ / تحديث التذكير'}</button></form><div className="table-wrap"><table><thead><tr><th>{lang==='en'?'Vehicle':'السيارة'}</th><th>{lang==='en'?'Service':'الخدمة'}</th><th>{lang==='en'?'Next due':'الموعد القادم'}</th><th>{lang==='en'?'Remaining':'المتبقي'}</th><th>{lang==='en'?'Status':'الحالة'}</th>{me.role==='super_admin'&&<th>{lang==='en'?'Actions':'الإجراءات'}</th>}</tr></thead><tbody>{visibleSchedules.map(m=><tr key={m.id}><td>{vehicles.find(v=>v.id===m.vehicle_id)?.plate_number||m.vehicle_id}</td><td>{(lang==='en'?({ENGINE_OIL:'Engine oil',SPARK_PLUGS:'Spark plugs',TRANSMISSION_OIL:'Transmission oil',TYRES:'Tyres'} as Record<string,string>):({ENGINE_OIL:'زيت المحرك',SPARK_PLUGS:'البواجي',TRANSMISSION_OIL:'زيت القير',TYRES:'الإطارات'} as Record<string,string>))[m.service_type]||m.service_type}</td><td>{m.next_due_km.toLocaleString('en-US')} كم</td><td>{m.remaining_km==null?'غير معروف':`${Math.round(m.remaining_km).toLocaleString('en-US')} ${lang==='en'?'km':'كم'}`}</td><td><span className="status">{(lang==='en'?({OK:'OK',DUE_SOON:'Due soon',OVERDUE:'Overdue',UNKNOWN:'Enter odometer'} as Record<string,string>):({OK:'سليم',DUE_SOON:'قريب',OVERDUE:'مستحق',UNKNOWN:'أدخل العداد'} as Record<string,string>))[m.status]||m.status}</span></td>{me.role==='super_admin'&&<td><button className="refresh" onClick={()=>adminDelete('maintenance-schedules',m.id)}>{lang==='en'?'Delete':'حذف'}</button></td>}</tr>)}</tbody></table>{!schedules.length&&<div className="empty">{lang==='en'?'Add a maintenance schedule to start receiving reminders.':'أضف جدول صيانة لبدء التذكيرات.'}</div>}</div><div className="tip">{lang==='en'?'These are in-dashboard alerts, not automatic phone notifications. Adjust service intervals to manufacturer recommendations.':'هذه تنبيهات داخل لوحة الاختبار، وليست إشعارات هاتفية آلية بعد. فترات الخدمة قابلة للتعديل حسب توصيات الشركة المصنعة.'}</div></section>}
+      <footer>{lang==='en'?'Nuqati by Al-Riadah Workshop':'نقاطي من ورشة حلول الريادة'} © {new Date().getFullYear()} — {lang==='en'?'Al-Riadah Automotive Maintenance':'حلول الريادة لصيانة السيارات'} <span>{lang==='en'?'Dark blue · Lime green':'الأزرق الداكن · الأخضر الليموني'}</span></footer>
+    </main>
+  </div>;
+}
