@@ -18,8 +18,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android API 36
+- name: Configure Android SDK
+  uses: android-actions/setup-android@v3
+  with:
+    packages: ''      - name: Install Android API 36
         run: sdkmanager 'platforms;android-36'
       - uses: subosito/flutter-action@v2
         with:
