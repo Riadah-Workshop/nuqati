@@ -1,0 +1,12 @@
+# Optional second source; run alongside the existing Nuqati API on Coolify.
+# IMPORTANT: put this on a Docker network that can reach the same Postgres service.
+services:
+  teltonika:
+    build: ./backend
+    command: ["python", "-m", "app.teltonika_receiver"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set to the same PostgreSQL URL as Nuqati API}
+      TELTONIKA_PORT: "5027"
+    ports:
+      - "5027:5027/tcp"
