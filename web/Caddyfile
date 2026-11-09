@@ -1,0 +1,27 @@
+:80 {
+    encode gzip zstd
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+    handle /privacy-policy/en {
+        rewrite * /privacy-policy/en/index.html
+        root * /srv
+        file_server
+    }
+    handle /privacy-policy/ar {
+        rewrite * /privacy-policy/ar/index.html
+        root * /srv
+        file_server
+    }
+    handle /privacy-policy {
+        rewrite * /privacy-policy/index.html
+        root * /srv
+        file_server
+    }
+    handle {
+       
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}
