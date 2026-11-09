@@ -76,3 +76,5 @@ services:
     restart: unless-stopped
 volumes:
   nuqati_staging_pgdata:
+    external: true
+    name: hskj899cs3voe1lk5gkyyxb8_nuqati-staging-pgdata
