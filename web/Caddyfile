@@ -3,6 +3,11 @@
     handle /api/* {
         reverse_proxy api:8000
     }
+    handle /privacy-policy {
+        rewrite * /privacy-policy/index.html
+        root * /srv
+        file_server
+    }
     handle {
        
         root * /srv
