@@ -1,0 +1,23 @@
+{
+  "base_file": "nuqati-main(20261111-104524).zip",
+  "base_sha256": "cd9da6de2c5d8f0498f2d36fbe96e92b7819b757316c8ca3afc59238e806a157",
+  "modified_existing_files": [
+    ".github/workflows/build-android.yml",
+    ".github/workflows/build-driver-release.yml",
+    ".github/workflows/build-ios.yml",
+    "backend/app/main.py",
+    "mobile/main.dart",
+    "mobile/pubspec.yaml",
+    "web/src/App.tsx",
+    "web/src/styles.css"
+  ],
+  "new_files": [
+    "HANDOVER_TEST_FIRST.md",
+    "backend/app/vehicle_handover.py",
+    "backend/test_vehicle_handover.py",
+    "mobile/vehicle_handover.dart",
+    "web/src/VehicleHandover.tsx"
+  ],
+  "removed_source_files": [],
+  "note": "No source feature files removed. __pycache__ and pytest cache omitted as build artifacts."
+}
