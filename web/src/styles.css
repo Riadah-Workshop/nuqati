@@ -1,0 +1,595 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+:root{font-family:'IBM Plex Sans Arabic',Tahoma,sans-serif;color:#14243d;background:#f4f7fb;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}body{margin:0;min-width:320px}button,input,select{font:inherit}button{cursor:pointer}
+.app-shell{min-height:100vh;display:flex;direction:rtl}.sidebar{width:248px;background:#102a56;color:#fff;padding:26px 16px;display:flex;flex-direction:column;flex-shrink:0}.brand{display:flex;align-items:center;gap:12px;padding:0 10px 30px}.brand-mark{width:43px;height:43px;border-radius:14px;background:#b8e638;color:#102a56;font-size:26px;font-weight:700;display:grid;place-items:center}.brand strong{display:block;font-size:22px}.brand small{display:block;color:#b8c8e2;font-size:12px}.side-caption{color:#8ea4c8;font-size:12px;padding:0 12px 10px}.nav-item{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border:0;border-radius:11px;background:transparent;color:#dbe6f7;text-align:right;margin:3px 0}.nav-item.active,.nav-item:hover{background:#1d3c70;color:#c6ef55}.sidebar-bottom{margin-top:auto;display:flex;gap:10px;align-items:center;padding:18px 10px 0;color:#b7c9e4;font-size:12px}.main{flex:1;max-width:1600px;margin:auto;padding:28px 34px}.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.eyebrow{color:#68809e;font-size:12px}.topbar h1{font-size:28px;margin:3px 0 0;color:#102a56}.refresh{display:flex;gap:8px;align-items:center;border:1px solid #dce4ef;background:#fff;border-radius:10px;padding:10px 14px;color:#344967}.hero{border-radius:20px;background:linear-gradient(115deg,#102a56,#1d477f);color:#fff;padding:30px 32px;display:flex;justify-content:space-between;align-items:center;overflow:hidden}.hero-pill{font-size:10px;letter-spacing:1.6px;color:#c6ef55;font-weight:700}.hero h2{font-size:28px;margin:12px 0 8px}.hero p{margin:0;color:#d1dff1}.hero-icon{width:100px;height:100px;display:grid;place-items:center;border-radius:30px;background:#ffffff12;color:#c6ef55}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:20px 0}.stat-card{background:#fff;border:1px solid #e5ebf3;border-radius:16px;padding:18px;display:grid;gap:9px}.stat-icon{width:38px;height:38px;display:grid;place-items:center;background:#eff8d8;color:#42630b;border-radius:12px}.stat-card span{color:#718198;font-size:13px}.stat-card strong{font-size:28px;color:#102a56}.content-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}.panel{background:#fff;border:1px solid #e5ebf3;border-radius:16px;padding:22px;margin-bottom:16px}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel h3{margin:0 0 4px;font-size:18px;color:#102a56}.panel-heading p{margin:0;color:#8190a4;font-size:12px}.form-row,.entry-form{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.form-row label,.entry-form label{display:grid;gap:6px;flex:1;min-width:150px;font-size:12px;color:#65758c}.input,.form-row input,.entry-form input,.entry-form select,.form-row select{border:1px solid #dce4ef;border-radius:9px;padding:11px 12px;min-width:0;width:100%;color:#1b2f4c;background:#fff;outline-color:#9ecb22}.primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;background:#b8e638;color:#102a56;font-weight:700;padding:11px 15px;white-space:nowrap}.primary:hover{background:#a8d72b}.tip{margin-top:18px;padding:12px 14px;border-radius:10px;background:#f5f8ed;color:#65734c;font-size:12px;line-height:1.8}.milestone{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #edf1f6}.milestone:last-child{border:0}.milestone>span{width:30px;height:30px;border-radius:10px;background:#eef2f7;display:grid;place-items:center;color:#63748c;font-weight:700}.milestone.done>span{background:#e9f7c4;color:#42630b}.milestone div{flex:1}.milestone b,.milestone small{display:block}.milestone b{font-size:13px}.milestone small{font-size:11px;color:#8492a6;margin-top:3px}.milestone em{font-size:10px;font-style:normal;color:#74839a}.table-wrap{overflow:auto;margin-top:22px}table{width:100%;border-collapse:collapse;text-align:right;white-space:nowrap}th{background:#f7f9fc;color:#728198;font-size:12px;font-weight:600}th,td{padding:13px 14px;border-bottom:1px solid #edf1f6;font-size:13px}td{color:#31425b}.status{background:#edf8d5;color:#4f7010;padding:4px 9px;border-radius:20px;font-size:11px}.empty{text-align:center;padding:30px;color:#8593a7;font-size:13px}.notice{background:#fff8dc;border:1px solid #f0dfa0;border-radius:10px;padding:12px 15px;margin-bottom:15px;color:#735b10;font-size:13px}footer{display:flex;justify-content:space-between;gap:10px;margin-top:25px;padding:15px 2px;color:#8b99ac;font-size:11px}footer span{color:#59702b}
+@media(max-width:950px){.sidebar{width:205px}.main{padding:22px 20px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.app-shell{display:block}.sidebar{width:100%;padding:14px;display:block}.brand{padding:0 5px 12px}.side-caption,.sidebar-bottom{display:none}.sidebar .nav-item{display:inline-flex;width:auto;padding:9px 10px;margin:2px;font-size:12px}.main{padding:20px 13px}.topbar h1{font-size:23px}.refresh{font-size:11px;padding:8px}.hero{padding:22px}.hero h2{font-size:22px}.hero-icon{display:none}.stats{gap:9px}.stat-card{padding:13px}.content-grid{gap:0}.panel{padding:16px}.form-row,.entry-form{align-items:stretch;flex-direction:column}.primary{min-height:42px}footer{flex-direction:column}}
+
+/* Phase 2: dark reference-inspired dashboard */
+:root{color:#dbe8ee;background:#0b121b}body{background:#0b121b}.sidebar{background:#0a111a;border-left:1px solid #24313e}.main{background:#101923;min-height:100vh;max-width:none}.topbar h1,.panel h3,.stat-card strong{color:#e8f2f6}.eyebrow,.panel-heading p,.stat-card span{color:#93a6b4}.panel,.stat-card{background:#18232e;border:1px solid #2b3b49}.hero{background:linear-gradient(115deg,#172935,#0c151f);border:1px solid #2b3b49}.nav-item.active,.nav-item:hover{background:#1e303c;color:#9fe8c8}.primary{background:#a5d84c;color:#101923}.primary:hover{background:#b7e864}.stat-icon{background:#234336;color:#9fe8c8}.tip{background:#1e3034;color:#a7d8b9}.notice{background:#3b3220;color:#f5da95;border-color:#6b5424}.table-wrap th{background:#1c2a35;color:#a7bac5}.table-wrap td{color:#d6e5e9;border-color:#30414d}.table-wrap th{border-color:#30414d}.status{background:#234335;color:#b6e78a}.refresh{background:#1b2a36;color:#d9e8ee;border-color:#354755}.form-row label,.entry-form label{color:#b3c7d1}.form-row input,.entry-form input,.entry-form select,.form-row select{background:#101b25;color:#e3eff2;border-color:#3c4c59}.brand-logo{width:78px;height:57px;object-fit:contain;border-radius:5px}.brand{padding:0 4px 22px}.header-actions{display:flex;gap:8px;align-items:center}.user-chip{font-size:12px;color:#a5d84c}.login-screen{min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 10%,#243b49,#09111a 70%);padding:20px}.login-card{width:min(430px,100%);background:#182530;border:1px solid #344956;padding:28px;border-radius:20px;display:grid;gap:15px;box-shadow:0 20px 80px #0006}.login-card img{width:200px;max-width:100%;margin:auto}.login-card h1{text-align:center;margin:0;color:#f0f4f5}.login-card p,.login-card small{text-align:center;color:#a6bbc7;margin:0}.login-card label{display:grid;gap:7px;font-size:13px}.login-card input{background:#101b25;color:#fff;border:1px solid #43535f;border-radius:8px;padding:12px}.login-card button{width:100%}footer{color:#8fa3b1}footer span{color:#a5d84c}
+@media(max-width:620px){.header-actions{flex-wrap:wrap}.user-chip{width:100%}}
+
+.app-shell[dir="ltr"]{direction:ltr}.app-shell[dir="ltr"] .sidebar{border-left:0;border-right:1px solid #24313e}.app-shell[dir="ltr"] .nav-item,.app-shell[dir="ltr"] table{text-align:left}.app-shell[dir="ltr"] .main{text-align:left}
+
+/* Nuqati trip intelligence - responsive dark fleet dashboard */
+.nuqati-trips{margin-top:24px;display:grid;gap:18px}.nuqati-trip-heading,.nuqati-trip-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}.nuqati-trip-heading h3,.nuqati-trip-toolbar h3{margin:0;color:#f1f7fa;font-size:19px}.nuqati-trip-heading p{margin:5px 0 0;color:#8fa8b8;font-size:12px}.nuqati-trip-count{padding:7px 12px;border-radius:99px;background:#263c35;color:#b5e96d;font-size:12px}.nuqati-trip-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.nuqati-trip-kpi{position:relative;min-height:110px;padding:16px;background:linear-gradient(150deg,#1b2b3b,#15222f);border:1px solid #314455;border-radius:15px;display:flex;flex-direction:column;gap:12px}.nuqati-trip-kpi small{font-size:12px;color:#9ab2c0}.nuqati-trip-kpi strong{font-size:21px;color:#f0f7fc;direction:ltr;text-align:start}.nuqati-kpi-icon{position:absolute;inset-inline-end:15px;top:12px;font-size:22px;color:#a5d84c;opacity:.9}.nuqati-trip-table-card{background:#172430;border:1px solid #324554;border-radius:16px;padding:18px;min-width:0}.nuqati-trip-filters{display:flex;gap:10px;flex-wrap:wrap}.nuqati-trip-filters input,.nuqati-trip-filters select{background:#111e29;color:#e5f0f5;border:1px solid #3a5263;border-radius:10px;padding:10px 12px;max-width:100%}.nuqati-trip-table-wrap{margin-top:16px}.nuqati-trip-table{width:100%;border-collapse:separate;border-spacing:0;text-align:start}.nuqati-trip-table th{background:#1f3141;color:#b4c7d3;font-size:11px}.nuqati-trip-table td{padding:15px 12px;font-size:12px;color:#e0edf3}.nuqati-trip-table tr:hover td,.nuqati-trip-table tr.nuqati-trip-selected td{background:#223846}.nuqati-trip-status{display:inline-flex;border-radius:20px;padding:6px 10px;font-size:11px;white-space:nowrap}.nuqati-trip-status.is-completed{background:#193f35;color:#a8efc0}.nuqati-trip-status.is-active{background:#173f67;color:#9bd1ff}.nuqati-violation-count{color:#9ce8ae}.nuqati-violation-count.is-alert{color:#ff9c73;font-weight:700}.nuqati-map-button{border:1px solid #3b6170;background:#203948;color:#b8e6ef;border-radius:9px;padding:8px 11px;white-space:nowrap}.nuqati-map-button:hover{border-color:#a5d84c;color:#c5f37d}.nuqati-trip-drawer{position:fixed;top:0;bottom:0;inset-inline-end:0;width:min(790px,96vw);background:#101d2b;border:1px solid #354b5d;z-index:1001;overflow-y:auto;padding:24px;box-shadow:0 0 50px #0009}.nuqati-trip-drawer h3{color:#f0f7fc}.nuqati-trip-drawer .nuqati-trip-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}@media(max-width:1200px){.nuqati-trip-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.nuqati-trip-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-trip-table-card{padding:10px}.nuqati-trip-kpi{padding:12px;min-height:95px}.nuqati-trip-kpi strong{font-size:17px}.nuqati-trip-drawer{width:100vw;padding:14px}}
+
+/* Nuqati V2: driver-first fleet experience */
+.nuqati-mission{margin:18px 0 22px;padding:26px;border-radius:22px;border:1px solid #36515d;background:radial-gradient(ellipse at top right,#234d46 0%,#152937 42%,#121f2d 100%);box-shadow:0 14px 42px #0002}
+.nuqati-mission-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:20px}.nuqati-overline{color:#b9e975;font-size:11px;font-weight:800;letter-spacing:1.8px}.nuqati-mission h3{color:#f1f9f5;font-size:clamp(20px,2.3vw,29px);margin:8px 0}.nuqati-mission p{color:#afc6ce;line-height:1.7;margin:6px 0}.nuqati-mission-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.nuqati-mission-grid article{background:#122532cc;border:1px solid #39535b;border-radius:15px;padding:17px;min-width:0}.nuqati-mission-grid strong{color:#eff7f3;font-size:14px;display:block;margin:10px 0 5px}.nuqati-mission-grid p{font-size:12px}.nuqati-mission-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#a5d84c1c;color:#c2ed78;font-size:23px}.nuqati-mission-note{font-size:11px!important;color:#8fa9b2!important;margin-top:16px!important}.nav-item:focus-visible,.primary:focus-visible,.refresh:focus-visible{outline:3px solid #c6ef55;outline-offset:2px}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.6}
+@media(max-width:1080px){.nuqati-mission-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.nuqati-mission{padding:16px}.nuqati-mission-grid{grid-template-columns:1fr}.nuqati-mission-heading .primary{width:100%}}
+
+/* Fleet v3 overview and compact searchable list controls */
+.nuqati-filter-bar{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:16px;margin-bottom:18px;background:#182a38;border:1px solid #365061;border-radius:14px;color:#e4f3f5}.nuqati-filter-bar label{display:grid;gap:6px;min-width:165px;flex:1;font-size:12px}.nuqati-filter-bar input,.nuqati-filter-bar select,.nuqati-overview-toolbar select{background:#0c1c28;border:1px solid #3a5263;color:#eef7fa;border-radius:9px;padding:10px;min-width:130px}.nuqati-overview-dashboard{padding:19px;background:#121f2b;border:1px solid #314656;border-radius:20px;margin-bottom:22px}.nuqati-overview-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.nuqati-overview-toolbar h2{font-size:20px;margin:0 0 6px;color:#eef8f7}.nuqati-overview-toolbar small,.nuqati-chart-note{color:#93aebb;font-size:12px}.nuqati-overview-toolbar>div:last-child{display:flex;flex-wrap:wrap;gap:8px}.nuqati-overview-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.nuqati-overview-kpis article,.nuqati-chart-card{padding:18px;background:#192a39;border:1px solid #364c5c;border-radius:14px}.nuqati-overview-kpis small{display:block;color:#9ab4c2}.nuqati-overview-kpis strong{display:block;font-size:28px;color:#c2ec7b;margin-top:6px}.nuqati-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.nuqati-chart-card{min-width:0}.nuqati-chart-card h3{font-size:15px;color:#eaf5f4;margin:0 0 14px}.nuqati-chart-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:#b7cad1}.nuqati-chart-legend span{display:inline-flex;gap:5px;align-items:center}.nuqati-chart-legend i{width:9px;height:9px;border-radius:3px}.nuqati-chart-bars{display:flex;align-items:stretch;gap:7px;height:205px;margin-top:16px;border-bottom:1px solid #536775;overflow:hidden}.nuqati-bar-column{display:flex;flex:1;min-width:0;align-items:center;flex-direction:column;justify-content:end;gap:5px}.nuqati-bar-track{width:min(100%,36px);height:175px;display:flex;align-items:flex-end;justify-content:center;gap:2px;flex-direction:row}.nuqati-bar-track div{flex:1;min-width:0;min-height:0}.nuqati-bar-column small{font-size:9px;color:#9ab2be;white-space:nowrap}.nuqati-chart-note{margin:12px 0 0}@media(max-width:900px){.nuqati-overview-grid{grid-template-columns:1fr}.nuqati-overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.nuqati-overview-kpis strong{font-size:22px}.nuqati-chart-card{padding:12px}.nuqati-bar-column small{font-size:8px;transform:rotate(-50deg);margin-bottom:7px}}
+/* Fleet > Trips: balanced responsive vehicle/map/driver workspace */
+.nuqati-top-company{display:flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
+.nuqati-top-company select{min-width:170px;max-width:270px;padding:8px;border-radius:8px}
+.nuqati-fleet-map-layout{display:grid;grid-template-columns:minmax(190px,23%) minmax(290px,1fr) minmax(190px,23%);gap:12px;margin:16px 0;min-height:500px}
+.nuqati-map-side,.nuqati-fleet-map-center{border:1px solid #365060;border-radius:12px;padding:12px;min-width:0;background:#152536}
+.nuqati-map-side{display:flex;flex-direction:column;gap:8px}
+.nuqati-map-side h3{margin:2px 0 8px}
+.nuqati-map-side input{width:100%;box-sizing:border-box}
+.nuqati-side-scroll{overflow-y:auto;max-height:435px;display:flex;flex-direction:column;gap:7px}
+.nuqati-side-item{display:flex;flex-direction:column;align-items:stretch;text-align:start;gap:5px;width:100%;padding:11px;background:#1c3344;border:1px solid #365060;color:inherit;border-radius:9px;cursor:pointer}
+.nuqati-side-item:hover,.nuqati-side-item.selected{border-color:#c4e85f;background:#254654}
+.nuqati-side-item small{opacity:.8;overflow-wrap:anywhere}
+.nuqati-fleet-map-center{display:flex;flex-direction:column;gap:8px}
+.nuqati-fleet-map-center>small{opacity:.75}
+.nuqati-trip-route-panel{margin-top:18px}
+@media(max-width:1050px){.nuqati-fleet-map-layout{grid-template-columns:1fr 1fr}.nuqati-fleet-map-center{grid-column:1 / -1;grid-row:1}.nuqati-side-scroll{max-height:270px}}
+@media(max-width:650px){.nuqati-fleet-map-layout{display:flex;flex-direction:column}.nuqati-fleet-map-center{order:-1}.nuqati-side-scroll{max-height:230px}.nuqati-top-company select{min-width:110px}}
+
+
+.hero-branding{margin-top:14px;display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:#ffffff12;border:1px solid #ffffff1f;color:#c6ef55;font-weight:700;font-size:12px}
+.driver-first-banner{margin-top:16px;border-radius:20px;background:linear-gradient(120deg,#1b2f3e,#101923 55%,#173527);border:1px solid #2f4150;padding:24px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;overflow:hidden}
+.driver-first-copy h3{margin:10px 0 8px;color:#f5fbfd;font-size:26px}
+.driver-first-copy p{margin:0 0 12px;color:#b8c9d3}
+.driver-first-bilingual{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;align-items:start;max-width:720px}
+.driver-first-bilingual strong{color:#a5d84c;font-size:14px}
+.driver-first-bilingual span{color:#d8e6eb;font-size:13px}
+.driver-first-visual{position:relative;min-width:180px;width:180px;height:180px;display:grid;place-items:center}
+.driver-pulse{position:absolute;border-radius:999px;border:1px solid #a5d84c55;background:radial-gradient(circle,#a5d84c22 0%,transparent 70%);animation:nuqatiPulse 3s ease-out infinite}
+.driver-pulse-a{width:84px;height:84px}
+.driver-pulse-b{width:128px;height:128px;animation-delay:1s}
+.driver-pulse-c{width:168px;height:168px;animation-delay:2s}
+.driver-pulse-core{position:relative;z-index:2;width:72px;height:72px;border-radius:24px;display:grid;place-items:center;background:linear-gradient(160deg,#a5d84c,#d3ff7d);color:#10212d;font-size:34px;box-shadow:0 14px 36px #0005;font-weight:700}
+@keyframes nuqatiPulse{0%{transform:scale(.78);opacity:.7}70%{transform:scale(1.06);opacity:.08}100%{transform:scale(1.12);opacity:0}}
+@media(max-width:900px){.driver-first-banner{flex-direction:column;align-items:flex-start}.driver-first-bilingual{grid-template-columns:1fr}.driver-first-visual{align-self:center}}
+
+
+/* Oct 29 — consistent dashboard visual rhythm. Presentation only. */
+:root{--nq-gap:14px;--nq-card:#182733;--nq-stroke:#314656;--nq-text:#e5f0f3;--nq-muted:#a3b8c5;--nq-focus:#b9e96a}
+.app-shell{align-items:stretch;min-width:0}
+.sidebar{width:236px;padding:19px 12px;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#395569 transparent}
+.brand{gap:10px;padding:3px 8px 18px;min-width:0}
+.brand>div{min-width:0}.brand strong{font-size:20px;overflow-wrap:anywhere}.brand small{font-size:11px;line-height:1.5}
+.nuqati-nav-group{border:1px solid transparent;border-radius:12px;margin-bottom:5px;background:transparent}
+.nuqati-nav-group[open]{border-color:#293e4c;background:#14222f}
+.nuqati-nav-group>summary{border-radius:11px;list-style-position:inside;color:#d7e5eb;font-size:12px;line-height:1.6}
+.nuqati-nav-group>summary:hover{background:#203442}
+.nuqati-nav-group .nav-item{margin:2px 5px;width:calc(100% - 10px);padding:9px 10px;font-size:12px;border-radius:8px;line-height:1.4}
+.nav-item{min-height:37px;text-align:start}
+.main{min-width:0;width:100%;padding:20px clamp(14px,2vw,32px) 36px}
+.topbar{min-height:68px;gap:18px;align-items:center;border-bottom:1px solid #263b49;padding-bottom:14px;margin-bottom:18px}
+.topbar>div:first-child{min-width:0}.topbar h1{font-size:clamp(21px,1.65vw,27px);line-height:1.3;overflow-wrap:anywhere}
+.header-actions{gap:7px;justify-content:flex-end;flex-wrap:wrap;min-width:0}
+.user-chip{display:inline-block;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.refresh,.primary,.nuqati-map-button{display:inline-flex;justify-content:center;align-items:center;gap:7px;min-height:37px;line-height:1.3;font-size:12px;border-radius:9px}
+.refresh{padding:8px 11px}.primary{padding:9px 13px}
+.panel{padding:clamp(15px,1.45vw,22px);margin-bottom:14px;border-radius:15px;min-width:0}
+.panel-heading{gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.panel h3{font-size:17px;line-height:1.4}
+.panel h4{color:var(--nq-text);font-size:14px;margin:16px 0 9px}
+.entry-form,.form-row{gap:11px 13px;align-items:end}
+.entry-form label,.form-row label{min-width:min(175px,100%);flex:1 1 190px;line-height:1.5}
+.entry-form input,.entry-form select,.form-row input,.form-row select,.input,.nuqati-filter-bar input,.nuqati-filter-bar select{min-height:39px;padding:9px 11px;max-width:100%}
+input,select,textarea{color-scheme:dark}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--nq-focus);outline-offset:2px}
+input::placeholder,textarea::placeholder{color:#8fa8b6}
+.entry-form>.primary,.entry-form>.refresh{margin-bottom:0}
+.nuqati-filter-bar{padding:12px 14px;gap:10px;margin-bottom:14px;border-radius:12px;align-items:end}
+.nuqati-filter-bar label{flex:1 1 175px;min-width:0}
+.table-wrap{overflow:auto;max-width:100%;margin-top:15px;border:1px solid #2b404e;border-radius:12px;scrollbar-width:thin;scrollbar-color:#465e6d transparent}
+.table-wrap table{min-width:600px;width:100%;border-collapse:separate;border-spacing:0}
+.table-wrap th{position:sticky;top:0;z-index:1;font-weight:700;letter-spacing:.1px;background:#20303d}
+.table-wrap th,.table-wrap td{padding:11px 12px;font-size:12px;line-height:1.5;vertical-align:middle}
+.table-wrap tbody tr:hover td{background:#213240}
+.table-wrap .refresh{padding:6px 9px;min-height:31px;font-size:11px;white-space:normal}
+.nuqati-overview-dashboard{padding:16px;margin-bottom:18px}
+.nuqati-overview-toolbar{align-items:center;gap:12px}
+.nuqati-overview-kpis{gap:11px;margin:14px 0}
+.nuqati-overview-kpis article,.nuqati-chart-card{padding:15px}
+.nuqati-overview-grid{gap:12px}
+.nuqati-chart-card h3{line-height:1.5;min-height:22px;margin-bottom:9px}
+.nuqati-trip-kpis{gap:10px}.nuqati-trip-kpi{padding:14px;min-height:99px;gap:9px}
+.nuqati-trips{gap:14px;margin-top:18px}.nuqati-trip-table-card{padding:15px}
+.nuqati-fleet-map-layout{gap:10px;margin:13px 0}.nuqati-map-side,.nuqati-fleet-map-center{padding:11px}
+.nuqati-trip-filters input{min-width:180px}
+.hero{padding:22px 25px}.hero h2{font-size:clamp(21px,2vw,28px)}
+.driver-first-banner{padding:17px 22px;gap:14px;margin:12px 0 16px}
+.driver-first-copy h3{font-size:clamp(19px,2vw,25px)}
+.driver-first-visual{width:132px;min-width:132px;height:132px}
+.driver-pulse-a{width:60px;height:60px}.driver-pulse-b{width:95px;height:95px}.driver-pulse-c{width:125px;height:125px}
+.driver-pulse-core{width:59px;height:59px;font-size:27px;border-radius:19px}
+.nuqati-help{background:#142531;border:1px solid #2d4858;border-radius:10px;padding:9px 11px}
+.nuqati-help summary{line-height:1.5}
+@media(max-width:1150px){.sidebar{width:208px}.topbar{align-items:flex-start;flex-direction:column}.header-actions{justify-content:flex-start}.nuqati-trip-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.app-shell{display:block}.sidebar{position:relative;top:auto;width:100%;height:auto;max-height:none;overflow:visible;padding:11px 12px}.sidebar .nav-item{width:auto;margin:2px;padding:8px 10px}.nuqati-nav-group{display:inline-block;vertical-align:top;max-width:100%;margin:2px}.nuqati-nav-group[open]{display:block}.nuqati-nav-group .nav-item{display:inline-flex;width:auto;margin:2px}.main{padding:15px 12px 28px}.topbar{min-height:0}.header-actions{width:100%}.user-chip{max-width:100%}.panel{padding:13px}.nuqati-overview-grid{grid-template-columns:1fr}.nuqati-trip-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-filter-bar{gap:8px}.nuqati-filter-bar label{flex:1 1 145px}.hero{padding:17px}.hero-icon{display:none}.driver-first-banner{padding:16px}.driver-first-visual{align-self:center}.driver-first-bilingual{grid-template-columns:1fr}}
+@media(max-width:470px){.header-actions .refresh{flex:1 1 auto}.nuqati-overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-overview-kpis article{padding:11px}.nuqati-overview-kpis strong{font-size:20px}.entry-form,.form-row{gap:9px}.nuqati-trip-kpi{min-height:90px;padding:11px}.nuqati-trip-kpi strong{font-size:17px}.nuqati-chart-card{padding:12px}.nuqati-trip-filters input{min-width:0;width:100%}}
+@media(prefers-reduced-motion:reduce){.driver-pulse{animation:none;opacity:.15}}
+
+/* Map-first workspace in both directions: list starts left in English and right in Arabic. */
+.nuqati-tracking-page{padding:14px!important}
+.nuqati-tracking-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:6px 8px 12px}
+.nuqati-tracking-heading h2{font-size:23px;margin:0;color:#f0f7f9}
+.nuqati-tracking-heading p{font-size:12px;color:#a5b8c3;margin:5px 0 0}
+.nuqati-tracking-workspace{display:grid;grid-template-columns:minmax(245px,28%) minmax(400px,1fr);gap:12px;min-height:610px}
+.nuqati-tracking-workspace[dir="rtl"]{direction:rtl}
+.nuqati-tracking-list{display:flex;flex-direction:column;background:#18232e;border:1px solid #324653;border-radius:12px;min-width:0;max-height:660px;overflow:hidden}
+.nuqati-tracking-tabs{display:flex;padding:10px;gap:8px;border-bottom:1px solid #334a58}
+.nuqati-tracking-tabs button{flex:1;background:#20323f;color:#c9dbe2;border:1px solid #405869;padding:10px 6px;border-radius:8px;font-weight:600}
+.nuqati-tracking-tabs button.selected{background:#244b3a;color:#b3e78e;border-color:#7bcba7}
+.nuqati-tracking-list .nuqati-map-side{border:0;background:#18232e;padding:12px;flex:1;min-height:0}
+.nuqati-tracking-list .nuqati-side-scroll{max-height:none;overflow:auto;flex:1}
+.nuqati-tracking-list .nuqati-side-item{background:#1c2b37;color:#dfedf1;border-color:#d9e5eb}
+.nuqati-tracking-list .nuqati-side-item:hover,.nuqati-tracking-list .nuqati-side-item.selected{background:#254338;border-color:#5bbd91}
+.nuqati-tracking-list input{border:1px solid #425969;background:#18232e;color:#e6f2f5;border-radius:8px;padding:10px}
+.nuqati-tracking-workspace .nuqati-fleet-map-center{background:#1c2b37;border:1px solid #324653;min-width:0;padding:8px}
+.nuqati-tracking-workspace .nuqati-fleet-map-center iframe{height:570px!important}
+.nuqati-tracking-workspace .nuqati-fleet-map-center small{color:#b0c4cd;padding:3px 6px}
+.nuqati-tracking-disclaimer{margin:14px 4px 2px;font-size:12px;color:#a5bac5}
+@media(max-width:1050px){.nuqati-tracking-workspace{grid-template-columns:minmax(200px,34%) minmax(320px,1fr)}}
+@media(max-width:760px){.nuqati-tracking-workspace{display:flex;flex-direction:column}.nuqati-tracking-workspace .nuqati-fleet-map-center{order:-1}.nuqati-tracking-workspace .nuqati-fleet-map-center iframe{height:400px!important}.nuqati-tracking-list{max-height:370px}}
+/* Historical tracking: selectable recorded trips beside an embedded route map */
+.nuqati-historical-workspace{display:grid;grid-template-columns:minmax(245px,30%) minmax(400px,1fr);gap:12px;margin-bottom:4px}
+.nuqati-historical-list,.nuqati-historical-map{border:1px solid #324653;border-radius:12px;background:#18232e;min-width:0;overflow:hidden}
+.nuqati-historical-list{display:flex;flex-direction:column;max-height:560px}
+.nuqati-historical-search{padding:12px;display:grid;gap:10px;border-bottom:1px solid #354a58}
+.nuqati-historical-search h3{margin:0;color:#eef5f7;font-size:15px}
+.nuqati-historical-search input{padding:10px;border-radius:8px;border:1px solid #405564;background:#18232e;color:#e3f0f5;width:100%}
+.nuqati-historical-scroll{padding:9px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.nuqati-historical-scroll .nuqati-side-item{background:#1c2b37;color:#dfedf1;border-color:#344957}
+.nuqati-historical-scroll .nuqati-side-item.selected,.nuqati-historical-scroll .nuqati-side-item:hover{border-color:#69c6a1;background:#e8f6ef}
+.nuqati-historical-map{padding:10px;min-height:500px}
+.nuqati-historical-map-heading{display:flex;justify-content:space-between;align-items:center;min-height:40px;padding:2px 7px 10px;color:#e3f0f5}
+.nuqati-historical-empty{height:435px;background:linear-gradient(155deg,#20313d,#13212d);color:#b2c5ce;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;text-align:center;padding:24px;border-radius:10px}
+.nuqati-historical-empty p{max-width:400px}
+.nuqati-historical-map iframe{width:100%!important;min-height:450px}
+@media(max-width:900px){.nuqati-historical-workspace{display:flex;flex-direction:column}.nuqati-historical-list{max-height:260px}.nuqati-historical-map{min-height:420px}}
+
+/* Maintenance Alerts: one selected vehicle and its own services */
+.maintenance-vehicle-filter{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:14px 16px;margin:4px 0 18px;background:rgba(30,58,80,.55);border:1px solid #355067;border-radius:12px}.maintenance-vehicle-filter>label{display:flex;flex-direction:column;gap:7px;min-width:260px;max-width:480px;flex:1;font-weight:600}.maintenance-vehicle-filter select{width:100%;min-height:40px}.maintenance-vehicle-summary{display:flex;gap:14px;flex-wrap:wrap;align-items:center;color:#c5d9e9}.maintenance-vehicle-summary strong{color:#b9e64b}.maintenance-vehicle-summary span{padding:7px 10px;border:1px solid #3b5569;border-radius:8px}
+
+/* Separate read-only Smart Oil Life Estimator; leaves existing maintenance UI untouched. */
+.nuqati-smart-oil { margin-top: 18px; }
+.nuqati-smart-oil .panel-heading {display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+.nuqati-smart-oil h3 {display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+.smart-oil-badge {background:#284a3e; color:#b5e54a; font-size:11px; padding:4px 9px; border-radius:14px;}
+.smart-oil-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0;}
+.smart-oil-grid>div {padding:14px;background:#203347;border:1px solid #344b61;border-radius:11px;display:flex;flex-direction:column;gap:8px;}
+.smart-oil-grid span {color:#bfcdd9;font-size:12px;}
+.smart-oil-grid strong {color:#f6fafc;font-size:20px;}
+.smart-oil-note {color:#d8edc5;}
+.smart-oil-warning {color:#ffcb82;}
+.smart-oil-muted {color:#b5c5d2;font-size:12px;line-height:1.65;}
+.smart-oil-muted a {color:#b5e54a;margin-inline-start:8px;}
+@media(max-width:850px){.smart-oil-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:440px){.smart-oil-grid{grid-template-columns:1fr;}}
+
+/* Dashboard account security */
+.nuqati-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:12px}
+.nuqati-account-grid form{display:flex;flex-direction:column;align-items:stretch;gap:12px;background:#152737;border:1px solid #365162;padding:18px;border-radius:14px}
+.nuqati-account-grid label{display:grid;gap:7px;min-width:0}
+.nuqati-account-grid input{min-width:0;width:100%;box-sizing:border-box}
+.nuqati-account-button{border:1px solid #395264;background:#1c3342;color:#e6f4fa;border-radius:9px;padding:8px 12px;cursor:pointer}
+.nuqati-account-recovery{padding:12px;border:1px solid #405768;border-radius:12px;display:grid;gap:10px}
+@media(max-width:760px){.nuqati-account-grid{grid-template-columns:1fr}}
+/* Geofence Location workspace */
+.nuqati-geo-page .nuqati-geo-company{max-width:430px;margin:12px 0}
+.nuqati-geo-company label{display:grid;gap:5px}
+.nuqati-geo-workspace{display:flex;gap:12px;min-height:540px;margin-top:14px}
+.nuqati-geo-sidebar{width:285px;flex:0 0 285px;border:1px solid #34485b;border-radius:11px;padding:12px;overflow:auto}
+.nuqati-geo-list{display:grid;gap:7px;max-height:520px;overflow:auto}
+.nuqati-geo-list-item{display:grid;gap:5px;background:#152637;color:#e7f3ff;text-align:start;padding:12px;border:1px solid #34495e;border-radius:9px;cursor:pointer}
+.nuqati-geo-list-item small{opacity:.75}.nuqati-geo-list-item.active{border-color:#b5e75b}
+.nuqati-geo-map{flex:1;min-width:0}.nuqati-geo-map-container{position:relative;width:100%;height:100%;min-height:330px}
+.nuqati-geo-leaflet{height:100%;width:100%;min-height:330px;border-radius:11px;z-index:0}
+.nuqati-geo-map-hint{position:absolute;z-index:400;bottom:12px;inset-inline-start:12px;background:#102437e6;color:#f4f8ff;padding:6px 10px;border-radius:7px;font-size:12px;pointer-events:none}
+.nuqati-zone-label{background:transparent;border:0;white-space:nowrap}
+.nuqati-zone-label-text{background:#102437e9;color:#fff;font-size:12px;font-weight:700;padding:4px 7px;border:1px solid #a0c965;border-radius:5px;white-space:nowrap;position:absolute;transform:translate(-50%,-120%);box-shadow:0 2px 4px #0008}
+.nuqati-geo-form{margin-top:16px}.nuqati-geo-modal-backdrop{position:fixed;inset:0;z-index:9999;background:#000a;display:flex;align-items:center;justify-content:center;padding:20px}
+.nuqati-geo-modal{width:min(800px,100%);max-height:92vh;overflow:auto;background:#172533;color:#f7fbff;border:1px solid #436074;border-radius:12px;padding:18px}
+.nuqati-geo-modal .nuqati-geo-map-container{height:330px}.nuqati-geo-check{display:flex;align-items:center;gap:8px;padding:5px}
+.nuqati-geo-vehicle-list{max-height:180px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.nuqati-geo-actions{display:flex;gap:10px;margin-top:15px}
+@media(max-width:850px){.nuqati-geo-workspace{flex-direction:column}.nuqati-geo-sidebar{width:100%;flex:auto}.nuqati-geo-map{min-height:440px}}
+
+/* Compact My Account layout; scoped so other Nuqati pages are unaffected. */
+.nuqati-self-service{max-width:1000px;margin-inline:auto;padding:22px 24px!important}
+.nuqati-account-heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.nuqati-account-heading-icon{display:grid;place-items:center;width:42px;height:42px;border:1px solid #3b5b4c;background:#203b35;color:#b6e65f;border-radius:12px;flex-shrink:0}
+.nuqati-account-heading h3{margin:0;font-size:18px}.nuqati-account-heading p{margin:4px 0 0;color:#aabeca;font-size:12px}
+.nuqati-account-identity{display:grid;grid-template-columns:1fr 1.2fr;gap:14px;padding:12px 16px;margin-bottom:17px;background:#111d28;border:1px solid #2b4251;border-radius:11px}
+.nuqati-account-identity div{display:flex;flex-direction:column;gap:4px;min-width:0}.nuqati-account-identity small{color:#9bb0be;font-size:11px}.nuqati-account-identity strong{color:#edf6f8;font-size:13px;overflow-wrap:anywhere;font-weight:600}
+.nuqati-self-service .nuqati-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0;align-items:start}
+.nuqati-self-service .nuqati-account-card{display:flex;flex-direction:column;gap:12px;padding:18px;background:#172735;border:1px solid #324a59;border-radius:12px;min-width:0;box-shadow:none}
+.nuqati-account-card-heading{min-height:53px;margin-bottom:3px}.nuqati-self-service .nuqati-account-card h4{font-size:14px;margin:0 0 5px;color:#f0f8fa}.nuqati-account-card-heading p{color:#aabfca;margin:0;font-size:11px;line-height:1.5}
+.nuqati-self-service .nuqati-account-card label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:11px;color:#bbced8;font-weight:500;flex:none}
+.nuqati-self-service .nuqati-account-card input{box-sizing:border-box;display:block;width:100%;height:39px;min-height:39px;padding:9px 11px;background:#0e1b27;border:1px solid #385161;border-radius:8px;color:#eef6f8;font-size:13px}
+.nuqati-self-service .nuqati-account-card input:focus{border-color:#b5e353}
+.nuqati-self-service .nuqati-account-card .primary{min-height:39px;width:100%;font-weight:700;font-size:12px;margin:3px 0 0}
+.nuqati-account-hint{font-size:11px;color:#a9bec9;line-height:1.5;margin:auto 0 0;padding-top:8px}
+.nuqati-account-status{margin-top:14px;padding:10px 12px;border-radius:9px;font-size:12px}
+@media(max-width:850px){.nuqati-self-service .nuqati-account-grid{grid-template-columns:1fr}.nuqati-account-card-heading{min-height:0}}
+@media(max-width:550px){.nuqati-self-service{padding:15px!important}.nuqati-account-identity{grid-template-columns:1fr}.nuqati-self-service .nuqati-account-card{padding:14px}}
+
+/* Compact, responsive email reporting subscriptions */
+.nuqati-scheduled-reports{border:1px solid #30485b;background:#102638;border-radius:14px;padding:18px;margin-bottom:18px}
+.nuqati-scheduled-heading h3{margin:0 0 4px}.nuqati-scheduled-heading p,.nuqati-scheduled-note{color:#b1c5d4;font-size:12px}
+.nuqati-scheduled-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px;margin:14px 0}
+.nuqati-scheduled-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#c8d8e2}
+.nuqati-scheduled-grid input,.nuqati-scheduled-grid select{width:100%;min-height:35px;max-width:100%;box-sizing:border-box}
+.nuqati-scheduled-choices{padding:12px;border:1px solid #385062;border-radius:9px;margin:10px 0}
+.nuqati-scheduled-choices>div{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;max-height:160px;overflow:auto}
+.nuqati-scheduled-choices label{display:flex;align-items:center;gap:6px;min-width:140px}
+.nuqati-scheduled-reports h4{margin:18px 0 8px}
+
+/* Compact, configurable Nuqati overview — existing charts remain unchanged. */
+.nuqati-intelligence-hero{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:24px 28px;margin-bottom:14px;min-height:205px;overflow:hidden;position:relative;border-radius:20px;border:1px solid #345362;background:radial-gradient(ellipse at 85% 88%,#204629 0%,transparent 46%),linear-gradient(110deg,#152d3b,#0c1926 75%)}
+.nuqati-intelligence-copy{position:relative;z-index:2;flex:1;min-width:0}.nuqati-intelligence-hero h2{font-size:clamp(21px,2.2vw,31px);line-height:1.2;color:#f4f9fc;margin:9px 0}.nuqati-intelligence-hero p{color:#bbd0d9;margin:6px 0 14px;max-width:760px}.nuqati-intelligence-tags{display:flex;gap:8px;flex-wrap:wrap}.nuqati-intelligence-tags span{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;background:#182e3b;border:1px solid #3c5664;border-radius:99px;color:#deebec;font-size:11px}.nuqati-intelligence-tags svg{color:#b9ed59}.nuqati-intelligence-hero .hero-branding{margin-top:12px}
+.nuqati-intelligence-visual{position:relative;flex:0 0 228px;height:155px;display:flex;align-items:center;justify-content:center;color:#c8f76c}.nuqati-motion-track{position:absolute;inset:20px 7px 5px;border:4px solid #a5d84c;border-left-color:transparent;border-bottom-color:#a5d84c44;border-radius:60% 35% 45% 25%;transform:rotate(-19deg);box-shadow:0 0 24px #a5d84c22}.nuqati-motion-car{position:relative;z-index:2;transform:translate(-8px,10px);filter:drop-shadow(0 5px 12px #87c43755)}.nuqati-motion-score{position:absolute;top:0;right:3px;display:flex;align-items:center;gap:4px;padding:7px 10px;background:#1c3540;border:1px solid #a5d84c;border-radius:10px;font-size:15px}.nuqati-motion-score small{font-size:9px}.nuqati-motion-shield{position:absolute;left:7px;top:0}
+.nuqati-overview-range{display:flex;flex-wrap:wrap;align-items:end;gap:11px;background:#152532;border:1px solid #314858;border-radius:13px;padding:12px;margin-bottom:10px}.nuqati-overview-range label{display:flex;align-items:center;gap:6px;font-size:12px;color:#c9dde1;flex-wrap:wrap}.nuqati-overview-range input{max-width:165px;min-width:0;padding:8px;background:#0f1c28;border:1px solid #3b5260;border-radius:8px;color:#f1f8fa;color-scheme:dark}.nuqati-overview-range input[type=time]{max-width:105px}.nuqati-overview-range .primary{padding:9px 16px}.nuqati-overview-presets{display:flex;gap:5px;flex-wrap:wrap}.nuqati-overview-presets button{padding:9px 11px;border:1px solid #3b5260;background:#1d303e;border-radius:8px;color:#dbe8eb;cursor:pointer}.nuqati-overview-presets button:hover{border-color:#a5d84c}.nuqati-overview-actions{display:flex;justify-content:flex-end;margin:8px 0}.nuqati-overview-actions .refresh{display:inline-flex;align-items:center;gap:8px;border-color:#a5d84c;color:#d0f29b}.nuqati-overview-customize{padding:16px;margin:8px 0 14px;background:#182936;border:1px solid #3d5867;border-radius:13px;display:grid;gap:12px}.nuqati-overview-customize p{font-size:12px;color:#a7beca;margin:4px 0}.nuqati-overview-customize-list{display:flex;gap:10px 18px;flex-wrap:wrap}.nuqati-overview-customize-list label{font-size:12px;display:inline-flex;gap:7px;align-items:center;cursor:pointer}.nuqati-overview-customize-list input{accent-color:#a5d84c}.nuqati-overview-insights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-top:14px}.nuqati-overview-insights article{background:#192a39;border:1px solid #364c5c;border-radius:12px;padding:13px}.nuqati-overview-insights small{display:block;color:#a9c0cb}.nuqati-overview-insights strong{display:block;color:#c5f277;font-size:25px;margin-top:5px}
+@media(max-width:800px){.nuqati-intelligence-visual{display:none}.nuqati-overview-range{align-items:stretch}.nuqati-overview-range label{flex:1 1 220px}.nuqati-intelligence-hero{min-height:0;padding:20px}}@media(max-width:520px){.nuqati-overview-insights{grid-template-columns:1fr}.nuqati-overview-range input{max-width:145px}}
+
+/* Overview: two-category moving vs stationary vehicle donut */
+.nuqati-motion-chart-body{display:flex;align-items:center;justify-content:space-around;gap:24px;flex-wrap:wrap;min-height:190px}
+.nuqati-motion-donut{width:165px;height:165px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;box-shadow:0 0 0 1px #405764}
+.nuqati-motion-donut-center{width:104px;height:104px;border-radius:50%;background:#192a39;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#ecf5f6}
+.nuqati-motion-donut-center strong{font-size:31px;line-height:1.15}
+.nuqati-motion-donut-center small{color:#a7bdc9;font-size:11px}
+.nuqati-motion-breakdown{min-width:165px;display:grid;gap:16px;flex:1;max-width:250px}
+.nuqati-motion-breakdown>div{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center}
+.nuqati-motion-breakdown span{color:#dae8eb;font-size:13px;display:flex;gap:8px;align-items:center}
+.nuqati-motion-breakdown strong{font-size:22px;color:#f1f8f8;text-align:end}
+.nuqati-motion-breakdown small{grid-column:2;color:#9fb5c1;text-align:end}
+.nuqati-motion-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.nuqati-motion-dot.moving{background:#a5d84c}.nuqati-motion-dot.stationary{background:#f0ac4d}.nuqati-motion-dot.unknown{background:#667b89}
+.nuqati-motion-caption{font-size:11px;color:#a7bfc9;line-height:1.5;margin:9px 0 0}
+@media(max-width:570px){.nuqati-motion-donut{width:140px;height:140px}.nuqati-motion-donut-center{width:90px;height:90px}.nuqati-motion-chart-body{gap:13px}}
+
+/* Compact report organization and geofence search */
+.nuqati-report-section{border:1px solid #35495a;border-radius:12px;padding:12px;margin:12px 0;background:#142737}
+.nuqati-report-section>summary{font-weight:700;cursor:pointer;color:#b5d86c;padding:6px}
+.nuqati-geo-report-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.nuqati-geo-report-filters label{display:flex;flex-direction:column;gap:5px;font-size:12px}
+.nuqati-geo-report-filters input,.nuqati-geo-report-filters select{min-height:36px;max-width:100%;min-width:0}
+.nuqati-geo-report-actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+/* Fleet live tracking — compact layers and selected-vehicle status */
+.nuqati-live-controls{display:flex;align-items:end;flex-wrap:wrap;gap:16px;margin:12px 0 16px}
+.nuqati-live-controls label{display:flex;gap:7px;align-items:center;font-size:13px}
+.nuqati-live-controls label:first-child{display:flex;flex-direction:column;align-items:stretch;min-width:190px}
+.nuqati-live-controls input[type=checkbox]{width:16px;height:16px;accent-color:#a5d84c}
+.nuqati-live-controls select{max-width:280px}
+.nuqati-live-sidebar{min-width:245px}
+.nuqati-live-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0;padding:10px;border:1px solid #2f4858;border-radius:12px}
+.nuqati-live-actions strong{font-size:13px;margin-right:8px}
+.nuqati-live-generated{display:flex;gap:4px;align-items:center;min-width:280px;flex:1}
+.nuqati-live-generated input{flex:1;min-width:180px}
+.nuqati-live-actions small{width:100%}
+.nuqati-live-active-settings,.nuqati-live-shares{margin:10px 0;padding:12px;border:1px solid #2f4858;border-radius:10px}
+.nuqati-live-active-settings>div{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.nuqati-live-active-settings label{display:flex;align-items:center;gap:6px;font-size:12px}
+.nuqati-live-shares>div{display:flex;gap:10px;align-items:center;margin-top:8px}
+.nuqati-public-live{max-width:920px;margin:48px auto;padding:20px;color:#edf7ff}
+
+/* Historical tracking: grouped route controls and layers */
+.nuqati-history-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 14px;margin-bottom:12px;border:1px solid #355363;border-radius:12px;background:#152b38;color:#e1f0f2}
+.nuqati-history-toolbar label,.nuqati-history-layer-toggles{display:inline-flex;align-items:center;gap:8px;font-size:12px}
+.nuqati-history-layer-toggles{flex-wrap:wrap;gap:14px}.nuqati-history-toolbar input[type=checkbox]{accent-color:#a5d84c}
+.nuqati-history-trip-row{display:flex;gap:6px;align-items:stretch}.nuqati-history-trip-row .nuqati-side-item{flex:1;min-width:0}
+.nuqati-history-plot-button{background:#223b47;border:1px solid #42616d;color:#d8f3ba;border-radius:8px;padding:8px;font-size:12px;min-width:53px}
+.nuqati-historical-map-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.nuqati-history-map-actions{display:flex;gap:7px;flex-wrap:wrap}
+
+/* Flexible RAG configuration and reporting, scoped to avoid affecting existing dashboard forms. */
+.nuqati-rag-settings,.nuqati-rag-report{border:1px solid #334b5c;border-radius:12px;padding:16px;margin:18px 0;background:#142638;color:#e6eff4}
+.nuqati-rag-settings summary{cursor:pointer;font-weight:750;font-size:15px}
+.nuqati-rag-config{margin-top:16px}
+.nuqati-rag-switch{display:flex;align-items:center;gap:10px;margin:14px 0;font-weight:650}
+.nuqati-rag-switch input{width:18px;height:18px}
+.nuqati-rag-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}
+.nuqati-rag-fields label,.nuqati-rag-config>label{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.nuqati-rag-fields input,.nuqati-rag-fields select,.nuqati-rag-config select,.nuqati-rag-config td input{min-height:36px;width:100%;background:#101e2c;color:#e8f2f5;border:1px solid #425b6c;border-radius:7px;padding:7px;font-size:13px}
+.nuqati-rag-config td input{min-width:70px;max-width:100px}
+.nuqati-rag-config td select{min-width:120px}
+.nuqati-rag-hint{font-size:12px;color:#bed0db;margin:14px 0}
+.nuqati-rag-pill{font-weight:800;border-radius:20px;padding:4px 10px;display:inline-block;background:#33485b;color:#e6eef5}
+.nuqati-rag-pill.green{background:#204d35;color:#80efaa}.nuqati-rag-pill.amber{background:#60471e;color:#f9cd6a}.nuqati-rag-pill.red{background:#623032;color:#ffabb2}
+.nuqati-rag-actions{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+
+/* Nuqati Safety Configuration — responsive, grouped, accessible controls */
+.nq-config{max-width:1500px;scroll-behavior:smooth}
+.nq-config-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap;padding:8px 0 18px}
+.nq-config-header h2{margin:6px 0;color:var(--nq-text,#e8f2f6);font-size:clamp(22px,2.4vw,30px)}
+.nq-config-header p,.nq-config-section header p{color:#a9bbc7;font-size:13px;line-height:1.7;max-width:780px;margin:6px 0}
+.nq-config-eyebrow{font-size:11px;color:#a5d84c;font-weight:800;letter-spacing:.11em}
+.nq-config-company{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:14px 17px;background:#11232d;border:1px solid #344c52;border-radius:14px}
+.nq-config-company label{display:grid;gap:6px;min-width:min(320px,100%);font-size:12px;color:#b8cad1}
+.nq-config-company select{width:100%;border:1px solid #43606a;background:#142630;color:#e8f2f6;padding:10px;border-radius:10px}
+.nq-config-company>span{flex:1;color:#b0c2c9;font-size:12px;line-height:1.65}
+.nq-config-nav{display:flex;gap:10px;overflow-x:auto;padding:16px 0;scrollbar-width:thin;position:sticky;top:0;background:#18232e;z-index:5}
+.nq-config-nav a{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;text-decoration:none;border:1px solid #3a4d5b;border-radius:11px;color:#dbe8ed;font-size:12px;font-weight:650;padding:11px 14px;background:#192c36}
+.nq-config-nav a:hover,.nq-config-nav a:focus-visible{background:#294538;border-color:#a5d84c}
+.nq-config-nav a span{color:#a5d84c;font-size:10px}
+.nq-config-section{border:1px solid #334755;border-radius:16px;background:#14212c;padding:clamp(14px,2vw,22px);margin:14px 0 20px;scroll-margin-top:84px;min-width:0}
+.nq-config-section>header{margin-bottom:18px}.nq-config-section h3{font-size:19px;margin:5px 0 9px}
+.nq-threshold-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(235px,100%),1fr));gap:12px}
+.nq-threshold-card{display:flex;flex-direction:column;gap:8px;padding:17px;border:1px solid #3a5160;background:#1b2c38;border-radius:14px;min-width:0}
+.nq-threshold-card strong{font-size:14px;color:#e5f1f5}.nq-threshold-card small{font-size:11px;color:#9fb7c1;line-height:1.55}
+.nq-input-unit{display:flex;align-items:stretch;border:1px solid #48606c;border-radius:10px;overflow:hidden;background:#101d28}
+.nq-input-unit:focus-within{outline:2px solid #a5d84c;outline-offset:1px}
+.nq-input-unit input{width:100%;min-width:0;color:#f0f8fa;font-size:20px;font-weight:750;padding:10px 12px;border:0;background:transparent;outline:none}
+.nq-input-unit span{display:flex;align-items:center;padding:0 11px;color:#a6c5d0;background:#243743;font-size:11px;white-space:nowrap}
+.nq-config-savebar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-top:17px}.nq-config-savebar small{color:#a4b9c2}
+.nq-event-switches,.nq-event-condition{border:1px solid #38505a;border-radius:12px;padding:14px;background:#1a2a35;margin-bottom:12px}
+.nq-switch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(255px,100%),1fr));gap:9px;margin-bottom:16px}
+.nq-switch-item{display:flex;align-items:center;gap:10px;min-height:47px;padding:10px 12px;background:#14232d;border:1px solid #344a56;border-radius:10px;font-size:13px}
+.nq-switch-item input{width:18px;height:18px;accent-color:#a5d84c;flex-shrink:0}
+.nq-config-section details{border-color:#39515e!important;background:#1a2a35;border-radius:12px}
+.nq-config-section .entry-form{margin-top:12px}
+.nq-config-section button:focus-visible,.nq-config-section input:focus-visible,.nq-config-section select:focus-visible{outline:2px solid #a5d84c;outline-offset:2px}
+@media(max-width:760px){.nq-config-nav{top:0}.nq-config-company{align-items:stretch}.nq-config-savebar .primary{width:100%}.nq-event-condition>div:first-child{flex-wrap:wrap}.nq-config-section{scroll-margin-top:78px}}
+
+/* Administrative trip/event correction controls */
+.nuqati-geo-event-editor{padding:12px 16px;border-top:1px solid rgba(150,170,180,.2)}
+.nuqati-geo-event-editor .nuqati-history-map-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.nuqati-geo-event-list{max-height:250px;overflow:auto;margin-top:8px}
+.nuqati-geo-event-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 2px;border-bottom:1px solid rgba(150,170,180,.13);font-size:.85rem}
+.nuqati-geo-event-row span{overflow-wrap:anywhere}
+
+/* Live Tracking workspace — isolated styles; no impact on historical tracking. */
+.nuqati-tracking-page{background:linear-gradient(165deg,#172b37 0%,#14232f 48%,#111f2c 100%);border:1px solid #345365;border-radius:20px}
+.nuqati-tracking-page .nuqati-tracking-heading{padding:12px 8px 20px}
+.nuqati-live-eyebrow{display:inline-flex;align-items:center;gap:8px;letter-spacing:.12em;color:#bce884;font-size:10px;font-weight:800;margin-bottom:9px}
+.nuqati-live-pulse{width:8px;height:8px;border-radius:50%;background:#a5d84c;box-shadow:0 0 0 4px #a5d84c21}
+.nuqati-tracking-page .nuqati-tracking-heading h2{font-size:clamp(23px,2vw,29px);font-weight:800;letter-spacing:-.02em}
+.nuqati-tracking-page .nuqati-tracking-heading p{font-size:13px;line-height:1.6}
+.nuqati-live-refresh{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.nuqati-live-refresh small{color:#a9c0c9;font-size:11px}
+.nuqati-live-refresh button{min-height:40px;display:inline-flex;align-items:center;gap:7px}
+.nuqati-live-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 13px}
+.nuqati-live-stats article{border:1px solid #375260;background:linear-gradient(145deg,#203748,#1a2b3b);border-radius:13px;padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:5px}
+.nuqati-live-stats article.is-moving{border-color:#56865288;background:linear-gradient(140deg,#203e3c,#1c3138)}
+.nuqati-live-stats article.is-stationary{border-color:#9c783c88;background:linear-gradient(140deg,#403928,#293036)}
+.nuqati-live-stats article>span{display:flex;align-items:center;gap:8px;color:#b9ced7;font-size:12px;font-weight:650}
+.nuqati-live-stats article strong{font-size:clamp(23px,2.5vw,32px);line-height:1.2;color:#f0f9fb;font-weight:800;font-variant-numeric:tabular-nums}
+.nuqati-live-stats article small{color:#8eacba;font-size:10px}
+.nuqati-live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.nuqati-live-dot.moving{background:#a5d84c;box-shadow:0 0 0 3px #a5d84c20}
+.nuqati-live-dot.stationary{background:#f0ac4d;box-shadow:0 0 0 3px #f0ac4d20}
+.nuqati-live-dot.unknown{background:#93a5b3;box-shadow:0 0 0 3px #93a5b320}
+.nuqati-live-filterbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:#102535;border:1px solid #355362;border-radius:14px;margin-bottom:12px}
+.nuqati-live-filter-intro{display:grid;gap:3px;min-width:210px;flex:1}
+.nuqati-live-filter-intro strong{font-size:13px;color:#eff7fa}
+.nuqati-live-filter-intro small{font-size:11px;color:#94afbd;line-height:1.55}
+.nuqati-live-motion-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.nuqati-live-motion-btn{min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:8px 14px;background:#1e3442;border:1px solid #48616b;border-radius:10px;color:#d7e7eb;font-weight:750;font-size:13px;transition:background .14s ease,border-color .14s ease}
+.nuqati-live-motion-btn b{display:inline-grid;place-items:center;min-width:25px;height:23px;padding:0 6px;border-radius:7px;background:#ffffff17;font-size:12px;font-variant-numeric:tabular-nums}
+.nuqati-live-motion-btn.moving.is-active{background:#294e3d;border-color:#a5d84c;color:#dcfac1;box-shadow:0 0 0 1px #a5d84c4d inset}
+.nuqati-live-motion-btn.stationary.is-active{background:#55402a;border-color:#f0ac4d;color:#ffe3b3;box-shadow:0 0 0 1px #f0ac4d4d inset}
+.nuqati-live-clear{min-height:42px;border:1px solid #465a68;border-radius:10px;background:transparent;color:#c0d6dd;padding:8px 12px;font-weight:700;font-size:12px}
+.nuqati-live-clear.is-current{background:#324958;border-color:#7c9aab;color:#f0f8f9}
+.nuqati-tracking-page .nuqati-live-motion-btn:hover,.nuqati-tracking-page .nuqati-live-clear:hover{border-color:#d2efad}
+.nuqati-tracking-page button:focus-visible{outline:2px solid #c6ef55;outline-offset:3px}
+.nuqati-tracking-page .nuqati-live-controls{border:1px solid #344d5b;border-radius:13px;background:#1a3040;padding:12px 14px;margin:0 0 14px;gap:16px;align-items:center;justify-content:space-between}
+.nuqati-tracking-page .nuqati-live-controls>label:first-child{display:grid;gap:6px;font-size:12px;color:#b7ccd5;min-width:235px;flex:0 1 320px}
+.nuqati-tracking-page .nuqati-live-controls select{background:#102330;border:1px solid #466272;border-radius:9px;color:#e9f5f8;min-height:39px;padding:7px 10px;max-width:100%}
+.nuqati-live-layer-controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.nuqati-live-layer-controls label{white-space:nowrap;color:#cbdde2;font-size:12px;display:flex;align-items:center;gap:7px}
+.nuqati-tracking-page .nuqati-tracking-workspace{grid-template-columns:minmax(285px,32%) minmax(0,1fr);min-height:0;align-items:stretch}
+.nuqati-tracking-page .nuqati-live-sidebar{background:#182d3b;border-color:#365363;padding:13px;gap:11px;min-height:0;overflow:hidden}
+.nuqati-live-sidebar-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.nuqati-live-sidebar-head h3{margin:0 0 5px;color:#f1f9fa;font-size:17px;font-weight:750}
+.nuqati-live-sidebar-head small{color:#9db8c3;display:inline-flex;align-items:center;gap:5px;font-size:11px}
+.nuqati-live-visible-count{white-space:nowrap;border-radius:9px;border:1px solid #466271;background:#253e4d;color:#e2f4fa;padding:6px 9px;font-size:12px;font-variant-numeric:tabular-nums;font-weight:700}
+.nuqati-live-search{display:flex;gap:6px;align-items:center;border-radius:10px;border:1px solid #486475;background:#102330;color:#a9c3ce;padding:0 11px}
+.nuqati-live-search:focus-within{border-color:#b0df77;box-shadow:0 0 0 2px #a5d84c24}
+.nuqati-live-search input{background:transparent;border:0;box-shadow:none;outline:none;color:#eaf4fa;padding:12px 0;font-size:13px;flex:1;min-width:0}
+.nuqati-live-search button{border:0;background:transparent;color:#a6bdc6;padding:4px;display:grid;place-items:center}
+.nuqati-live-sidebar-caption{display:flex;justify-content:space-between;align-items:center;gap:9px;font-size:11px;color:#adc2ca;padding:0 2px}
+.nuqati-live-sidebar-caption button{background:transparent;border:0;color:#c2ed86;text-decoration:underline;text-underline-offset:3px;font-size:11px;padding:4px}
+.nuqati-tracking-page .nuqati-live-sidebar .nuqati-side-scroll{max-height:545px;overflow-y:auto;min-height:300px;padding:0 3px 4px 0;scrollbar-width:thin;scrollbar-color:#506d78 #19313f;gap:9px}
+.nuqati-tracking-page .nuqati-live-vehicle-card{background:#203748;border:1px solid #385565;color:#dcecf1;border-radius:12px;gap:8px;padding:13px;text-align:start;transition:background .14s ease,border-color .14s ease;box-shadow:0 4px 10px #09141b25}
+.nuqati-tracking-page .nuqati-live-vehicle-card:hover{border-color:#87b77a;background:#264454}
+.nuqati-tracking-page .nuqati-live-vehicle-card.selected{border-color:#a5d84c;background:#25463f;box-shadow:0 0 0 1px #a5d84c35 inset}
+.nuqati-live-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap}
+.nuqati-live-card-top strong{color:#f3fafb;font-size:14px;font-weight:800;overflow-wrap:anywhere}
+.nuqati-live-state{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 9px;line-height:1.25;font-size:10px;font-weight:750;white-space:normal}
+.nuqati-live-state.moving{color:#d4f9b2;background:#315543}
+.nuqati-live-state.stationary{color:#ffe3b5;background:#5c4931}
+.nuqati-live-state.unknown{color:#d1dde3;background:#3c515e}
+.nuqati-live-state .nuqati-live-dot{width:7px;height:7px}
+.nuqati-live-driver{font-size:12px;color:#c8d9e2;overflow-wrap:anywhere}
+.nuqati-live-card-metrics{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;padding-top:8px;border-top:1px solid #395667}
+.nuqati-live-card-metrics span{display:inline-flex;gap:5px;align-items:center;font-size:11px;color:#a9c4ce}
+.nuqati-live-card-metrics b{color:#eaf9f1;font-weight:750;font-variant-numeric:tabular-nums}
+.nuqati-live-card-geofence{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#b6dca8;overflow-wrap:anywhere}
+.nuqati-live-no-results{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:32px 14px;text-align:center;color:#a5bac5}
+.nuqati-live-no-results strong{color:#e7f2f5;font-size:14px}.nuqati-live-no-results p{margin:0;font-size:12px;line-height:1.6}
+.nuqati-tracking-page .nuqati-tracking-workspace .nuqati-fleet-map-center{background:#172c3b;border-color:#365363;padding:12px;border-radius:13px;min-height:0}
+.nuqati-tracking-page .nuqati-tracking-workspace .nuqati-fleet-map-center iframe{height:550px!important;border-radius:11px!important}
+.nuqati-live-map-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:3px 4px 8px}
+.nuqati-live-map-heading>div{display:grid;gap:5px}
+.nuqati-live-map-heading strong{display:inline-flex;align-items:center;gap:7px;font-size:15px;color:#eff7f9}
+.nuqati-live-map-heading small{color:#9eb9c5;font-size:11px}
+.nuqati-live-map-heading button{font-size:11px}
+.nuqati-live-map-empty{height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:1px dashed #466171;border-radius:10px;color:#b7cdd4;background:#102330;text-align:center;padding:20px}
+.nuqati-live-map-empty strong{font-size:16px;color:#eaf4f7}.nuqati-live-map-empty p{font-size:12px}
+.nuqati-tracking-page .nuqati-live-actions{display:block;background:#1b3140;margin:13px 0 8px;padding:0;border:1px solid #355261;border-radius:12px}
+.nuqati-tracking-page .nuqati-live-actions>summary{padding:14px 16px;font-weight:700;font-size:13px;cursor:pointer;color:#d3e4eb}
+.nuqati-live-action-content{display:flex;align-items:center;gap:10px;padding:0 14px 14px;flex-wrap:wrap}
+.nuqati-live-action-content select{max-width:120px}.nuqati-live-action-content>small{width:100%;color:#b6d1d9}
+@media(max-width:1200px){.nuqati-tracking-page .nuqati-tracking-workspace{grid-template-columns:minmax(245px,36%) minmax(0,1fr)}.nuqati-live-stats article{padding:12px}}
+@media(max-width:950px){.nuqati-live-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-live-filter-intro{flex-basis:100%}}
+@media(max-width:760px){.nuqati-tracking-page .nuqati-tracking-workspace{display:flex;flex-direction:column}.nuqati-tracking-page .nuqati-tracking-workspace .nuqati-fleet-map-center{order:-1}.nuqati-tracking-page .nuqati-live-sidebar .nuqati-side-scroll{max-height:300px;min-height:0}.nuqati-tracking-page .nuqati-tracking-workspace .nuqati-fleet-map-center iframe{height:380px!important}.nuqati-live-refresh{justify-content:flex-start}}
+@media(max-width:480px){.nuqati-tracking-page{padding:11px!important}.nuqati-live-stats{gap:7px}.nuqati-live-stats article{padding:11px 10px}.nuqati-live-stats article>span{font-size:11px}.nuqati-live-motion-buttons{width:100%}.nuqati-live-motion-btn{flex:1}.nuqati-live-filterbar{padding:12px}.nuqati-live-filter-intro{min-width:0}.nuqati-live-controls>label:first-child{min-width:0!important;flex:1 1 100%!important}.nuqati-live-layer-controls{gap:9px}.nuqati-live-refresh{align-items:flex-start}.nuqati-live-generated{min-width:100%}}
+/* Override the legacy first-label selector for the nested layer checkboxes. */
+.nuqati-tracking-page .nuqati-live-layer-controls label,.nuqati-tracking-page .nuqati-live-layer-controls label:first-child{display:inline-flex;flex-direction:row;align-items:center;min-width:0;gap:7px}
+
+/* Historical Tracking 2026 — aligned with Live Tracking, scoped to history page only. */
+.nuqati-history-page{padding:15px!important;background:#14222f;border:1px solid #304758;min-width:0}
+.nuqati-history-page button:focus-visible,.nuqati-history-page input:focus-visible,.nuqati-history-page select:focus-visible,.nuqati-history-page summary:focus-visible{outline:2px solid #b6e56b;outline-offset:3px}
+.nuqati-history-hero{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;border-radius:17px;padding:19px 22px;margin-bottom:15px;background:radial-gradient(circle at 8% 10%,#2e50445c,transparent 44%),linear-gradient(120deg,#142f3d,#11212e);border:1px solid #365667}
+.nuqati-history-hero-title{display:grid;gap:8px;min-width:0;flex:1}
+.nuqati-history-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#bee98b;letter-spacing:.11em;font-size:10px;font-weight:800}
+.nuqati-history-hero h2{font-size:clamp(22px,2.1vw,29px);line-height:1.25;font-weight:800;margin:0;color:#f4f9fb}
+.nuqati-history-hero p{font-size:12px;line-height:1.65;max-width:670px;color:#acbfcc;margin:0}
+.nuqati-history-hero-actions{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.nuqati-history-hero-actions label{display:grid;gap:6px;min-width:180px;color:#b9cbd5;font-size:11px;font-weight:750}
+.nuqati-history-hero-actions select{background:#102533;border:1px solid #486575;color:#eaf4f8;min-height:42px;padding:8px 12px;border-radius:10px;max-width:100%}
+.nuqati-history-hero-actions .primary{min-height:42px}
+.nuqati-history-content{display:grid;gap:14px;min-width:0}
+.nuqati-history-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px}
+.nuqati-history-kpis article{display:flex;flex-direction:column;gap:7px;min-height:121px;padding:15px 16px;border-radius:14px;background:linear-gradient(145deg,#1c3342,#172a38);border:1px solid #35505f;min-width:0}
+.nuqati-history-kpis article:first-child{border-color:#6a9658;background:linear-gradient(145deg,#27453e,#1b353d)}
+.nuqati-history-kpis article>span{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#bad0d8}
+.nuqati-history-kpis article>span svg{color:#b2e17e;flex-shrink:0}
+.nuqati-history-kpis article strong{font-size:clamp(23px,2.1vw,30px);font-variant-numeric:tabular-nums;font-weight:800;line-height:1.1;color:#f1f9fb;overflow-wrap:anywhere}
+.nuqati-history-kpis article strong em{font-style:normal;font-weight:650;font-size:13px;color:#bad0d6;margin-inline-start:3px}
+.nuqati-history-kpis article small{font-size:10px;line-height:1.4;color:#91aab7}
+.nuqati-history-filters{display:grid;gap:14px;padding:17px;border-radius:15px;background:#192e3d;border:1px solid #365264;min-width:0}
+.nuqati-history-section-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.nuqati-history-section-heading h3{color:#f0f8fa;font-size:17px;font-weight:800;margin:0 0 5px}
+.nuqati-history-section-heading p{font-size:11px;line-height:1.5;color:#9db5c2;margin:0}
+.nuqati-history-reset{display:inline-flex;gap:5px;align-items:center;background:transparent;color:#cee0e6;border:1px solid #536b76;border-radius:9px;padding:8px 12px;font-size:11px;font-weight:750}
+.nuqati-history-reset:hover{border-color:#aedf82;color:#fff}
+.nuqati-history-status-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.nuqati-history-status-tabs button{min-height:41px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:7px 13px;color:#d5e3e9;font-size:12px;font-weight:750;background:#203a48;border:1px solid #435f6d;border-radius:10px}
+.nuqati-history-status-tabs button b{background:#ffffff17;color:#f1f7fa;padding:3px 7px;border-radius:7px;font-variant-numeric:tabular-nums;font-size:11px}
+.nuqati-history-status-tabs button:hover{border-color:#a5d84c}
+.nuqati-history-status-tabs button.is-active{border-color:#9fda73;background:#2a4a3c;color:#dcf7c5;box-shadow:0 0 0 1px #9fda7330 inset}
+.nuqati-history-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px}
+.nuqati-history-filter-grid label,.nuqati-history-range-body label{display:grid;gap:7px;font-size:11px;font-weight:700;color:#b8cbd3;min-width:0}
+.nuqati-history-filter-grid select,.nuqati-history-range-body input{border:1px solid #486373;background:#102331;border-radius:10px;color:#eaf3f7;padding:9px 12px;width:100%;min-width:0;min-height:41px}
+.nuqati-history-range{border:1px solid #385463;border-radius:11px;background:#152a37}
+.nuqati-history-range summary{display:flex;align-items:center;gap:9px;padding:12px 14px;color:#e4f0f4;font-size:12px;font-weight:750;cursor:pointer;list-style:none}
+.nuqati-history-range summary::-webkit-details-marker{display:none}
+.nuqati-history-range summary:after{content:'⌄';margin-inline-start:auto;color:#b7cbcc;font-size:16px}
+.nuqati-history-range[open] summary:after{transform:rotate(180deg)}
+.nuqati-history-range-pill{border:1px solid #678d5b;background:#284735;color:#d5f8b9;font-weight:700;font-size:10px;padding:3px 8px;border-radius:999px}
+.nuqati-history-range-body{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding:4px 14px 10px}
+.nuqati-history-range-body label{flex:1 1 170px}
+.nuqati-history-range-body button{min-height:41px}
+.nuqati-history-range>p{font-size:11px;color:#95aeba;line-height:1.6;margin:0;padding:0 14px 14px}
+.nuqati-history-workspace{display:grid;grid-template-columns:minmax(275px,33%) minmax(0,1fr);gap:13px;align-items:stretch;min-width:0}
+.nuqati-history-sidebar,.nuqati-history-map-panel{min-width:0;border:1px solid #355362;background:#182d3b;border-radius:14px;overflow:hidden}
+.nuqati-history-sidebar{display:flex;flex-direction:column;gap:12px;padding:13px;max-height:800px}
+.nuqati-history-sidebar-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.nuqati-history-sidebar-heading h3{font-size:17px;font-weight:800;color:#f1f9fb;margin:0 0 5px}
+.nuqati-history-sidebar-heading small{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#9ab6c1}
+.nuqati-history-match-count{white-space:nowrap;background:#294655;border:1px solid #466676;color:#e7f5f8;border-radius:9px;padding:6px 9px;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+.nuqati-history-page .nuqati-history-search{min-height:44px}
+.nuqati-history-list-caption{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#a9c4cd;font-size:11px;flex-wrap:wrap}
+.nuqati-history-list-caption small{color:#8eaab7}
+.nuqati-history-scroll{display:flex;flex-direction:column;gap:9px;overflow:auto;flex:1;min-height:260px;padding:0 3px 3px 0;scrollbar-width:thin;scrollbar-color:#506d78 #19313f}
+.nuqati-history-trip-card{display:grid;overflow:hidden;border-radius:12px;border:1px solid #3a5869;background:#203847;transition:border-color .15s ease,background .15s ease}
+.nuqati-history-trip-card:hover{border-color:#85b67b;background:#264354}
+.nuqati-history-trip-card.selected{border-color:#a5d84c;background:#26473e;box-shadow:0 0 0 1px #a5d84c40 inset}
+.nuqati-history-trip-main{display:grid;width:100%;gap:10px;padding:12px 13px 10px;border:0;background:transparent;text-align:start;color:inherit}
+.nuqati-history-card-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.nuqati-history-card-top strong{font-size:15px;color:#f4fbfb;overflow-wrap:anywhere}
+.nuqati-history-state{display:inline-flex;align-items:center;gap:6px;border-radius:100px;padding:5px 9px;font-size:10px;font-weight:750;white-space:nowrap}
+.nuqati-history-state.active{color:#ddf6b7;background:#37573b}.nuqati-history-state.complete{color:#cbe8f5;background:#335264}
+.nuqati-history-state-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;background:#a5d84c}
+.nuqati-history-state-dot.complete{background:#79b0c7}.nuqati-history-state-dot.active{box-shadow:0 0 0 3px #a5d84c20}
+.nuqati-history-driver{display:grid;gap:3px;color:#e2eef3;font-weight:700;font-size:12px;overflow-wrap:anywhere}
+.nuqati-history-driver small{font-size:11px;color:#a9c1cb;font-weight:450}
+.nuqati-history-start{display:inline-flex;align-items:center;gap:6px;color:#adc6d0;font-size:11px;direction:ltr;justify-content:flex-start}
+.nuqati-history-card-metrics{display:flex;justify-content:space-between;align-items:center;gap:7px;flex-wrap:wrap;border-top:1px solid #456072;padding-top:10px}
+.nuqati-history-card-metrics span{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#b4cdd6}
+.nuqati-history-card-metrics b{color:#f0fafb;font-size:11px;font-variant-numeric:tabular-nums}
+.nuqati-history-card-metrics .has-events,.nuqati-history-card-metrics .has-events b{color:#ffd59d}
+.nuqati-history-card-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #345263;padding:8px 12px}
+.nuqati-history-card-actions>span{color:#9bb4bf;font-size:10px}
+.nuqati-history-card-actions button{background:#233e4c;color:#cce6ed;border:1px solid #4a6573;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:750}
+.nuqati-history-card-actions button.is-plotted{color:#f1c28f;border-color:#a47e54;background:#504233}
+.nuqati-history-card-actions button:disabled{opacity:.5;cursor:wait}
+.nuqati-history-map-panel{padding:13px;display:flex;flex-direction:column;gap:10px}
+.nuqati-history-map-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:11px}
+.nuqati-history-map-heading>div:first-child{display:grid;gap:5px}
+.nuqati-history-map-heading strong{display:inline-flex;align-items:center;gap:7px;color:#f1f9fb;font-size:15px;font-weight:800}
+.nuqati-history-map-heading small{color:#9bb4c1;font-size:11px}
+.nuqati-history-map-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.nuqati-history-map-actions .refresh{font-size:11px;padding:8px 10px}
+.nuqati-history-map-panel iframe{height:540px!important;min-height:400px;border-color:#3e5969!important;border-radius:11px!important}
+.nuqati-history-map-panel>div>p{font-size:11px;color:#b2c7d2;line-height:1.6;margin:8px 3px}
+.nuqati-history-map-empty{min-height:490px;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;background:linear-gradient(145deg,#1b3544,#102532);color:#b4c8d1;border:1px dashed #4b6676;border-radius:11px;text-align:center;padding:25px}
+.nuqati-history-map-empty strong{color:#eaf5f9;font-size:15px}.nuqati-history-map-empty p{color:#a8bec9;line-height:1.7;max-width:410px;font-size:12px;margin:0}
+.nuqati-history-map-layers{display:grid;gap:9px;padding:12px;border:1px solid #3c5868;border-radius:11px;background:#193242}
+.nuqati-history-map-layers>span{font-size:11px;font-weight:800;color:#d5e7ed}
+.nuqati-history-map-layers>div{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.nuqati-history-map-layers label{display:inline-flex;gap:6px;align-items:center;color:#becfda;font-size:11px;white-space:nowrap}
+.nuqati-history-map-layers input{accent-color:#a5d84c;width:15px;height:15px}
+.nuqati-history-overlays{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 2px;color:#9fb6c2;font-size:11px}
+.nuqati-history-overlays button{font-size:11px;padding:8px 11px}
+.nuqati-history-events{border:1px solid #3f5a6b;background:#19303d;border-radius:12px;overflow:hidden}
+.nuqati-history-events summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px;font-size:12px;font-weight:800;color:#e8f2f6}
+.nuqati-history-events summary b{margin-inline-start:auto;padding:3px 7px;background:#405d69;border-radius:7px}
+.nuqati-history-event-list{display:grid;gap:0;border-top:1px solid #3a5664}
+.nuqati-history-event-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid #334c5a}
+.nuqati-history-event-row span{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+.nuqati-history-event-row strong{font-size:11px;color:#e9f3f8}.nuqati-history-event-row small{font-size:10px;color:#a7bcca}
+.nuqati-history-event-list>p{padding:0 13px;color:#afc5ce;font-size:12px}
+.nuqati-history-danger{display:inline-flex;align-items:center;gap:7px;padding:9px 12px;margin:9px 12px 12px;background:#4e2f31;border:1px solid #955659;border-radius:9px;color:#ffd9d9;font-size:11px;font-weight:800}
+.nuqati-history-playbar{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;padding:15px 17px;border-radius:14px;border:1px solid #365263;background:#1b3040}
+.nuqati-history-playbar>div:first-child{display:grid;gap:6px}
+.nuqati-history-playbar strong{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#f0f7fa}
+.nuqati-history-playbar small{font-size:11px;line-height:1.6;color:#a3bbc5}
+.nuqati-history-playbar-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.nuqati-history-playbar-actions>span{font-variant-numeric:tabular-nums;font-size:12px;font-weight:800;color:#c7f2a9}
+.nuqati-history-stop{background:#59363c;border:1px solid #a16e75;color:#ffe5e5;padding:10px 15px;border-radius:9px;font-weight:800}
+.nuqati-history-register{border:1px solid #365263;border-radius:14px;background:#172b39;overflow:hidden}
+.nuqati-history-register>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;padding:15px 17px;list-style:none}
+.nuqati-history-register>summary::-webkit-details-marker{display:none}
+.nuqati-history-register>summary span{display:flex;gap:9px;align-items:center;font-size:14px;font-weight:800;color:#eef7fa}
+.nuqati-history-register>summary small{font-size:11px;color:#9db7c3}
+.nuqati-history-register .table-wrap{margin:0;padding:0 10px 12px}
+.nuqati-history-register .nuqati-trip-table th{position:sticky;top:0}
+.nuqati-history-register-actions{display:inline-flex;align-items:center;gap:6px}
+.nuqati-history-register-actions .refresh{padding:7px}
+.nuqati-history-footnote{font-size:11px;color:#9db5c1;line-height:1.7;padding:0 4px;margin:1px 0}
+.nuqati-history-no-results,.nuqati-history-no-company{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:#b1c4cd;padding:28px 14px}
+.nuqati-history-no-results strong,.nuqati-history-no-company strong{color:#eaf3f8;font-size:14px}
+.nuqati-history-no-results p,.nuqati-history-no-company p{font-size:12px;line-height:1.6;margin:0}
+@media(max-width:1200px){.nuqati-history-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.nuqati-history-workspace{grid-template-columns:minmax(255px,35%) minmax(0,1fr)}}
+@media(max-width:960px){.nuqati-history-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-history-workspace{grid-template-columns:minmax(220px,35%) minmax(0,1fr)}.nuqati-history-sidebar{max-height:740px}}
+@media(max-width:760px){.nuqati-history-workspace{display:flex;flex-direction:column}.nuqati-history-map-panel{order:-1}.nuqati-history-sidebar{max-height:420px}.nuqati-history-scroll{min-height:0}.nuqati-history-map-panel iframe{height:380px!important;min-height:380px}.nuqati-history-map-empty{min-height:320px}.nuqati-history-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.nuqati-history-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.nuqati-history-page{padding:10px!important}.nuqati-history-hero{padding:15px}.nuqati-history-hero-actions{width:100%}.nuqati-history-hero-actions label{flex:1;min-width:0}.nuqati-history-hero-actions button{width:100%}.nuqati-history-kpis{gap:8px}.nuqati-history-kpis article{min-height:105px;padding:12px}.nuqati-history-kpis article strong{font-size:22px}.nuqati-history-filters{padding:12px}.nuqati-history-filter-grid{grid-template-columns:1fr}.nuqati-history-status-tabs button{flex:1 1 calc(50% - 8px)}.nuqati-history-range-body label{flex-basis:100%}.nuqati-history-playbar-actions{width:100%}.nuqati-history-playbar-actions button{width:100%}.nuqati-history-map-panel{padding:10px}}
+
+/* Vehicle Handover: self-contained and additive; no existing dashboard styles changed. */
+.nuqati-handover .handover-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.nuqati-handover .handover-heading h3,.nuqati-handover .handover-heading h4{display:flex;gap:8px;align-items:center;margin:0 0 6px}
+.nuqati-handover .handover-heading p,.nuqati-handover small{color:#a5bcc7}
+.nuqati-handover .handover-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.nuqati-handover .handover-kpis>div{display:flex;flex-direction:column;gap:6px;border:1px solid #345064;border-radius:12px;padding:15px;background:#172d3d}
+.nuqati-handover .handover-kpis span{font-size:12px;color:#b1c7d0}.nuqati-handover .handover-kpis strong{font-size:25px;color:#c9f36c}
+.nuqati-handover .handover-toolbar{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}.nuqati-handover .handover-toolbar label{flex:1 1 180px;display:grid;gap:5px}
+.nuqati-handover input,.nuqati-handover select,.nuqati-handover textarea{background:#0d202e;border:1px solid #466072;color:#eef6f6;border-radius:9px;padding:9px;width:100%;box-sizing:border-box}
+.nuqati-handover .handover-status{display:inline-block;padding:5px 9px;border-radius:20px;background:#203b4d;font-size:11px;white-space:nowrap}
+.nuqati-handover .handover-status.active{color:#b9ef63}.nuqati-handover .handover-status.pending_receipt,.nuqati-handover .handover-status.pending_return{color:#ffd781;background:#554521}
+.nuqati-handover .handover-details{background:#101f2c;border-radius:14px;border:1px solid #344c60;padding:16px;margin-top:18px}
+.nuqati-handover .handover-details .handover-heading>div:last-child{display:flex;flex-wrap:wrap;gap:7px}
+.nuqati-handover .handover-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.nuqati-handover .handover-inspection{border:1px solid #3d5362;border-radius:12px;padding:14px;min-width:0}
+.nuqati-handover .handover-inspection h4{display:flex;gap:7px;align-items:center;margin:0 0 12px}
+.nuqati-handover .handover-data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:12px;overflow-wrap:anywhere}
+.nuqati-handover .handover-flags{border-inline-start:3px solid #f5b84c;padding:10px;margin:12px 0;background:#594c242a;border-radius:6px;font-size:12px}
+.nuqati-handover .handover-flags p{margin:5px 0}
+.nuqati-handover .handover-photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.nuqati-handover .handover-photo{background:#132b3a;border:1px solid #365263;border-radius:8px;overflow:hidden;min-width:0}
+.nuqati-handover .handover-photo img{width:100%;height:128px;object-fit:cover;display:block}
+.nuqati-handover .handover-photo>span{height:128px;display:flex;gap:6px;align-items:center;justify-content:center;font-size:12px}
+.nuqati-handover .handover-photo small{display:block;padding:7px;overflow-wrap:anywhere;font-size:10px}
+.nuqati-handover .handover-review{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}.nuqati-handover .handover-review textarea{width:100%}
+.nuqati-handover .handover-delta{background:#1c3344;border:1px solid #355161;padding:12px;border-radius:8px}
+.nuqati-handover .handover-audit{font-size:12px}.nuqati-handover .handover-audit p{border-top:1px solid #30495d;padding:8px 0;margin:0}
+@media(max-width:750px){.nuqati-handover .handover-comparison{grid-template-columns:1fr}.nuqati-handover .handover-kpis{grid-template-columns:1fr 1fr}.nuqati-handover .handover-data-grid{grid-template-columns:1fr}}
