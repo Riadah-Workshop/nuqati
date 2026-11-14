@@ -1,13 +1,8 @@
-# Runtime artifacts, secrets, node dependencies and build outputs
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.env
-.env.*
-!.env.example
-node_modules/
-dist/
-build/
-*.db
-*.sqlite
-*.sqlite3
+# Minimal backend image build context: root-relative paths used by Coolify.
+# Web service has its own ./web build context and is unaffected.
+*
+!backend/
+!backend/Dockerfile
+!backend/requirements.txt
+!backend/app/
+!backend/app/**
