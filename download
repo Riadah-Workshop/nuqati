@@ -1,0 +1,13 @@
+# Runtime artifacts, secrets, node dependencies and build outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+*.db
+*.sqlite
+*.sqlite3
