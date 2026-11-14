@@ -1,0 +1,27 @@
+{
+  "source_zip": "nuqati-main(20261112-075855).zip",
+  "changed_or_added": [
+    ".gitignore",
+    "SECURITY_AUDIT_FIXES_2026-11-12.md",
+    "backend/Dockerfile",
+    "backend/app/auth_limits.py",
+    "backend/app/main.py",
+    "backend/app/teltonika_receiver.py",
+    "backend/requirements-test.txt",
+    "backend/test_auth_runtime_postgres.py",
+    "backend/test_security_runtime_units.py",
+    "compose.yml",
+    "docker-compose.yml",
+    "docs/DEPLOYMENT.md",
+    "hardware-teltonika.compose.yml",
+    "web/Caddyfile",
+    "web/Dockerfile",
+    "web/package.json",
+    "web/src/App.tsx"
+  ],
+  "removed_generated_bytecode": [
+    "backend/app/__pycache__/main.cpython-313.pyc"
+  ],
+  "unchanged_file_count": 85,
+  "note": "The changes preserve driver, manager, tracking, scoring and handover sources."
+}
