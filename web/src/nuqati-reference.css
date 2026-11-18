@@ -1,0 +1,476 @@
+/* Nuqati Reference Layout · 2026-11-18
+   Matches the requested Fleet/Vehicles screenshot across ALL authenticated web pages.
+   Pure CSS; no data fetching, handlers, roles, navigation or workflow changes. */
+.nq-reference-layout {
+  --nq-bg:#101923;
+  --nq-sidebar:#0b121b;
+  --nq-surface:#19242f;
+  --nq-surface-deep:#111c27;
+  --nq-surface-raised:#1d2d3a;
+  --nq-line:#2d4050;
+  --nq-line-soft:#263745;
+  --nq-text:#f0f7fb;
+  --nq-muted:#a7bac8;
+  --nq-lime:#a5d84c;
+  --nq-lime-bright:#c6f275;
+  --nq-focus:#bcec6b;
+  --nq-shadow:0 8px 26px rgba(0,0,0,.1);
+  --nq-page-symbol:'📊';
+  color:var(--nq-text);
+  background:var(--nq-bg);
+  isolation:isolate;
+}
+.nq-reference-layout[data-page='companies'] {--nq-page-symbol:'🏢'}
+.nq-reference-layout[data-page='users'] {--nq-page-symbol:'🔑'}
+.nq-reference-layout[data-page='vehicles'] {--nq-page-symbol:'🚙'}
+.nq-reference-layout[data-page='drivers'] {--nq-page-symbol:'👥'}
+.nq-reference-layout[data-page='handover'] {--nq-page-symbol:'🔄'}
+.nq-reference-layout[data-page='live-tracking'] {--nq-page-symbol:'📍'}
+.nq-reference-layout[data-page='historical-tracking'] {--nq-page-symbol:'🗺️'}
+.nq-reference-layout[data-page='odometer'] {--nq-page-symbol:'🧭'}
+.nq-reference-layout[data-page='maintenance'] {--nq-page-symbol:'🔧'}
+.nq-reference-layout[data-page='mobile-diagnostics'] {--nq-page-symbol:'📱'}
+.nq-reference-layout[data-page='assistance'] {--nq-page-symbol:'🛠️'}
+.nq-reference-layout[data-page='safety'] {--nq-page-symbol:'🛡️'}
+.nq-reference-layout[data-page='configuration'] {--nq-page-symbol:'⚙️'}
+.nq-reference-layout[data-page='privacy-audit'] {--nq-page-symbol:'🔒'}
+.nq-reference-layout[data-page='reports'] {--nq-page-symbol:'📈'}
+.nq-reference-layout[data-page='settings'] {--nq-page-symbol:'🎨'}
+.nq-reference-layout[data-page='my-account'] {--nq-page-symbol:'👤'}
+
+/* Screenshot-matched flat navy frame with the compact group/menu icon treatment. */
+.nq-reference-layout .sidebar {
+  width:260px;
+  background:#0b121b;
+  border:0;
+  border-inline-end:1px solid #23303e;
+  padding:20px 13px 16px;
+  box-shadow:none;
+}
+.nq-reference-layout .brand {
+  background:#15222d;
+  border:1px solid #2b3e4b;
+  border-radius:15px;
+  padding:12px;
+  margin:0 0 14px;
+  box-shadow:none;
+}
+.nq-reference-layout .brand::before {background:#a5d84c; width:3px}
+.nq-reference-layout .brand-logo {width:52px;height:51px;border-radius:10px}
+.nq-reference-layout .brand strong {font-size:18px}
+.nq-reference-layout .nuqati-nav {display:grid;gap:5px}
+.nq-reference-layout .nuqati-nav-group,
+.nq-reference-layout .nuqati-nav-group[open] {background:transparent;border-color:transparent;border-radius:12px}
+.nq-reference-layout .nuqati-nav-group>summary,
+.nq-reference-layout .nuqati-nav-group[open]>summary {
+  color:#9fb4c5;
+  background:transparent;
+  font-size:12px;
+  font-weight:650;
+  min-height:34px;
+  padding:9px 11px 7px;
+}
+.nq-reference-layout .nuqati-nav-group>summary:hover {color:#e8f4f8;background:#15222e}
+.nq-reference-layout .nuqati-nav-group-label {gap:8px}
+.nq-reference-layout .nuqati-nav-group-label svg {width:14px;height:14px;color:#738c9e}
+.nq-reference-layout .nuqati-nav-chevron {color:#7590a1}
+.nq-reference-layout .nuqati-nav-group .nav-item {
+  width:calc(100% - 8px);
+  min-height:43px;
+  margin:3px 4px;
+  padding:9px 12px;
+  gap:10px;
+  border-radius:11px;
+  border:1px solid transparent;
+  background:transparent;
+  color:#dce9f0;
+  font-size:13px;
+  font-weight:580;
+  box-shadow:none;
+  transform:none;
+  position:relative;
+}
+.nq-reference-layout .nav-item .nq-nav-emoji {
+  display:grid;
+  place-items:center;
+  flex-shrink:0;
+  width:23px;
+  min-width:23px;
+  height:23px;
+  font-family:system-ui,'Apple Color Emoji','Segoe UI Emoji',sans-serif;
+  font-size:16px;
+  line-height:1;
+  overflow:visible;
+}
+.nq-reference-layout .nav-item .nq-nav-label {
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:normal;
+  line-height:1.55;
+}
+.nq-reference-layout .nuqati-nav-group .nav-item:hover {
+  background:#1b2b38;
+  border-color:#294250;
+  color:#edf7fa;
+  transform:none;
+}
+.nq-reference-layout .nuqati-nav-group .nav-item.active,
+.nq-reference-layout .nuqati-nav-group .nav-item[aria-current='page'] {
+  background:#223441;
+  border-color:transparent;
+  color:#c6f9aa;
+  box-shadow:none;
+  font-weight:750;
+}
+.nq-reference-layout .nuqati-nav-group .nav-item.active::before {
+  inset-inline-start:0;
+  inset-inline-end:auto;
+  height:65%;
+  top:17.5%;
+  border-radius:6px;
+  width:4px;
+  background:#a5d84c;
+}
+.nq-reference-layout .sidebar-bottom {border-top-color:#2b3d4c;margin-top:auto}
+
+/* Headers and current page icon */
+.nq-reference-layout .main {
+  background:#101923;
+  padding:22px clamp(15px,2vw,32px) 35px;
+  overflow-x:hidden;
+}
+.nq-reference-layout .topbar {
+  min-height:76px;
+  padding:11px 16px;
+  margin-bottom:17px;
+  border:1px solid #2c3d4b;
+  background:#18242f;
+  border-radius:16px;
+  box-shadow:none;
+}
+.nq-reference-layout .nuqati-page-icon {
+  height:45px;
+  width:45px;
+  border:1px solid #364e53;
+  border-radius:12px;
+  background:#213834;
+  box-shadow:none;
+}
+.nq-reference-layout .nq-page-emoji {
+  font-family:system-ui,'Apple Color Emoji','Segoe UI Emoji',sans-serif;
+  font-size:23px;
+  line-height:1;
+}
+.nq-reference-layout .eyebrow {color:#9db3c0;font-size:10px;letter-spacing:.3px}
+.nq-reference-layout .topbar h1 {font-size:clamp(19px,1.8vw,25px);color:#eef7fb;font-weight:750}
+.nq-reference-layout .header-actions {gap:8px}
+.nq-reference-layout .nuqati-account-button {background:#1b3036;border-color:#406053;color:#c4eca9}
+
+/* Cards on all dashboard pages retain their contents, controls and order. */
+.nq-reference-layout :is(
+  .panel,.stat-card,.nuqati-overview-dashboard,.nuqati-chart-card,
+  .nuqati-trip-table-card,.nuqati-trip-kpi,.nuqati-report-section,
+  .nuqati-rag-settings,.nuqati-rag-report,.nuqati-scheduled-reports,
+  .nq-config-section,.nuqati-map-side,.nuqati-fleet-map-center,
+  .nuqati-tracking-page,.nuqati-history-page
+) {
+  background:#19242f;
+  border:1px solid #2e4150;
+  border-radius:19px;
+  box-shadow:none;
+  min-width:0;
+}
+.nq-reference-layout .panel {padding:clamp(17px,1.75vw,28px);margin-bottom:17px}
+.nq-reference-layout .panel-heading {padding-bottom:14px;margin-bottom:16px;border-bottom:1px solid #2c3f4d}
+.nq-reference-layout .panel :is(h2,h3,h4),
+.nq-reference-layout .nuqati-chart-card h3 {color:#f2f8fc}
+.nq-reference-layout :is(.panel>.panel-heading h3,.panel>h3:first-child)::before {
+  content:var(--nq-page-symbol);
+  display:inline-grid;
+  place-items:center;
+  width:24px;
+  height:24px;
+  margin-inline-end:9px;
+  vertical-align:-3px;
+  font:17px/1 system-ui,'Segoe UI Emoji',sans-serif;
+}
+.nq-reference-layout :is(.panel,.nuqati-chart-card,.nuqati-scheduled-reports) p {line-height:1.75}
+.nq-reference-layout :is(.nuqati-overview-kpis article,.nuqati-overview-insights article,.nuqati-trip-kpi,.nuqati-live-stats article,.nuqati-history-kpis article,.nuqati-handover .handover-kpis>div) {
+  background:#20313d;
+  border-color:#334958;
+  box-shadow:none;
+  border-radius:13px;
+}
+.nq-reference-layout :is(.nuqati-overview-kpis article,.nuqati-overview-insights article,.nuqati-trip-kpi,.nuqati-live-stats article,.nuqati-history-kpis article):hover {
+  border-color:#739b62;
+  transform:translateY(-1px);
+  box-shadow:0 4px 13px #0002;
+}
+.nq-reference-layout :is(.nuqati-intelligence-hero,.hero,.driver-first-banner,.nuqati-history-hero) {
+  background:linear-gradient(116deg,#1b313b,#16232e);
+  border-color:#3c514d;
+  border-radius:18px;
+  box-shadow:none;
+}
+
+/* The screenshot's wide search/company/status filter strip. */
+.nq-reference-layout :is(
+  .nuqati-filter-bar,.nuqati-overview-range,.nuqati-overview-customize,
+  .nuqati-history-filters,.nuqati-live-filterbar,.nq-config-company,
+  .nuqati-geo-report-filters,.nuqati-handover .handover-toolbar
+) {
+  background:#19242f;
+  border:1px solid #2f4251;
+  border-radius:17px;
+  box-shadow:none;
+}
+.nq-reference-layout .nuqati-filter-bar {
+  padding:18px 19px;
+  gap:13px;
+  align-items:end;
+  margin-bottom:17px;
+}
+.nq-reference-layout .nuqati-filter-bar label {flex:1 1 180px;min-width:145px;gap:7px}
+.nq-reference-layout :is(.entry-form,.form-row,.nuqati-filter-bar,.nuqati-history-filter-grid,.nuqati-handover .handover-toolbar) label {
+  color:#c3d6e0;
+  font-size:12px;
+  font-weight:640;
+}
+.nq-reference-layout :is(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,textarea
+) {
+  border:1px solid #3b5161;
+  border-radius:10px;
+  background:#111b26;
+  color:#eaf5fb;
+  min-height:41px;
+  outline:none;
+  box-shadow:none;
+}
+.nq-reference-layout :is(input,select,textarea):focus-visible {
+  border-color:#a5d84c;
+  outline:2px solid #a5d84c80;
+  outline-offset:1px;
+}
+.nq-reference-layout :is(input,textarea)::placeholder {color:#849eaf}
+.nq-reference-layout .nuqati-filter-bar>button {min-height:41px}
+.nq-reference-layout .nq-input-unit input {background:transparent!important;border:0!important;min-height:0}
+.nq-reference-layout input[type='checkbox'],
+.nq-reference-layout input[type='radio'] {accent-color:#a5d84c}
+
+/* Screenshot-style action chips: lime primary, pale neutral edit, amber delete. */
+.nq-reference-layout :is(button.primary,button.refresh,.nuqati-map-button,.nuqati-history-plot-button) {
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  font-weight:700;
+  min-height:41px;
+  border-radius:10px;
+  line-height:1.45;
+  letter-spacing:0;
+  box-shadow:none;
+}
+.nq-reference-layout button.primary {
+  background:#a5d84c;
+  border:1px solid #b3e45d;
+  color:#132019;
+  padding:9px 16px;
+}
+.nq-reference-layout button.primary:hover:not(:disabled) {
+  background:#bde977;
+  border-color:#d3f69d;
+  transform:translateY(-1px);
+  box-shadow:0 5px 16px #a5d84c22;
+}
+.nq-reference-layout button.refresh {
+  background:#1c2b38;
+  border:1px solid #3a4c5d;
+  color:#d8e9f2;
+  padding:8px 12px;
+}
+.nq-reference-layout button.refresh:hover:not(:disabled) {
+  background:#293d4b;
+  border-color:#779371;
+  color:#f2fff0;
+  transform:translateY(-1px);
+}
+.nq-reference-layout button:focus-visible,
+.nq-reference-layout a:focus-visible,
+.nq-reference-layout summary:focus-visible {
+  outline:2px solid #b5e87d;
+  outline-offset:3px;
+}
+.nq-reference-layout button:disabled {cursor:not-allowed;opacity:.5;transform:none!important;box-shadow:none!important}
+.nq-reference-layout .table-wrap [data-nq-action] {
+  min-height:34px;
+  margin:2px;
+  border-radius:8px;
+  padding:6px 10px;
+  white-space:nowrap;
+}
+.nq-reference-layout .table-wrap [data-nq-action='edit']::before {
+  content:'✎';
+  display:inline-block;
+  margin-inline-end:3px;
+  color:#9fc2d5;
+  font-size:14px;
+  line-height:1;
+}
+.nq-reference-layout .table-wrap [data-nq-action='delete'] {
+  color:#f4cb7e;
+  border-color:#86692a;
+  background:#242925;
+}
+.nq-reference-layout .table-wrap [data-nq-action='delete']::before {
+  content:'🗑';
+  margin-inline-end:3px;
+  font-size:12px;
+}
+.nq-reference-layout .table-wrap [data-nq-action='delete']:hover:not(:disabled) {
+  background:#3e3228;
+  border-color:#c69e4b;
+  color:#ffe5a8;
+}
+
+/* All native data tables (including secondary panels and embedded reports). */
+.nq-reference-layout .table-wrap {
+  margin-top:17px;
+  border:1px solid #304553;
+  border-radius:16px;
+  background:#19242f;
+  overflow:auto;
+  scrollbar-width:thin;
+  scrollbar-color:#436071 transparent;
+}
+.nq-reference-layout .table-wrap table {
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+}
+.nq-reference-layout .table-wrap th {
+  background:#1e2d39;
+  color:#adbfcd;
+  font-size:11px;
+  font-weight:730;
+  padding:14px 13px;
+  border-bottom:1px solid #2c4050;
+  white-space:nowrap;
+}
+.nq-reference-layout .table-wrap td {
+  background:transparent;
+  color:#edf5fa;
+  font-size:12px;
+  padding:12px 13px;
+  border-bottom:1px solid #2f4352;
+  vertical-align:middle;
+}
+.nq-reference-layout .table-wrap tr:last-child td {border-bottom:none}
+.nq-reference-layout .table-wrap tbody tr:hover td {background:#243644}
+.nq-reference-layout .table-wrap :is(td,th):first-child {padding-inline-start:16px}
+.nq-reference-layout .table-wrap :is(td,th):last-child {padding-inline-end:16px}
+.nq-reference-layout .table-wrap td:has(button) {white-space:normal;min-width:160px}
+.nq-reference-layout .table-wrap .status {display:inline-flex;align-items:center;gap:6px;background:#243f33;color:#c3f49c;border-color:#3b6b4b}
+.nq-reference-layout .empty {color:#a8becb}
+.nq-reference-layout :is(.notice,.tip) {border-radius:12px}
+
+/* Specialized modules share the same layout without changing their controls. */
+.nq-reference-layout :is(.nuqati-history-filters,.nuqati-history-map-panel,.nuqati-history-sidebar,.nuqati-history-playbar,.nuqati-history-register,.nuqati-geo-map,.nuqati-geo-sidebar,.nuqati-geo-form,.nuqati-handover .handover-details,.nuqati-handover .handover-review) {
+  background:#192a36;
+  border-color:#344b59;
+  border-radius:15px;
+}
+.nq-reference-layout :is(.nuqati-side-item,.nuqati-history-trip-card,.nuqati-live-vehicle,.nuqati-geo-list-item,.handover-inspection,.handover-photo,.nq-threshold-card,.nq-event-switches,.nq-event-condition,.nq-switch-item,.nuqati-scheduled-choices) {
+  background:#1c303c;
+  border-color:#37505d;
+  border-radius:11px;
+}
+.nq-reference-layout :is(.nuqati-live-motion-btn,.nuqati-history-status-tabs button,.nuqati-overview-presets button,.nuqati-history-reset,.nq-config-nav a) {
+  background:#223340;
+  color:#d8e8f0;
+  border:1px solid #3b5261;
+  border-radius:9px;
+}
+.nq-reference-layout :is(.nuqati-live-motion-btn.active,.nuqati-live-motion-btn.is-active,.nuqati-history-status-tabs button.is-active) {
+  background:#29483a;
+  border-color:#87c75c;
+  color:#d9f9af;
+}
+.nq-reference-layout .nq-config-nav {background:#162531;border:1px solid #304552;border-radius:12px}
+.nq-reference-layout :is(.nuqati-account-card,.nuqati-self-service .nuqati-account-card,.nuqati-account-identity) {background:#1b2d38;border-color:#385261;border-radius:14px}
+.nq-reference-layout .nuqati-overview-kpis strong,
+.nq-reference-layout .nuqati-live-stats strong,
+.nq-reference-layout .nuqati-handover .handover-kpis strong {font-variant-numeric:tabular-nums}
+
+/* Touch-friendly responsive arrangement and real Arabic/English direction support. */
+@media (max-width:1200px) {
+  .nq-reference-layout .sidebar {width:225px}
+  .nq-reference-layout .main {padding-inline:16px}
+}
+@media (max-width:760px) {
+  .nq-reference-layout {display:block}
+  .nq-reference-layout .sidebar {width:100%;height:auto;position:relative;padding:12px;border-inline-end:0;border-bottom:1px solid #2f4351}
+  .nq-reference-layout .nuqati-nav {grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  .nq-reference-layout .nuqati-nav-group[open] {grid-column:span 2}
+  .nq-reference-layout .nuqati-nav-group .nav-item {width:calc(100% - 8px);margin:3px 4px}
+  .nq-reference-layout .nuqati-nav-group>summary {min-height:38px}
+  .nq-reference-layout .main {padding:14px 11px 26px;overflow-x:clip}
+  .nq-reference-layout .topbar {gap:12px;min-height:0;padding:12px}
+  .nq-reference-layout .panel {padding:15px}
+  .nq-reference-layout .nuqati-filter-bar {padding:13px}
+  .nq-reference-layout .nuqati-filter-bar label {flex:1 1 175px;min-width:0}
+  .nq-reference-layout .table-wrap {max-width:100%;-webkit-overflow-scrolling:touch}
+  .nq-reference-layout .table-wrap th,.nq-reference-layout .table-wrap td {padding:11px 10px}
+}
+@media (max-width:480px) {
+  .nq-reference-layout .nuqati-nav-group .nav-item {min-height:40px;padding:8px 10px;font-size:12px}
+  .nq-reference-layout .brand {padding:10px}
+  .nq-reference-layout .topbar h1 {font-size:19px}
+  .nq-reference-layout .nuqati-filter-bar label {flex:1 1 100%}
+  .nq-reference-layout .nuqati-overview-kpis {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce) {
+  .nq-reference-layout *, .nq-reference-layout *::before, .nq-reference-layout *::after {transition-duration:.01ms!important}
+}
+
+/* Login, invitation and account-recovery pages carry the same navy/lime identity. */
+.login-screen {
+  background:radial-gradient(ellipse 670px 430px at 50% 0%,#213b40 0%,transparent 74%),#101923;
+}
+.login-screen .login-card {
+  background:#19242f;
+  border:1px solid #324756;
+  border-radius:19px;
+  box-shadow:0 22px 55px #0005;
+}
+.login-screen .login-card input {
+  background:#111b26;
+  border:1px solid #3b5161;
+  border-radius:10px;
+}
+.login-screen .login-card .primary {
+  background:#a5d84c;
+  color:#132019;
+  border-radius:10px;
+  font-weight:720;
+}
+.login-screen .login-card .primary:hover {background:#c0e977}
+
+/* Read-only public vehicle share page, outside the signed-in dashboard wrapper. */
+.nuqati-public-live {
+  min-height:100vh;
+  padding:clamp(16px,3vw,40px);
+  background:#101923;
+  color:#eaf5fb;
+}
+.nuqati-public-live .panel {
+  background:#19242f;
+  border:1px solid #344b59;
+  border-radius:17px;
+}
+.nuqati-public-live p,.nuqati-public-live small {color:#a9bdca}
+.nuqati-public-live iframe {border-radius:12px}
