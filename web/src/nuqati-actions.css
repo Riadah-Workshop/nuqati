@@ -1,0 +1,15 @@
+/* Nuqati – action buttons add-on. Load AFTER nuqati-premium.css.
+   Adds ONLY what the Design System 2026 theme lacks: danger buttons and compact row actions.
+   Scoped under .nuqati-design-2026; reuses existing palette tones. */
+.nuqati-design-2026 .refresh svg,.nuqati-design-2026 .primary svg{flex:none}
+
+/* Destructive actions (Delete, Deactivate, Revoke…) – same tone as .nuqati-history-danger */
+.nuqati-design-2026 .refresh.danger{background:#583238;border-color:#a36468;color:#ffe0e0}
+.nuqati-design-2026 .refresh.danger:hover:not(:disabled){background:#6a3a41;border-color:#c07a7e;color:#fff}
+
+/* Compact, quiet row actions inside tables (Edit / Plate / Model …) */
+.nuqati-design-2026 .table-wrap td .refresh,
+.nuqati-design-2026 .table-wrap td .primary{
+  min-height:30px;padding:0 10px;margin:2px;font-size:12px;border-radius:8px;gap:6px;white-space:nowrap}
+.nuqati-design-2026 .table-wrap td .refresh:not(.danger){background:#ffffff08;border-color:transparent;color:#a9becd}
+.nuqati-design-2026 .table-wrap td .refresh:not(.danger):hover:not(:disabled){background:#ffffff14;border-color:#30465b;color:#edf5f8}
