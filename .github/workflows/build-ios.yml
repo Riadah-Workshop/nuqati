@@ -1,0 +1,103 @@
+name: Build Nuqati Driver iOS (simulator and unsigned device)
+on:
+  workflow_dispatch:
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate iOS project
+        run: flutter create --platforms=ios --project-name nuqati_driver .
+      - name: Install Nuqati driver source and online handover screen
+        run: |
+          test -s main.dart
+          test -s vehicle_handover.dart
+          mkdir -p lib
+          cp main.dart lib/main.dart
+          cp vehicle_handover.dart lib/vehicle_handover.dart
+
+      - name: Install iOS CoreLocation recorder and application permissions
+        run: |
+          test -s ios_native_tracking/NuqatiIOSNativeTracking.swift
+          # AppDelegate.swift is already in the generated Xcode build phase.
+          # Embed the native class there so no manual .pbxproj file registration is required.
+          cat ios_native_tracking/NuqatiIOSNativeTracking.swift ios_native_tracking/AppDelegate.swift > ios/Runner/AppDelegate.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          p=Path('ios/Runner/Info.plist')
+          with p.open('rb') as f: data=plistlib.load(f)
+          data.update({
+            'NSLocationWhenInUseUsageDescription':'Nuqati uses GPS to detect driving trips and calculate safety events.',
+            'NSLocationAlwaysAndWhenInUseUsageDescription':'Nuqati records fleet driving trips while the screen is locked or the app is in the background. Tracking can be paused only with approved Privacy Mode.',
+            'NSLocationAlwaysUsageDescription':'Nuqati requires Always location access for automatic fleet trip monitoring.',
+            'NSCameraUsageDescription':'Capture vehicle inspection evidence for online handover and return.',
+            'NSPhotoLibraryUsageDescription':'Attach vehicle inspection photos during an online handover.',
+            'UIBackgroundModes':['location','fetch'],
+          })
+          with p.open('wb') as f: plistlib.dump(data,f)
+          project=Path('ios/Runner.xcodeproj/project.pbxproj')
+          source=project.read_text()
+          source=source.replace('com.example.nuqatiDriver','sa.alriadah.nuqati.driver')
+          source=source.replace('com.example.nuqati_driver','sa.alriadah.nuqati.driver')
+          project.write_text(source)
+          PY
+      - name: Verify iOS background location capability
+        run: |
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          with Path('ios/Runner/Info.plist').open('rb') as f: data=plistlib.load(f)
+          assert 'location' in data['UIBackgroundModes']
+          assert data['NSLocationAlwaysAndWhenInUseUsageDescription']
+          assert 'final class NuqatiIOSNativeTracking' in Path('ios/Runner/AppDelegate.swift').read_text()
+          print('iOS native recorder and Always location permission configured')
+          PY
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Catch Flutter/Dart syntax and type errors before the costly Android/iOS build.
+      - name: Analyze vehicle handover Dart source
+        run: |
+          test -s lib/vehicle_handover.dart || (echo 'Missing handover screen in lib/' && exit 1)
+          dart format --output=none lib/vehicle_handover.dart
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/vehicle_handover.dart
+      - name: Remove generated sample test
+        run: rm -f test/widget_test.dart
+      - name: Analyze Flutter code
+        # Retain analyzer output, but don't block iOS builds on legacy lint
+        # warnings/informational messages. Actual Dart errors still fail the job.
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+      - name: Generate iOS launcher icon
+        run: |
+          cat > flutter_launcher_icons_ios.yaml <<'ICONCONFIG'
+          flutter_launcher_icons:
+            android: false
+            ios: true
+            image_path: assets/nuqati_icon.png
+          ICONCONFIG
+          dart run flutter_launcher_icons -f flutter_launcher_icons_ios.yaml
+      - name: Build iOS simulator app
+        run: flutter build ios --simulator --debug --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+      - name: Package simulator app
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app nuqati-ios-simulator.zip
+      - name: Build unsigned physical-device app (not an installable IPA)
+        run: flutter build ios --release --no-codesign --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+      - name: Package unsigned device app for Xcode signing
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app nuqati-ios-unsigned-device.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuqati-ios-builds-unsigned
+          path: |
+            mobile/nuqati-ios-simulator.zip
+            mobile/nuqati-ios-unsigned-device.zip
+          retention-days: 7
