@@ -6,7 +6,10 @@ type Vehicle={id:number;company_id:number;plate_number:string};
 type Subscription={id:number;recipient:string;kind:string;frequency:string;scope_type:string;site_name:string|null;next_send_at:string;last_sent_at:string|null;last_error:string|null;enabled:boolean};
 type Props={request:(path:string,opts?:RequestInit)=>Promise<any>;lang:'en'|'ar';role:string;companyId:number|null;selectedCompany:string;companies:Company[];drivers:Driver[];vehicles:Vehicle[]};
 export default function ReportSubscriptions({request,lang,role,companyId,selectedCompany,companies,drivers,vehicles}:Props){
- const ar=lang==='ar';const cid=role==='super_admin'?Number(selectedCompany):companyId;
+ const ar=lang==='ar';
+ const [companyChoice,setCompanyChoice]=useState(selectedCompany);
+ useEffect(()=>{setCompanyChoice(selectedCompany)},[selectedCompany]);
+ const cid=role==='super_admin'?Number(companyChoice)||null:companyId;
  const [records,setRecords]=useState<Subscription[]>([]),[sites,setSites]=useState<string[]>([]);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [form,setForm]=useState({kind:'vehicle_utilization',frequency:'weekly',recipient:'',scope_type:'all',site_name:'',selected_ids:[] as number[],weekday:0,month_day:1,anchor_month:1,send_hour:9,send_minute:0,timezone:'Asia/Riyadh'});
@@ -21,6 +24,7 @@ export default function ReportSubscriptions({request,lang,role,companyId,selecte
  async function modify(id:number,enabled:boolean,remove=false){try{await request(`/api/v1/fleet/report-subscriptions/${id}${remove?'':`?enabled=${enabled}`}`,{method:remove?'DELETE':'PATCH'});await reload();}catch(e){setError(String(e));}}
  return <section className="nuqati-scheduled-reports" dir={ar?'rtl':'ltr'}>
  <div className="nuqati-scheduled-heading"><div><h3>{ar?'اشتراكات التقارير بالبريد الإلكتروني':'Email Report Subscriptions'}</h3><p>{ar?'اختر التقرير والمستلمين والأيام ووقت الإرسال':'Choose report, recipient, coverage and delivery schedule'}</p></div></div>
+ {role==='super_admin'&&<label style={{display:'grid',gap:7,marginBottom:16}}>{ar?'اختر الشركة':'Select company'}<select value={companyChoice} onChange={e=>{setCompanyChoice(e.target.value);setForm(old=>({...old,selected_ids:[],site_name:'',scope_type:'all'}));setRecords([]);setSites([]);setError('');}}><option value="">{ar?'— اختر شركة —':'— Choose company —'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
  <div className="nuqati-scheduled-grid">
  <label>{ar?'نوع التقرير':'Report type'}<select value={form.kind} onChange={e=>all({kind:e.target.value,scope_type:'all',selected_ids:[]})}>{kinds.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
  <label>{ar?'التكرار':'Frequency'}<select value={form.frequency} onChange={e=>all({frequency:e.target.value})}>{frequencies.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
