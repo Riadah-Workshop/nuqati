@@ -1,0 +1,37 @@
+/* Additive report previews: Nuqati's navy/lime identity, not the reference workbook style. */
+.nq-concept-report{color:#e7f0f5;font-size:13px}
+.nq-concept-heading{display:flex;gap:14px;align-items:center;margin:0 0 18px}
+.nq-concept-mark{display:grid;place-items:center;flex:0 0 47px;height:47px;color:#bfe975;background:#c5ed7520;border:1px solid #a6d35b55;border-radius:14px}
+.nq-concept-mark svg{width:22px;height:22px}.nq-concept-heading h3{margin:3px 0 4px!important;font-size:19px!important;color:#f5fbfc}
+.nq-concept-heading p{margin:0;color:#a7bdcb;line-height:1.5}.nq-concept-eyebrow{color:#bcdf89;font-size:10px;letter-spacing:.1em;font-weight:750}
+.nq-concept-filter{background:#10232f;border:1px solid #355061;padding:17px;border-radius:14px}
+.nq-concept-filter-title,.nq-concept-filter-footer{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.nq-concept-filter-title>span{margin-inline-start:auto;color:#94acb9;font-size:11px}
+.nq-concept-fields{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:11px;margin:15px 0}
+.nq-concept-fields label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#b6ccd6;font-weight:650}
+.nq-concept-fields input,.nq-concept-fields select{box-sizing:border-box;width:100%;min-width:0;background:#172e3c;border:1px solid #3a5766;color:#f4fafd;border-radius:9px;padding:10px 9px;min-height:42px;font:inherit;font-size:12px}
+.nq-concept-filter-footer{justify-content:space-between}.nq-concept-filter-footer>span{color:#9eb4bf;font-size:11px}
+.nq-concept-filter-footer .primary,.nq-concept-export button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.nq-concept-error{color:#ffb4b4;padding:10px 14px;border:1px solid #a83a3a66;border-radius:10px;margin:13px 0;background:#602b2b2b}
+.nq-concept-placeholder{margin:18px 0 4px;padding:33px 14px;border:1px dashed #3b5462;border-radius:13px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#9ab5c1;text-align:center}
+.nq-concept-placeholder strong{color:#dcebf0;font-size:13px}.nq-concept-placeholder small{max-width:420px}
+.nq-concept-generated{margin:20px 0 15px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nq-concept-generated h4{font-size:20px;color:#f3fbfc;margin:4px 0}.nq-concept-generated p{margin:0;color:#9bb5c2;font-size:11px}
+.nq-concept-export{display:flex;flex-wrap:wrap;gap:8px}.nq-concept-export button{font-size:12px;border-radius:9px;padding:9px 12px;background:#1e3a47;color:#dff1ed;border:1px solid #4b6976;cursor:pointer}
+.nq-concept-export button:first-child{background:#264a3d;border-color:#55865e;color:#d9f4b5}.nq-concept-export button:hover:not(:disabled){border-color:#bfeb77}.nq-concept-export button:disabled{opacity:.6}
+.nq-concept-kpis{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:10px;margin-bottom:19px}
+.nq-concept-kpis article{background:linear-gradient(120deg,#1c3441,#182b38);border:1px solid #3c5663;padding:13px;border-radius:12px;min-width:0}
+.nq-concept-kpis small{display:block;color:#9db7c3;font-size:11px}.nq-concept-kpis strong{display:block;color:#d9f5a6;font-size:22px;margin-top:7px}.nq-concept-kpis em{font-style:normal;color:#91b1bd;font-size:11px}
+.nq-concept-grid-header,.nq-concept-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0}
+.nq-concept-grid-header strong{font-size:14px;color:#ebf6f7}.nq-concept-grid-header strong span{color:#aad67a}.nq-concept-grid-header small,.nq-concept-pagination span{font-size:11px;color:#9db9c4}
+.nq-concept-table-wrap{overflow:auto;border:1px solid #405766;border-radius:11px;max-height:560px;background:#142531}
+.nq-concept-table-wrap table{border-collapse:separate;border-spacing:0;width:100%;min-width:max-content;text-align:start}
+.nq-concept-table-wrap thead th{position:sticky;top:0;background:#274338;color:#d4efad;z-index:1;padding:12px 11px;text-align:start;font-size:11px;font-weight:750;white-space:normal;min-width:95px;max-width:170px;line-height:1.35;border-bottom:1px solid #71985a}
+.nq-concept-table-wrap tbody td{padding:11px 12px;font-size:11px;line-height:1.45;color:#dae9ee;border-bottom:1px solid #2d4552;min-width:90px;max-width:215px;overflow-wrap:anywhere}
+.nq-concept-table-wrap tbody tr:nth-child(even){background:#1c313c}.nq-concept-table-wrap tbody tr:hover{background:#24423f}
+.nq-concept-no-data{text-align:center;padding:30px;color:#91a9b8}
+.nq-concept-rag{display:inline-block;padding:4px 9px;border-radius:16px;font-size:10px;font-weight:850;letter-spacing:.06em}
+.nq-rag-green{background:#214c3c;color:#b5f1bc}.nq-rag-amber{background:#574a28;color:#ffe18e}.nq-rag-red{background:#592f35;color:#ffc0c0}
+.nq-concept-notes{margin-top:14px;border:1px solid #385463;background:#122530;border-radius:10px;padding:12px 16px;color:#b0c6cf}
+.nq-concept-notes summary{color:#dbeec7;cursor:pointer;font-weight:700;font-size:12px}.nq-concept-notes ul{line-height:1.7;font-size:11px;padding-inline-start:22px;margin:12px 0 0}.nq-concept-notes p{font-size:11px}
+@media(max-width:1000px){.nq-concept-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.nq-concept-fields{grid-template-columns:1fr}.nq-concept-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.nq-concept-generated{display:block}.nq-concept-export{margin-top:11px}}
