@@ -1,0 +1,90 @@
+name: CI Flutter
+
+# Static analysis of the two Flutter apps on pull requests. It reproduces, step for step, the
+# project generation and `flutter analyze` commands of the build-*.yml workflows, so a pull
+# request fails here instead of after merge. It builds no APK/AAB and uses no secrets.
+# (Path filters live here, not in ci.yml, so Dart-only changes do not pay for Flutter setup
+# and unrelated changes do not wait for it. Do not make these two jobs "required" checks.)
+
+on:
+  pull_request:
+    paths:
+      - "driver_app/**"
+      - "manager_app/**"
+      - ".github/workflows/ci-flutter.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  driver:
+    name: Driver app analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: driver_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Flutter project (as in build-driver-release.yml)
+        run: flutter create --platforms=android --project-name nuqati_driver .
+
+      - name: Install app sources into lib/
+        run: |
+          mkdir -p lib
+          for f in main.dart nuqati_network.dart vehicle_handover.dart nuqati_home_test.dart; do
+            test -s "$f" || { echo "ERROR: driver_app/$f is missing"; exit 1; }
+            cp "$f" "lib/$f"
+          done
+          rm -f test/widget_test.dart
+
+      - run: flutter pub get
+
+      # Same flags as the build workflows: fails on analyzer errors, tolerates warnings/infos.
+      - name: Analyze
+        run: |
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/main.dart lib/nuqati_network.dart
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/vehicle_handover.dart
+
+  manager:
+    name: Manager app analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: manager_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Flutter project (as in build-manager-android.yml)
+        run: flutter create --platforms=android --project-name nuqati_manager --org sa.alriadah .
+
+      - name: Install app source into lib/
+        run: |
+          test -s main.dart || { echo "ERROR: manager_app/main.dart is missing"; exit 1; }
+          mkdir -p lib
+          cp main.dart lib/main.dart
+
+      - run: flutter pub get
+
+      - name: Analyze
+        run: |
+          rm -f test/widget_test.dart
+          printf 'analyzer:\n  errors:\n    deprecated_member_use: ignore\n' > analysis_options.yaml
+          flutter analyze --no-fatal-infos
