@@ -1,0 +1,12 @@
+# Deliberately does NOT force line-ending normalisation: mobile/main.dart (now
+# driver_app/main.dart) is stored with CRLF today and a blanket "eol=lf" would rewrite the
+# whole file. Normalise it in the dedicated formatting commit planned for Phase 1.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.sh   text eol=lf
+
+# Keep GitHub language statistics and diffs useful
+docs/history/** linguist-documentation
+package-lock.json linguist-generated=true -diff
