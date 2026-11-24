@@ -847,9 +847,10 @@ void nuqatiTrackingEntry(ServiceInstance service) async {
    syncFailureCount=0;nextSyncAttempt=null;
   }catch(e,s){
    syncFailureCount=math.min(syncFailureCount+1,8);
-   final delay=math.min(300,15*(1<<math.min(syncFailureCount-1,5)))+math.Random().nextInt(8));
+   final delay=math.min(300,15*(1<<math.min(syncFailureCount-1,5))+math.Random().nextInt(8));
    nextSyncAttempt=DateTime.now().add(Duration(seconds:delay));
    await nuqatiLog('SYNC_DEFERRED retry_in_s=$delay failure_count=$syncFailureCount',e,s);
+   if(nuqatiIsTransportFailure(e) && serverReachable){serverReachable=false;await nuqatiLog('NETWORK_UNREACHABLE_UPLOAD',e);}
   }
   finally{flushing=false;}
  }
@@ -1292,7 +1293,7 @@ void nuqatiTrackingEntry(ServiceInstance service) async {
        body:jsonEncode({'screen_state':screen,'trip_active':isTripActive,
          'gps_fix_age_s':age,'connectivity_policy_version':2,
          'captured_at':now.toIso8601String()}))
-       .timeout(const Duration(seconds:12));
+       .timeout(const Duration(seconds:25));
      if(response.statusCode>=200&&response.statusCode<300){
        if(!serverReachable){
          serverReachable=true;nextSyncAttempt=null;syncFailureCount=0;
@@ -1325,7 +1326,7 @@ void nuqatiTrackingEntry(ServiceInstance service) async {
    connectionProbeBusy=true;
    try {
      final response=await http.get(Uri.parse('$api/api/v1/health'))
-       .timeout(const Duration(seconds:8));
+       .timeout(const Duration(seconds:20));
      if(response.statusCode!=200)return;
      final body=jsonDecode(response.body);
      if(body is! Map || body['service']!='nuqati-api' || body['status']!='ok')return;
