@@ -1,0 +1,15 @@
+# Nuqati production deployment — nuqati.al-riadah.sa
+
+## Before changing the live domain
+
+1. Back up PostgreSQL with `pg_dump -Fc` and validate that the backup can be restored. Preserve your current Coolify resource, secrets, persistent volumes, and database. Do **not** delete/re-create the application or database resource.
+2. In Hostinger DNS, create/update an **A** record for `nuqati` pointing to your VPS public IPv4 (and an **AAAA** record only if IPv6 is configured and reachable). Keep the other `al-riadah.sa` records unchanged. DNS changes may take time.
+3. In the **existing** Coolify Docker Compose resource, change the compose file path from `/compose.staging.yml` to `/compose.yml`. Use the same Git branch, service identities, Docker Compose project, and persistent PostgreSQL volume. If Coolify proposes recreating the database under a new name, stop and verify its volume mapping before deploying.
+4. Set `NUQATI_PUBLIC_ORIGIN=https://nuqati.al-riadah.sa`. Remove the old `STAGING_ORIGIN`, `STAGING_USER`, and `STAGING_PASSWORD_HASH` values after confirming they are no longer needed. Keep all other credentials, SMTP, WhatsApp, MapTiler, and signing secrets unchanged. For CORS, the Compose file uses `NUQATI_PUBLIC_ORIGIN`.
+5. Attach **only** `https://nuqati.al-riadah.sa` to Coolify's `web` service (internal port 80). Enable HTTPS and wait for a valid TLS certificate. The API runs behind the same origin at `/api/*`; do not publish database or private API container ports to the Internet. The current Caddyfile has no staging Basic Auth.
+6. Redeploy the existing stack, then verify `https://nuqati.al-riadah.sa/api/v1/health`, dashboard login, fleet/trip history, live tracking, email invitations, WhatsApp verification, maps and the privacy policy endpoint. Confirm existing data survived.
+7. In GitHub Actions repository **Variables**, set `NUQATI_PRODUCTION_API=https://nuqati.al-riadah.sa` for the signed Driver AAB workflow. Rebuild and roll out a new **Driver** AAB and a new signed **Manager** AAB. Already-installed mobile apps embed the previous URL and do not update when DNS changes.
+8. In Meta's WhatsApp Developer configuration, set the callback to `https://nuqati.al-riadah.sa/api/v1/whatsapp/webhook` and use the existing verification token. Update any external webhook, app listing, privacy-policy, or integration links that point to the old host.
+9. Only after both mobile app updates are installed and all integrations are checked should you remove the old staging-domain DNS record and Coolify domain binding. Otherwise, old app versions will stop synchronizing. Optionally use a temporary HTTPS redirect/reverse proxy on the old hostname during migration.
+
+**Data safety:** This production file deliberately retains the historical Docker volume key `nuqati_staging_pgdata`; changing that key can cause Compose to create an empty volume. It is an internal volume identifier, not a public staging endpoint. Production permanent company deletion always requires a verified off-server backup reference.
