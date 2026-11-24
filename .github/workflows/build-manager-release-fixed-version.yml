@@ -31,7 +31,7 @@ jobs:
       # Do not install default SDK packages during setup: their license prompts
       # can fail non-interactive GitHub Actions jobs.
       - name: Configure Android SDK command-line tools
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: ''
 
