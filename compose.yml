@@ -1,0 +1,95 @@
+services:
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_MAPTILER_API_KEY: ${VITE_MAPTILER_API_KEY:?Set MapTiler API key in Coolify}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    expose:
+      - "80"
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:?Set DB user}:${POSTGRES_PASSWORD:?Set DB password}@db:5432/${POSTGRES_DB:?Set DB name}
+      CORS_ORIGINS: ${NUQATI_PUBLIC_ORIGIN:?Set HTTPS production origin}
+      NUQATI_AUTH_SECRET: ${NUQATI_AUTH_SECRET:?Set a random secret of at least 32 characters}
+      NUQATI_TRUSTED_PROXIES: ${NUQATI_TRUSTED_PROXIES:-127.0.0.1/8,::1/128}
+      NUQATI_PUBLIC_ORIGIN: ${NUQATI_PUBLIC_ORIGIN:?Set HTTPS production origin}
+      NUQATI_EMAIL_FROM: ${NUQATI_EMAIL_FROM:-noreply@al-riadah.sa}
+      NUQATI_WHATSAPP_VERIFY_TOKEN: ${NUQATI_WHATSAPP_VERIFY_TOKEN:-}
+      NUQATI_WHATSAPP_APP_SECRET: ${NUQATI_WHATSAPP_APP_SECRET:-}
+      NUQATI_SMTP_HOST: ${NUQATI_SMTP_HOST:-}
+      NUQATI_SMTP_PORT: ${NUQATI_SMTP_PORT:-587}
+      NUQATI_SMTP_USER: ${NUQATI_SMTP_USER:-}
+      NUQATI_SMTP_PASSWORD: ${NUQATI_SMTP_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    expose:
+      - "8000"
+  # Hardware GPS TCP receiver — separate from the HTTP API
+  teltonika:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.teltonika_receiver"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:?Set DB user}:${POSTGRES_PASSWORD:?Set DB password}@db:5432/${POSTGRES_DB:?Set DB name}
+      TELTONIKA_PORT: "5027"
+      TELTONIKA_BIND_HOST: ${TELTONIKA_BIND_HOST:-127.0.0.1}
+      TELTONIKA_ALLOWED_CIDRS: ${TELTONIKA_ALLOWED_CIDRS:-}
+      TELTONIKA_MAX_DB_CONCURRENCY: ${TELTONIKA_MAX_DB_CONCURRENCY:-16}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "${TELTONIKA_BIND_HOST:-127.0.0.1}:5027:5027/tcp"
+  # Scheduled email reports: private worker, no publicly exposed ports.
+  report_scheduler:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.report_subscriptions"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:?Set DB user}:${POSTGRES_PASSWORD:?Set DB password}@db:5432/${POSTGRES_DB:?Set DB name}
+      NUQATI_EMAIL_FROM: ${NUQATI_EMAIL_FROM:-noreply@al-riadah.sa}
+      NUQATI_SMTP_HOST: ${NUQATI_SMTP_HOST:-}
+      NUQATI_SMTP_PORT: ${NUQATI_SMTP_PORT:-587}
+      NUQATI_SMTP_USER: ${NUQATI_SMTP_USER:-}
+      NUQATI_SMTP_PASSWORD: ${NUQATI_SMTP_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set DB user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set DB password}
+      POSTGRES_DB: ${POSTGRES_DB:?Set DB name}
+    volumes:
+      - nuqati_staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  nuqati_staging_pgdata:
+    # Reuses your original staging volume by default, but creates it on new hosts.
+    # Override NUQATI_PG_VOLUME_NAME with the exact backed-up production volume.
+    name: ${NUQATI_PG_VOLUME_NAME:-hskj899cs3voe1lk5gkyyxb8_nuqati-staging-pgdata}
