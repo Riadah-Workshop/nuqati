@@ -1,0 +1,39 @@
+# Changelog
+
+All notable changes to Nuqati. Format follows [Keep a Changelog](https://keepachangelog.com/).
+Notes written before this file existed are in [`docs/history/`](docs/history/README.md).
+
+## [Unreleased]
+
+### Phase 0: repository hygiene and safety net (no application behaviour changed)
+
+#### Added
+- `README.md` with architecture diagram, layout and quick start; `docs/ARCHITECTURE.md`,
+  `docs/DEVELOPMENT.md`, `CONTRIBUTING.md`, `.env.example`, pull-request template.
+- CI: `.github/workflows/ci.yml` (backend tests on SQLite and PostgreSQL, web type-check and
+  build, Docker image / compose / Caddyfile checks, advisory Ruff lint) and
+  `ci-flutter.yml` (`flutter analyze` for both apps on pull requests).
+- `backend/requirements-test.txt` (referenced by the 2026-11-12 security notes but missing).
+- `backend/test_repo_hygiene.py`: repository-layout guards.
+- `.github/dependabot.yml`, `pyproject.toml` (pytest and Ruff settings), `Makefile`.
+- `.gitignore`, `.editorconfig`, `.gitattributes`.
+
+#### Changed
+- `mobile/` is now `driver_app/` and `manager/` is now `manager_app/`; workflows and contract
+  tests updated. **Existing habits that upload into `mobile/` or `manager/` must change.**
+- `download` renamed to `.dockerignore`, so the Coolify build context really is the minimal one
+  described in `docs/history/COOLIFY_DOCKER_CONTEXT_FIX_2026-11-14.md`. This is the only change
+  that affects a deployed build; revert that single commit if the Coolify build misbehaves.
+- The 34 patch notes and audits moved from the repository root to `docs/history/` (unchanged),
+  and `DEPLOY_COOLIFY.md` moved to `docs/`.
+- Driver README rewritten to describe the real file layout.
+
+#### Removed
+- Committed bytecode `backend/app/__pycache__/main.cpython-313.pyc`.
+- Root `GeofenceMapPicker.tsx` (byte-identical to `web/src/GeofenceMapPicker.tsx`).
+- Two empty placeholder files (`manager/assets/1`, `mobile/android_camera_activity/1`).
+
+#### Known limits
+- The new workflows were validated statically only and have not run on GitHub yet.
+- Flutter builds still generate their platform projects in CI; no `flutter test` suite exists.
+- `web/package-lock.json` is still not committed (CI uploads a generated one).

@@ -1,0 +1,19 @@
+# Tooling configuration only. The backend is not an installable package: its dependencies live
+# in backend/requirements.txt and backend/requirements-test.txt.
+
+[tool.pytest.ini_options]
+testpaths = ["backend"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+# Only the Python backend is linted by Ruff.
+extend-exclude = ["web", "driver_app", "manager_app", "docs"]
+
+[tool.ruff.lint]
+# Phase 0 enables only rules that point at real bugs (syntax errors, undefined names, invalid
+# comparisons), so the first run should be quiet. Style rules are deliberately NOT enabled yet:
+# main.py has lines of 300+ characters, and formatting it is a separate, reviewed commit
+# (docs/DEVELOPMENT.md, "Phase 1").
+select = ["E9", "F63", "F7", "F82"]
