@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit
 from ..auth import allow, current_user
 from ..db import get_db
 from ..models import AppSetting, User
@@ -41,6 +42,7 @@ def update_branding(payload:BrandingIn,db:Session=Depends(get_db),admin:User=Dep
     row=db.get(AppSetting,'branding')
     if row: row.value=data
     else: db.add(AppSetting(key='branding',value=data))
+    audit(db,'branding.update',actor=admin,target_type='branding',target_id='global')
     db.commit();return {'status':'saved'}
 
 @app.get('/api/v1/public/label-defaults')

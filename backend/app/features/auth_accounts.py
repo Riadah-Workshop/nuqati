@@ -16,6 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit, audit_commit
 from ..auth import (
     allow,
     current_user,
@@ -48,8 +49,12 @@ def login(payload:LoginIn, request:Request, db:Session=Depends(get_db)):
     enforce_auth_limit(db,request,'dashboard-login',email)
     user=db.scalar(select(User).where(User.email==email))
     if not verify_or_dummy(payload.password,user.password_hash if user and user.is_active else None):
+        audit_commit(db,'auth.login',outcome='failed',actor=user,request=request,detail={'known_account':user is not None})
         raise HTTPException(401,'Invalid credentials')
-    if user.role=='driver': raise HTTPException(403,'Drivers must sign in through the driver app')
+    if user.role=='driver':
+        audit_commit(db,'auth.login',outcome='denied',actor=user,request=request,detail={'reason':'driver_account'})
+        raise HTTPException(403,'Drivers must sign in through the driver app')
+    audit_commit(db,'auth.login',actor=user,request=request)
     return {'access_token':encode_token(user),'token_type':'bearer','user':user_view(user)}
 
 class DriverPhoneLogin(BaseModel):
@@ -143,6 +148,7 @@ def request_dashboard_password_reset(payload:PasswordResetRequest,request:Reques
             'Use this one-time link within 30 minutes: '+url+'\n\n'
             'If you did not request it, ignore this email.\n\n'
             'طلب إعادة تعيين كلمة مرور نقاطي. الرابط صالح لمدة 30 دقيقة: '+url)
+        audit(db,'auth.password_reset_requested',actor=user,request=request)
         db.commit()
     except HTTPException:
         db.rollback()
@@ -167,6 +173,7 @@ def confirm_dashboard_password_reset(payload:PasswordResetConfirm,request:Reques
     user.password_hash=hash_password(payload.new_password)
     db.execute(text('UPDATE users SET auth_version=auth_version+1 WHERE id=:id'),{'id':user.id})
     db.execute(text('UPDATE dashboard_account_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL'),{'now':now,'uid':user.id})
+    audit(db,'auth.password_reset_completed',actor=user,request=request)
     db.commit()
     return {'status':'password_changed'}
 
@@ -183,6 +190,7 @@ def change_dashboard_password(payload:ChangePasswordIn,db:Session=Depends(get_db
     now=datetime.now(timezone.utc)
     db.execute(text('UPDATE users SET auth_version=auth_version+1 WHERE id=:id'),{'id':user.id})
     db.execute(text('UPDATE dashboard_account_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL'),{'now':now,'uid':user.id})
+    audit(db,'account.password_changed',actor=user)
     db.commit()
     return {'status':'password_changed','sign_in_again':True}
 
@@ -216,6 +224,7 @@ def request_dashboard_email_change(payload:EmailChangeRequest,db:Session=Depends
             'يرجى تأكيد بريد حساب نقاطي الجديد خلال 30 دقيقة: '+url)
     except HTTPException:
         db.rollback();raise
+    audit(db,'account.email_change_requested',actor=user)
     db.commit()
     return {'status':'confirmation_sent'}
 
@@ -237,8 +246,18 @@ def confirm_dashboard_email_change(payload:EmailChangeConfirm,request:Request,db
     user.email=row['new_email']
     db.execute(text('UPDATE users SET auth_version=auth_version+1 WHERE id=:id'),{'id':user.id})
     db.execute(text('UPDATE dashboard_account_tokens SET used_at=:now WHERE user_id=:uid AND used_at IS NULL'),{'now':now,'uid':user.id})
+    audit(db,'account.email_changed',actor=user,request=request)
     db.commit()
     return {'status':'email_changed','sign_in_again':True}
+
+@app.post('/api/v1/auth/logout')
+def dashboard_logout(request:Request,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """Ends every dashboard session of this user: tokens issued before now stop working. Drivers use /auth/driver-logout."""
+    _dashboard_account(user)
+    db.execute(text('UPDATE users SET auth_version=auth_version+1 WHERE id=:id'),{'id':user.id})
+    audit(db,'auth.logout',actor=user,request=request)
+    db.commit()
+    return {'status':'logged_out'}
 
 # Driver device reservation is serialized by locking the user row. A second
 # phone cannot race a concurrent login, even with multiple API workers.
@@ -277,11 +296,16 @@ def driver_phone_login(payload:DriverPhoneLogin,request:Request,db:Session=Depen
     matches=[u for d,u in candidates if verify_password(payload.password,u.password_hash)]
     if not candidates: verify_or_dummy(payload.password,None)
     if not matches:
+        audit_commit(db,'auth.driver_login',outcome='failed',request=request,detail={'method':'phone','known_account':bool(candidates)})
         raise HTTPException(401,'Invalid phone or password')
     if len(matches)!=1:
         raise HTTPException(409,'Multiple driver accounts match. Provide your company ID to sign in.')
     u=matches[0]
-    sid=reserve_driver_device(db,u,payload.device_id)
+    try: sid=reserve_driver_device(db,u,payload.device_id)
+    except HTTPException as exc:
+        audit_commit(db,'auth.driver_login',outcome='denied',actor=u,request=request,detail={'reason':str(exc.detail)})
+        raise
+    audit_commit(db,'auth.driver_login',actor=u,request=request)
     return {'access_token':encode_token(u,session_id=sid),'refresh_token':encode_token(u,refresh=True,session_id=sid),'token_type':'bearer','user':user_view(u)}
 
 class DriverIqamaLogin(BaseModel):
@@ -303,10 +327,16 @@ def driver_iqama_login(payload:DriverIqamaLogin,request:Request,db:Session=Depen
     candidates=db.execute(q.limit(25)).all()
     matches=[u for d,u in candidates if verify_password(payload.password,u.password_hash)]
     if not candidates: verify_or_dummy(payload.password,None)
-    if not matches: raise HTTPException(401,'Invalid Iqama or password')
+    if not matches:
+        audit_commit(db,'auth.driver_login',outcome='failed',request=request,detail={'method':'iqama','known_account':bool(candidates)})
+        raise HTTPException(401,'Invalid Iqama or password')
     if len(matches)!=1: raise HTTPException(409,'Multiple driver accounts match. Provide your company ID to sign in.')
     u=matches[0]
-    sid=reserve_driver_device(db,u,payload.device_id)
+    try: sid=reserve_driver_device(db,u,payload.device_id)
+    except HTTPException as exc:
+        audit_commit(db,'auth.driver_login',outcome='denied',actor=u,request=request,detail={'reason':str(exc.detail)})
+        raise
+    audit_commit(db,'auth.driver_login',actor=u,request=request)
     return {'access_token':encode_token(u,session_id=sid),'refresh_token':encode_token(u,refresh=True,session_id=sid),'token_type':'bearer','user':user_view(u)}
 
 class DriverRefreshRequest(BaseModel):
@@ -342,6 +372,7 @@ def driver_online_logout(request:Request,db:Session=Depends(get_db),user:User=De
         # Audit the actual server-side logout, not an offline queued intention.
         db.execute(text('INSERT INTO mobile_lifecycle_audit(event_id,company_id,driver_id,event_type,occurred_at) VALUES (:i,:c,:d,\'logout\',:a)'),
                    {'i':'logout_'+secrets.token_hex(20),'c':driver.company_id,'d':driver.id,'a':datetime.now(timezone.utc)})
+    audit(db,'auth.driver_logout',actor=user,request=request)
     db.delete(locked)
     db.commit()
     return {'status':'logged_out'}
@@ -357,6 +388,7 @@ def admin_release_driver_device(driver_id:int,db:Session=Depends(get_db),user:Us
     db.execute(select(User.id).where(User.id==link.user_id).with_for_update()).one()
     locked=db.get(DriverDeviceSession,link.user_id)
     if locked: db.delete(locked)
+    audit(db,'driver.device_release',actor=user,target_type='driver',target_id=driver_id,company_id=driver.company_id,detail={'had_session':locked is not None})
     db.commit()
     return {'status':'released','driver_id':driver_id,'had_session':locked is not None}
 

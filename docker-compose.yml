@@ -23,6 +23,7 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       NUQATI_AUTH_SECRET: ${NUQATI_AUTH_SECRET:-nuqati-local-development-only-rotate-for-production}
       NUQATI_TRUSTED_PROXIES: 127.0.0.1/8,::1/128
+      NUQATI_ENABLE_API_DOCS: ${NUQATI_ENABLE_API_DOCS:-1}
     depends_on:
       db:
         condition: service_healthy

@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit
 from ..auth import allow, current_user, scope
 from ..db import get_db
 from ..models import AppSetting, Driver, DriverLocation, DrivingEvent, Trip, User, Vehicle
@@ -241,6 +242,7 @@ def create_live_share(payload:LiveShareCreate,db:Session=Depends(get_db),user:Us
             'expires_at':(datetime.now(timezone.utc)+timedelta(minutes=payload.expiry_minutes)).isoformat(),
             'revoked':False}
     db.add(AppSetting(key=f'live_share:{digest}',value=json.dumps(record)))
+    audit(db,'live_share.create',actor=user,target_type='vehicle',target_id=v.id,company_id=v.company_id,detail={'expiry_minutes':payload.expiry_minutes})
     db.commit()
     return {'share_id':digest,'token':token,'expires_at':record['expires_at']}
 
@@ -264,7 +266,9 @@ def revoke_live_share(share_id:str,db:Session=Depends(get_db),user:User=Depends(
     if not row:raise HTTPException(404,'Not found')
     data=json.loads(row.value)
     if data.get('creator_id')!=user.id:raise HTTPException(404,'Not found')
-    data['revoked']=True;row.value=json.dumps(data);db.commit()
+    data['revoked']=True;row.value=json.dumps(data)
+    audit(db,'live_share.revoke',actor=user,target_type='vehicle',target_id=data.get('vehicle_id'),company_id=data.get('company_id'))
+    db.commit()
     return {'revoked':True}
 
 @app.get('/api/v1/public/live-share/{token}')

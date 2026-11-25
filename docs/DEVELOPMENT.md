@@ -17,6 +17,9 @@ How to run, test and change Nuqati. For what the system is, read [`ARCHITECTURE.
 make up         # PostgreSQL 16 + API on http://127.0.0.1:8000, interactive API docs at /docs
 ```
 
+The interactive API docs exist only locally: `docker-compose.yml` sets `NUQATI_ENABLE_API_DOCS=1`, and
+the production `compose.yml` never does (without the variable `/docs`, `/redoc` and `/openapi.json` answer 404).
+
 **Use `make up`, not a bare `docker compose up`.** The repository has two Compose files and
 Compose prefers `compose.yml`, which is the **production** stack and aborts without production
 variables. The local stack is `docker-compose.yml`; the Makefile names it explicitly.
@@ -55,9 +58,18 @@ What the backend test files cover:
 | `test_company_one_page_editor.py` | source contract | company editor saves in one request |
 | `test_security_runtime_units.py`, `test_driver_device_session_units.py` | unit | role checks, auth throttling, driver token / device-lock validation |
 | `test_vpn_connection_alerts.py` | unit | 60 s / 5 min / 15 min connectivity alert policy |
+| `test_security_guards.py` | source contract | the exact list of routes that need no login; SQL text only assembled in reviewed places; no `eval` / `shell=True`; sensitive handlers keep their audit calls and never audit secrets; docs off in production |
+| `test_security_units.py` | unit | audit helper (what is stored and what is filtered, never raises); secret-rotation window |
 | `test_vehicle_handover.py` | API (SQLite) | handover receive / return, flags, authorization |
 | `test_concept_reports.py` | API (in-memory SQLite) | report suite queries and Excel / CSV / PDF export |
 | `test_auth_runtime_postgres.py` | API (PostgreSQL) | login, scoping, drivers, maintenance; imports `app.main`, so it proves the app boots on PostgreSQL |
+| `test_security_audit_postgres.py` | API (PostgreSQL) | audit rows for sign-ins and edits, logout revokes the token, company-scoped audit endpoint, secret rotation end to end, API docs off |
+
+**`test_security_guards.py` fails on purpose when you add a route without a login, build SQL text from a
+new variable, or remove an audit call.** That is the review step: if the change is intended, update the list in
+the test in the same pull request and say why. To make a new handler audit, call
+`audit(db, 'thing.verb', actor=user, ...)` before its `db.commit()` (or `audit_commit(...)` after a commit that
+you made yourself) and add it to `AUDITED_HANDLERS`.
 
 **Source-contract tests compare strings in source files on purpose.** They are the only
 automated link between the Dart / Kotlin code and the backend today. If you rename something
@@ -82,6 +94,7 @@ it cannot touch real data. Never point it at production or staging.
 |---|---|---|
 | `ci.yml` | every pull request, pushes to `main` | **Backend tests**, **Web build**, **Docker, compose and Caddy**, **Lint (advisory)** |
 | `ci-flutter.yml` | pull requests that touch `driver_app/` or `manager_app/` | **Driver app analyze**, **Manager app analyze** |
+| `security.yml` | weekly (Monday), pull requests that touch dependency files, manual | **Python dependencies** (pip-audit), **Web dependencies** (npm audit), **CodeQL** (Python, JavaScript/TypeScript), **Secret scan** (gitleaks). Advisory: every job has `continue-on-error`, nothing blocks a merge or deploy; results are run artifacts |
 | `build-*.yml` | manual (and, for debug APKs, pushes to `main` that touch an app) | release and debug builds; unchanged by Phase 0 apart from folder names |
 
 Notes:
@@ -93,6 +106,10 @@ Notes:
 - **Web lockfile.** `web/package-lock.json` is not committed, so CI uses `npm install` and
   uploads the generated lockfile as the artifact `web-package-lock`. Download it from the first
   green run and commit it; from then on CI and the Docker build use `npm ci`.
+- **Security checks are advisory.** Read the artifacts of the latest `security.yml` run now and then (the Python job
+  also attaches `backend-requirements.lock.txt`, today's resolved versions, for when you want pinned dependencies).
+  The CodeQL job also tries to show results under *Security → Code scanning*; that needs a public repository or GitHub
+  Advanced Security, so on a private repository without it only the downloadable SARIF file exists.
 - **Lint is advisory.** Ruff runs with a minimal rule set (syntax errors, undefined names). To make
   it blocking, delete `continue-on-error: true` in the `lint` job once a run is clean.
 - **Flutter checks are not "required".** Path-filtered workflows are skipped on other pull
@@ -154,4 +171,4 @@ these remain open and are the content of Phase 1 and later:
 | Run formatters once (Ruff / Black, Prettier, `dart format`) in a single commit, then add its hash to a `.git-blame-ignore-revs` file | Would rewrite lines of 300+ characters and bury real changes; do it alone |
 | Make Ruff blocking; add ESLint / Prettier for `web/`; add real Dart tests (`flutter test`) | Needs the formatting commit and new dev dependencies (and a lockfile) first |
 | Commit `web/package-lock.json` | Generated by the first CI run (see section 4) |
-| Retention job, structured logging, a health check that tests the database | Behaviour changes with their own review |
+| Retention job, structured logging, a health check that tests the database | Behaviour changes with their own review. The retention proposal and the other compliance runbooks are in `docs/compliance/` |

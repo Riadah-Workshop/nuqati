@@ -423,6 +423,9 @@ def register_concept_reports(app, **deps):
                               db:Session=Depends(get_db),user:User=Depends(current_user)):
         if format not in ('xlsx','csv','pdf') or lang not in ('en','ar'):raise HTTPException(422,'Invalid export format or language')
         data=read(kind,start_date,end_date,driver_id,vehicle_id,company_id,db,user)
+        from .audit import audit_commit
+        audit_commit(db,'report.export',actor=user,target_type='concept_report',target_id=kind,company_id=(company_id if user.role=='super_admin' else user.company_id),
+                     detail={'format':format,'start_date':start_date.isoformat(),'end_date':end_date.isoformat(),'driver_id':driver_id,'vehicle_id':vehicle_id})
         if format=='xlsx':payload=_excel(data,lang);mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         elif format=='pdf':payload=_pdf(data);mime='application/pdf'
         else:payload=_csv(data,lang);mime='text/csv; charset=utf-8'

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit_commit
 from ..auth import allow, current_user, scope
 from ..db import get_db
 from ..models import Company, Driver, DrivingEvent, Trip, User, Vehicle
@@ -64,6 +65,7 @@ def monthly_fleet_reports(year:int,month:int,company_id:int|None=None,driver_id:
 @app.get('/api/v1/fleet/monthly-reports/export')
 def monthly_fleet_export(year:int,month:int,format:Literal['pdf','csv','xlsx'],kind:Literal['vehicles','utilization','rag','violations'],company_id:int|None=None,driver_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
     data=monthly_fleet_reports(year,month,company_id,driver_id,db,user)
+    audit_commit(db,'report.export',actor=user,target_type='monthly_report',target_id=f'{year}-{month:02d}',company_id=(company_id if user.role=='super_admin' else user.company_id),detail={'kind':kind,'format':format,'driver_id':driver_id})
     headers={
       'vehicles':['Plate','Model','Assigned driver','Monthly drivers','Odometer km','Trips','Distance km'],
       'utilization':['Driver','Vehicle','Trips','Distance km','Driving hours','Active days'],

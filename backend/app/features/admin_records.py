@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit, audit_commit
 from ..auth import allow, current_user, scope
 from ..db import engine, get_db
 from ..models import (
@@ -81,7 +82,9 @@ def edit_company(company_id:int,payload:CompanyEdit,db:Session=Depends(get_db),u
             db.add(AppSetting(key=key, value=json.dumps({'logo_data': value})))
         else:
             record.value = json.dumps({'logo_data': value})
-    row.name=payload.name.strip();db.commit();db.refresh(row);return row
+    row.name=payload.name.strip()
+    audit(db,'company.update',actor=user,target_type='company',target_id=company_id,company_id=company_id,detail={'logo_updated':payload.logo_data is not None})
+    db.commit();db.refresh(row);return row
 _delete_audit_metadata = MetaData()
 company_delete_audit = Table('company_delete_audit', _delete_audit_metadata,
     Column('id', Integer, primary_key=True),
@@ -169,6 +172,7 @@ def permanently_delete_company(company_id:int,data:ConfirmCompanyDelete,db:Sessi
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(409,'Deletion blocked by database relationships or database error. No deletion committed. Review server logs.')
+    audit_commit(db,'company.permanent_delete',actor=user,target_type='company',target_id=company_id,company_id=company_id,detail={'deleted_counts':counts})
     return {'status':'deleted','company_id':company_id,'deleted_counts':counts,'audit_recorded':True}
 
 @app.delete('/api/v1/companies/{company_id}')
@@ -181,6 +185,7 @@ def delete_empty_company(company_id:int,db:Session=Depends(get_db),user:User=Dep
     from ..vehicle_handover import company_handover_counts
     if any(company_handover_counts(db,company_id).values()):
         raise HTTPException(409,'Company has handover evidence; use verified-backup permanent deletion.')
+    audit(db,'company.delete',actor=user,target_type='company',target_id=company_id,company_id=company_id)
     db.delete(row);db.commit();return {'status':'deleted'}
 
 
@@ -204,6 +209,7 @@ def edit_user(user_id:int,payload:UserEdit,db:Session=Depends(get_db),user:User=
         if cid is not None: raise HTTPException(422,'Super Admin cannot belong to a client company')
     elif cid is None or not db.get(Company,cid): raise HTTPException(422,'Valid company required')
     for k,v in changes.items(): setattr(target,k,v)
+    audit(db,'user.update',actor=user,target_type='user',target_id=user_id,company_id=target.company_id,detail={'fields':sorted(changes),'role':target.role})
     db.commit();db.refresh(target);return user_view(target)
 
 @app.delete('/api/v1/users/{user_id}')
@@ -213,6 +219,7 @@ def delete_user(user_id:int,db:Session=Depends(get_db),user:User=Depends(current
     if target.id==user.id or target.role=='super_admin': raise HTTPException(409,'Cannot delete a Super Admin account')
     db.execute(delete(AccountInvitation).where(AccountInvitation.user_id==user_id))
     db.execute(delete(DriverAccount).where(DriverAccount.user_id==user_id))
+    audit(db,'user.delete',actor=user,target_type='user',target_id=user_id,company_id=target.company_id,detail={'role':target.role})
     db.delete(target)
     try:db.commit()
     except IntegrityError:db.rollback();raise HTTPException(409,'Account has other dependent records')
@@ -285,6 +292,7 @@ def edit_driver(driver_id:int,payload:DriverEdit,db:Session=Depends(get_db),user
         if account:
             linked=db.get(User,account.user_id)
             if linked:linked.full_name=row.full_name
+    audit(db,'driver.update',actor=user,target_type='driver',target_id=driver_id,company_id=row.company_id)
     try:db.commit()
     except IntegrityError:db.rollback();raise HTTPException(409,'Update conflicts with another record')
     db.refresh(row)
@@ -300,7 +308,9 @@ def delete_driver(driver_id:int,db:Session=Depends(get_db),user:User=Depends(cur
     enforce_managed_link(db,driver_id=driver_id)
     for v in db.scalars(select(Vehicle).where(Vehicle.assigned_driver_id==driver_id)):v.assigned_driver_id=None
     db.execute(delete(DriverAccount).where(DriverAccount.driver_id==driver_id))
-    db.flush();db.delete(row)
+    db.flush()
+    audit(db,'driver.delete',actor=user,target_type='driver',target_id=driver_id,company_id=row.company_id)
+    db.delete(row)
     try:db.commit()
     except IntegrityError:db.rollback();raise HTTPException(409,'Driver has other linked history. Archive instead.')
     return {'status':'deleted'}
@@ -342,6 +352,7 @@ def edit_vehicle(vehicle_id:int,payload:VehicleEdit,db:Session=Depends(get_db),u
                                reading_km=correction_km,source='ADMIN_CORRECTION',
                                note=correction_reason.strip()))
         row.odometer_km=correction_km
+    audit(db,'vehicle.update',actor=user,target_type='vehicle',target_id=vehicle_id,company_id=row.company_id)
     try: db.commit()
     except IntegrityError: db.rollback();raise HTTPException(409,'Plate number already exists')
     db.refresh(row);return row
@@ -356,6 +367,7 @@ def delete_vehicle(vehicle_id:int,db:Session=Depends(get_db),user:User=Depends(c
     for model in (Trip,OdometerReading,MaintenanceSchedule):
         if db.scalar(select(func.count()).select_from(model).where(model.vehicle_id==vehicle_id)):
             raise HTTPException(409,'Vehicle has trip, odometer or maintenance history. Deletion blocked.')
+    audit(db,'vehicle.delete',actor=user,target_type='vehicle',target_id=vehicle_id,company_id=row.company_id)
     db.delete(row);db.commit();return {'status':'deleted'}
 
 class OdometerCorrection(BaseModel):
@@ -368,7 +380,9 @@ def correct_odometer(vehicle_id:int,payload:OdometerCorrection,db:Session=Depend
     if not v: raise HTTPException(404,'Vehicle not found')
     # Preserve the original odometer history. Record a new correction entry instead of rewriting history.
     db.add(OdometerReading(company_id=v.company_id,vehicle_id=v.id,reading_km=payload.reading_km,source='ADMIN_CORRECTION',note=payload.reason))
-    v.odometer_km=payload.reading_km;db.commit();return {'status':'corrected','odometer_km':v.odometer_km}
+    v.odometer_km=payload.reading_km
+    audit(db,'vehicle.odometer_correction',actor=user,target_type='vehicle',target_id=vehicle_id,company_id=v.company_id,detail={'reading_km':payload.reading_km})
+    db.commit();return {'status':'corrected','odometer_km':v.odometer_km}
 
 @app.delete('/api/v1/maintenance-schedules/{schedule_id}')
 def delete_maintenance(schedule_id:int,db:Session=Depends(get_db),user:User=Depends(current_user)):

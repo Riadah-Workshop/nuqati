@@ -15,6 +15,9 @@ except ImportError:  # started as `python -m unittest backend.test_...` from the
 SOURCE = Path(__file__).parent / 'app' / 'features' / 'admin_records.py'  # shown in tracebacks only
 
 
+AUDIT_CALLS = []
+
+
 class Company:
     pass
 
@@ -58,6 +61,8 @@ def load_edited_endpoints():
     env = {'BaseModel': BaseModel, 'Field': Field, 'HTTPException': HTTPException,
            'Depends': lambda _: None, 'get_db': None, 'current_user': None,
            'Session': object, 'User': object, 'CompanyOut': object, 'Company': Company,
+           # edit_company writes a security audit row; here it only records the call, as `allow` is replaced too
+           'audit': lambda db, action, **kwargs: AUDIT_CALLS.append(action),
            'AppSetting': AppSetting, 'json': json,
            '_company_logo_setting': lambda cid: f'logo:{cid}',
            'allow': lambda user, *roles: None if user.role in roles else (_ for _ in ()).throw(HTTPException(403)),
@@ -74,6 +79,7 @@ class CompanyEditorContractTests(unittest.TestCase):
     def setUp(self):
         self.db = FakeDB()
         self.admin = SimpleNamespace(role='super_admin')
+        AUDIT_CALLS.clear()
 
     def update(self, **data):
         return self.env['edit_company'](7, self.env['CompanyEdit'](**data), self.db, self.admin)
@@ -83,6 +89,11 @@ class CompanyEditorContractTests(unittest.TestCase):
         self.assertEqual(self.db.company.name, 'Updated Company')
         self.assertEqual(self.db.commits, 1)
         self.assertFalse(self.db.settings)
+
+    def test_edit_is_audited_in_the_same_transaction(self):
+        self.update(name='Updated Company')
+        self.assertEqual(AUDIT_CALLS, ['company.update'])
+        self.assertEqual(self.db.commits, 1, 'the audit row must ride on the edit\'s own commit')
 
     def test_name_and_logo_written_in_one_commit(self):
         value = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'dummy-payload').decode()

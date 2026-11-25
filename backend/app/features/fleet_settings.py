@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit
 from ..auth import allow, current_user, scope
 from ..db import get_db
 from ..models import AppSetting, Company, CompanyDrivingSettings, User
@@ -53,6 +54,7 @@ def save_fleet_settings(data:Thresholds,company_id:int|None=None,db:Session=Depe
     row=db.get(AppSetting,f'severity_policy:{cid}')
     if row:row.value=json.dumps(severity)
     else:db.add(AppSetting(key=f'severity_policy:{cid}',value=json.dumps(severity)))
+    audit(db,'settings.thresholds_update',actor=user,target_type='company',target_id=cid,company_id=cid,detail={'speeding_kmh':data.speeding_kmh,'harsh_accel_ms2':data.harsh_accel_ms2,'harsh_brake_ms2':data.harsh_brake_ms2})
     db.commit()
     return {'company_id':cid,**data.model_dump(),**severity}
 
@@ -89,5 +91,7 @@ def put_event_policy(data:EventPolicyIn,company_id:int|None=None,db:Session=Depe
     key=f'driving_event_policy:{cid}'
     setting=db.get(AppSetting,key)
     if setting is None: setting=AppSetting(key=key,value='{}');db.add(setting)
-    setting.value=json.dumps(data.model_dump());db.commit()
+    setting.value=json.dumps(data.model_dump())
+    audit(db,'settings.event_policy_update',actor=user,target_type='company',target_id=cid,company_id=cid,detail={'enabled':data.enabled})
+    db.commit()
     return {'company_id':cid,**event_policy(db,cid)}

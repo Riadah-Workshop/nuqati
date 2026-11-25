@@ -18,6 +18,7 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:?Set DB user}:${POSTGRES_PASSWORD:?Set DB password}@db:5432/${POSTGRES_DB:?Set DB name}
       CORS_ORIGINS: ${NUQATI_PUBLIC_ORIGIN:?Set HTTPS production origin}
       NUQATI_AUTH_SECRET: ${NUQATI_AUTH_SECRET:?Set a random secret of at least 32 characters}
+      NUQATI_AUTH_SECRET_PREVIOUS: ${NUQATI_AUTH_SECRET_PREVIOUS:-}
       NUQATI_TRUSTED_PROXIES: ${NUQATI_TRUSTED_PROXIES:-127.0.0.1/8,::1/128}
       NUQATI_PUBLIC_ORIGIN: ${NUQATI_PUBLIC_ORIGIN:?Set HTTPS production origin}
       NUQATI_EMAIL_FROM: ${NUQATI_EMAIL_FROM:-noreply@al-riadah.sa}

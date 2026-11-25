@@ -63,6 +63,7 @@ jobs:
         run: >-
           python -m pytest -q
           --ignore=backend/test_auth_runtime_postgres.py
+          --ignore=backend/test_security_audit_postgres.py
           --ignore=backend/test_concept_reports.py
           backend
 
@@ -80,7 +81,7 @@ jobs:
         env:
           PYTHONPATH: backend
           NUQATI_TEST_DATABASE_URL: postgresql+psycopg2://nuqati_ci:ci-only-not-a-secret@localhost:5432/nuqati_test
-        run: python -m pytest -q backend/test_auth_runtime_postgres.py
+        run: python -m pytest -q backend/test_auth_runtime_postgres.py backend/test_security_audit_postgres.py
 
   web:
     name: Web build
