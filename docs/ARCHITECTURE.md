@@ -15,7 +15,7 @@ reviewer can check them.
 | Manager app | Flutter, `flutter_map` | `manager_app/` | Built by GitHub Actions; same login as the dashboard |
 | Tracker receiver | asyncio TCP server, Teltonika Codec 8 / 8E | `backend/app/teltonika_receiver.py`, `hardware.py` | `teltonika` service, port 5027, bound to `127.0.0.1` unless configured |
 | Report scheduler | Python loop | `backend/app/report_subscriptions.py` | `report_scheduler` service; checks for due email reports every 30 seconds |
-| Database | PostgreSQL 16 | models in `backend/app/models.py` plus SQL executed at import time | `db` service with a named volume |
+| Database | PostgreSQL 16 | models in `backend/app/models.py`; schema changes are Alembic revisions in `backend/app/migrations/` (older tables are still created by SQL executed at import time) | `db` service with a named volume |
 | Database backup | POSIX shell on `postgres:16-alpine` | `ops/backup/` (`backup.sh`, `restore_drill.sh`) | `db_backup` service: daily dump into the `nuqati_backups` volume, health goes red when the last good dump is older than 26 hours (see [docs/OPERATIONS.md](OPERATIONS.md)) |
 
 ## 1a. Backend module map
@@ -135,8 +135,11 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   points, report email subscriptions, the security audit trail (`audit.py`) and the auth
   rate-limit table (`auth_limits.py`).
   `vehicle_handover.py` defines its own ORM tables, including photos stored as binary rows.
-- **No migration tool.** The schema is "whatever the code creates at startup". The SQL uses
-  PostgreSQL features (`BIGSERIAL`, `ON CONFLICT`, `ADD COLUMN IF NOT EXISTS`), so SQLite works
+- **Migrations (Alembic, since Phase 3.3).** `backend/app/migrations/` holds numbered revisions; `0001` is the baseline, the
+  schema that the start-up SQL above builds. `python -m app.migrate` applies them and adopts an existing database without
+  changing it (`docs/DEVELOPMENT.md` section 6). The container runs it before the API when `NUQATI_RUN_MIGRATIONS=1`.
+  The start-up SQL is frozen (a test fails if it grows) and stays for one release as a fallback; new schema changes are
+  revisions only. The SQL uses PostgreSQL features (`BIGSERIAL`, `ON CONFLICT`, `ADD COLUMN IF NOT EXISTS`), so SQLite works
   only for a subset of tests.
 - **Settings as JSON:** per-company policies and live-share tokens live in `app_settings` under
   keys such as `safety_score_policy:{company_id}`, `flexible_rag_policy:{company_id}` and

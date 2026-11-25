@@ -5,6 +5,30 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 3.3: database migrations (Alembic)
+
+#### Added
+- **Alembic migrations, off by default.** `backend/app/migrations/` (revision `0001` = the schema the application built
+  by itself until Phase 3.2, `versions/0001_baseline.sql`) and `python -m app.migrate` (`upgrade`, `status`, `check`,
+  `new`). An existing database is adopted: compared with the baseline in a scratch schema that is rolled back and
+  then only marked as revision `0001`, nothing changed; a database that lacks tables or columns is refused with a list.
+  One run at a time (advisory lock). A failing revision is rolled back completely.
+- `NUQATI_RUN_MIGRATIONS` (default `0`): when `1` the `api` container migrates before it starts and stops if that fails.
+  With `0` it starts exactly as before.
+- CI job **Migrations** on a real PostgreSQL: the committed baseline equals what the application's own code builds; a
+  database built only by migrations has an identical schema (columns, defaults, constraints, indexes, sequences) and the
+  old start-up SQL changes nothing on it; adoption changes nothing; missing table/column is refused and left alone; a
+  failing revision leaves no trace and a good one applies; the container starts with migrations on, fails fast on a bad
+  database, and is unchanged with them off.
+- `backend/test_migrations.py` (23 tests) including a guard that **freezes the old start-up SQL**: a new
+  `CREATE TABLE`, `ALTER TABLE`, `CREATE INDEX` or `create_all` in application code fails the build with
+  "add an Alembic revision instead".
+
+#### Changed
+- `docs/DEVELOPMENT.md` section 6 (how to make a schema change), `docs/DEPLOY_COOLIFY.md` (turning migrations on),
+  `docs/OPERATIONS.md` (symptoms), `docs/ARCHITECTURE.md`.
+- `backend/requirements.txt`: `alembic>=1.13,<2`.
+
 ### Phase 3.2: worker health checks
 
 #### Added
