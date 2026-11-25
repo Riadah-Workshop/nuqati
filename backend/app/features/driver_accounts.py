@@ -60,7 +60,7 @@ def link_existing_driver(driver_id:int, data:DriverLinkIn, db:Session=Depends(ge
     if existing and existing.user_id!=u.id: raise HTTPException(409,'This driver already has a different login; contact Super Admin')
     v=None
     if data.vehicle_id is not None:
-        from .vehicle_handover import enforce_managed_link
+        from ..vehicle_handover import enforce_managed_link
         current_vehicle=db.scalar(select(Vehicle).where(Vehicle.assigned_driver_id==d.id))
         if not current_vehicle or current_vehicle.id!=data.vehicle_id:
             enforce_managed_link(db,driver_id=d.id,vehicle_id=data.vehicle_id)

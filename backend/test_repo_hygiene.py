@@ -196,5 +196,92 @@ def test_names_other_modules_import_from_main_are_still_exported_by_main():
         assert name in bound, f"{user} imports '{name}' from .main but main.py no longer exports it"
 
 
+def _top_level_names(tree):
+    """Names bound at module level (also inside top-level if/try), and whether the module is too dynamic to check."""
+    names, dynamic = set(), False
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name == "*":
+                    dynamic = True
+                names.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                for sub in ast.walk(target):
+                    if isinstance(sub, ast.Name):
+                        names.add(sub.id)
+        elif isinstance(node, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
+            for field in ("body", "orelse", "finalbody", "handlers"):
+                for child in getattr(node, field, []) or []:
+                    stack.extend(child.body if isinstance(child, ast.ExceptHandler) else [child])
+    return names, dynamic
+
+
+def test_every_relative_import_resolves_even_inside_functions():
+    """A relative import inside a function runs only when called, so moving a file can break it silently.
+
+    Example: `from .db import SessionLocal` in app/features/x.py means app.features.db, not app.db.
+    """
+    problems = []
+    for path in sorted(APP.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.ImportFrom) and node.level >= 1):
+                continue
+            base = path.parent
+            for _ in range(node.level - 1):
+                base = base.parent
+            where = f"{path.relative_to(ROOT)}:{node.lineno}"
+            if node.module is None:  # from . import name
+                for alias in node.names:
+                    if not ((base / f"{alias.name}.py").is_file() or (base / alias.name / "__init__.py").is_file()):
+                        problems.append(f"{where} imports '{alias.name}' from {base.relative_to(ROOT)}, which has no such module")
+                continue
+            target = base.joinpath(*node.module.split("."))
+            if target.with_suffix(".py").is_file():
+                module_file = target.with_suffix(".py")
+            elif (target / "__init__.py").is_file():
+                module_file = target / "__init__.py"
+            else:
+                problems.append(f"{where} imports '{'.' * node.level}{node.module}' but {target.relative_to(ROOT)}.py does not exist")
+                continue
+            names, dynamic = _top_level_names(ast.parse(module_file.read_text(encoding="utf-8")))
+            if dynamic:
+                continue
+            for alias in node.names:
+                submodule = target / f"{alias.name}.py"
+                if alias.name not in names and not submodule.is_file():
+                    problems.append(f"{where} imports '{alias.name}' which {module_file.relative_to(ROOT)} does not define")
+    assert not problems, "Broken relative imports:\n" + "\n".join(problems)
+
+
+def test_modules_started_by_docker_and_compose_exist():
+    """api / teltonika / report_scheduler start `app.<module>`; a missing file makes that container crash-loop."""
+    started = {"app.main"}
+    for name in ("compose.yml", "docker-compose.yml", "hardware-teltonika.compose.yml", "backend/Dockerfile"):
+        path = ROOT / name
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            for groups in re.findall(r"\"-m\",\s*\"(app\.[\w.]+)\"|-m\s+(app\.[\w.]+)|uvicorn\W+(app\.[\w.]+):", text):
+                started |= {module for module in groups if module}
+    assert (APP / "__init__.py").is_file(), "backend/app/__init__.py is missing"
+    for module in sorted(started):
+        relative = Path(*module.split(".")[1:])
+        assert (APP / relative).with_suffix(".py").is_file() or (APP / relative / "__init__.py").is_file(), (
+            f"{module} is started by Docker/compose but backend/app/{relative}.py is missing")
+
+
+def test_no_stray_python_modules_in_backend_root():
+    """Only tests and test helpers live in backend/; application code belongs in backend/app/."""
+    for path in sorted((ROOT / "backend").glob("*.py")):
+        assert path.name.startswith("test_") or path.name in {"backend_source.py", "conftest.py"}, (
+            f"backend/{path.name} is in the wrong folder: application code goes in backend/app/ (delete this copy)")
+
+
 if __name__ == "__main__":
     unittest.main()

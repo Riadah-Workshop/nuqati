@@ -275,7 +275,7 @@ def ensure_vehicle_tyre_schedules(db: Session, company_id: int | None = None) ->
 @app.on_event('startup')
 def initialize_legacy_tyre_schedules():
     # One-time-per-startup idempotent backfill; GET maintenance remains read-only.
-    from .db import SessionLocal
+    from ..db import SessionLocal
     with SessionLocal() as db:
         ensure_vehicle_tyre_schedules(db)
         db.commit()

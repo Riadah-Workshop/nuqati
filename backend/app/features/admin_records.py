@@ -109,12 +109,12 @@ def company_delete_counts(db: Session, company_id: int):
     counts={model.__tablename__: db.scalar(select(func.count()).select_from(model).where(
         filters[model] if model in filters else model.company_id == company_id
     )) for model in COMPANY_DELETE_MODELS}
-    from .vehicle_handover import company_handover_counts
+    from ..vehicle_handover import company_handover_counts
     counts.update(company_handover_counts(db,company_id))
     return counts
 
 def purge_company_records(db: Session, company_id: int):
-    from .vehicle_handover import purge_handover_company
+    from ..vehicle_handover import purge_handover_company
     purge_handover_company(db,company_id)
     user_ids = select(User.id).where(User.company_id == company_id)
     driver_ids = select(Driver.id).where(Driver.company_id == company_id)
@@ -178,7 +178,7 @@ def delete_empty_company(company_id:int,db:Session=Depends(get_db),user:User=Dep
     for model in (User,Driver,Vehicle,Trip,OdometerReading,MaintenanceSchedule,DrivingEvent,DriverLocation,CompanyDrivingSettings):
         if db.scalar(select(func.count()).select_from(model).where(model.company_id==company_id)):
             raise HTTPException(409,'Company has related records. Use deletion preview and permanent delete.')
-    from .vehicle_handover import company_handover_counts
+    from ..vehicle_handover import company_handover_counts
     if any(company_handover_counts(db,company_id).values()):
         raise HTTPException(409,'Company has handover evidence; use verified-backup permanent deletion.')
     db.delete(row);db.commit();return {'status':'deleted'}
@@ -266,7 +266,7 @@ def edit_driver(driver_id:int,payload:DriverEdit,db:Session=Depends(get_db),user
                 setattr(meta,key,changes[key].strip())
     if 'vehicle_id' in changes:
         # Once a documented handover is active, require the online return path.
-        from .vehicle_handover import enforce_managed_link
+        from ..vehicle_handover import enforce_managed_link
         target_id=changes['vehicle_id']
         current_vehicle=db.scalar(select(Vehicle).where(Vehicle.assigned_driver_id==driver_id))
         if (current_vehicle.id if current_vehicle else None) != target_id:
@@ -296,7 +296,7 @@ def delete_driver(driver_id:int,db:Session=Depends(get_db),user:User=Depends(cur
     if not row: raise HTTPException(404,'Driver not found')
     if db.scalar(select(func.count()).select_from(Trip).where(Trip.driver_id==driver_id)):
         raise HTTPException(409,'Driver has trip history. Permanently delete their company with explicit confirmation, or archive the driver.')
-    from .vehicle_handover import enforce_managed_link
+    from ..vehicle_handover import enforce_managed_link
     enforce_managed_link(db,driver_id=driver_id)
     for v in db.scalars(select(Vehicle).where(Vehicle.assigned_driver_id==driver_id)):v.assigned_driver_id=None
     db.execute(delete(DriverAccount).where(DriverAccount.driver_id==driver_id))
@@ -331,7 +331,7 @@ def edit_vehicle(vehicle_id:int,payload:VehicleEdit,db:Session=Depends(get_db),u
     elif correction_reason is not None:
         raise HTTPException(422,'Odometer correction value is required when a reason is provided')
     if 'assigned_driver_id' in changes and changes['assigned_driver_id'] != row.assigned_driver_id:
-        from .vehicle_handover import enforce_managed_link
+        from ..vehicle_handover import enforce_managed_link
         enforce_managed_link(db,driver_id=changes['assigned_driver_id'],vehicle_id=vehicle_id)
     if changes.get('assigned_driver_id') is not None:
         driver=db.get(Driver,changes['assigned_driver_id'])
@@ -350,7 +350,7 @@ def edit_vehicle(vehicle_id:int,payload:VehicleEdit,db:Session=Depends(get_db),u
 def delete_vehicle(vehicle_id:int,db:Session=Depends(get_db),user:User=Depends(current_user)):
     allow(user,'super_admin');row=db.get(Vehicle,vehicle_id)
     if not row: raise HTTPException(404,'Vehicle not found')
-    from .vehicle_handover import HandoverAssignment
+    from ..vehicle_handover import HandoverAssignment
     if db.scalar(select(HandoverAssignment.id).where(HandoverAssignment.vehicle_id==vehicle_id)):
         raise HTTPException(409,'Vehicle has handover history; keep the vehicle archived to preserve evidence.')
     for model in (Trip,OdometerReading,MaintenanceSchedule):
