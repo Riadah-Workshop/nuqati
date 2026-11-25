@@ -21,3 +21,14 @@
   builds one more small image and creates the volume.
 - The dumps are on the same server. Copy them off the server and run a restore drill: [compliance/BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md).
 - Add an external uptime monitor on `https://nuqati.al-riadah.sa/api/v1/ready` and read [OPERATIONS.md](OPERATIONS.md).
+
+## Turning migrations on (Phase 3.3)
+
+Alembic is built into the `api` image but **off by default**: after deploying this version the application behaves exactly as before. To turn it on, once:
+
+1. Check that a recent backup exists (Coolify: `db_backup` healthy; `docker exec <db_backup-container> ls -l /backups`). To be extra careful, take one now: `docker exec <db_backup-container> /usr/local/bin/backup.sh once`.
+2. In Coolify, add the environment variable `NUQATI_RUN_MIGRATIONS` with the value `1` and redeploy.
+3. Read the `api` log: the first start prints `Existing database adopted: recorded as revision 0001; nothing was changed.` and then `Uvicorn running`. Later starts print nothing about migrations until a new revision exists.
+4. If the log instead says `NOT adopting this database` with a list, nothing was changed; see [OPERATIONS.md](OPERATIONS.md) section 5.
+
+To switch it off again set the value to `0` (or remove it) and redeploy; the extra `alembic_version` table is harmless and can stay.

@@ -234,6 +234,171 @@ jobs:
           docker volume create nq-empty
           if docker run --rm -v nq-empty:/backups nuqati-backup:ci health; then echo "health must fail without a backup"; exit 1; fi
 
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start a disposable PostgreSQL and build the API image
+        run: |
+          set -euo pipefail
+          docker network create nq-m
+          docker run -d --name nq-mdb --network nq-m -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci-only -e POSTGRES_DB=ci postgres:16-alpine
+          # the official image starts a temporary server to initialise, stops it, then starts the real one
+          for i in $(seq 1 60); do [ "$(docker logs nq-mdb 2>&1 | grep -c 'ready to accept connections')" -ge 2 ] && break; sleep 1; done
+          docker exec nq-mdb pg_isready -U ci -d ci
+          docker build -f backend/Dockerfile -t nuqati-api:ci .
+
+      - name: Build the schema the way the application did until now (start-up code)
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          newdb legacy
+          api legacy nuqati-api:ci python -c "from app.main import app; print('schema created by the application')"
+          tables=$(sql legacy "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
+          echo "legacy database has $tables tables"
+          test "$tables" -ge 40
+
+      - name: The committed baseline is exactly what the application's own code builds
+        run: |
+          set -euo pipefail
+          ops/ci/schema_dump.sh nq-mdb legacy > legacy_dump.sql
+          diff -u backend/app/migrations/versions/0001_baseline.sql legacy_dump.sql
+
+      - name: A new database built only by migrations has the same schema, and the old start-up code changes nothing on it
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          fingerprint legacy > legacy.txt
+          test "$(wc -l < legacy.txt)" -gt 200
+          newdb fresh
+          expect_exit 0 "migrate builds a new database" -- api fresh nuqati-api:ci python -m app.migrate
+          test "$(version_of fresh)" = "0001"
+          fingerprint fresh > fresh.txt
+          diff -u legacy.txt fresh.txt
+          # the application's start-up SQL still runs for one more release: it must be a no-op on a migrated database
+          api fresh nuqati-api:ci python -c "from app.main import app; print('application started on the migrated database')"
+          fingerprint fresh > fresh_after_start.txt
+          diff -u fresh.txt fresh_after_start.txt
+          expect_exit 0 "a second run changes nothing" -- api fresh nuqati-api:ci python -m app.migrate
+          expect_exit 0 "status is current" -- api fresh nuqati-api:ci python -m app.migrate status
+          fingerprint fresh > fresh_again.txt
+          diff -u fresh.txt fresh_again.txt
+
+      - name: An existing database is adopted without any change
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          copydb legacy adopt
+          fingerprint adopt > before.txt
+          must_not has_version_table adopt
+          expect_exit 0 "the first run adopts" -- api adopt nuqati-api:ci python -m app.migrate
+          grep -q "adopted" <<< "$OUT"
+          test "$(version_of adopt)" = "0001"
+          fingerprint adopt > after.txt
+          diff -u before.txt after.txt
+          test "$(sql adopt "SELECT count(*) FROM pg_namespace WHERE nspname='nuqati_baseline_check'")" = "0"
+          expect_exit 0 "the second run does nothing" -- api adopt nuqati-api:ci python -m app.migrate
+          must_not grep -q "adopted" <<< "$OUT"
+          expect_exit 0 "status is current" -- api adopt nuqati-api:ci python -m app.migrate status
+          expect_exit 0 "check finds no difference" -- api adopt nuqati-api:ci python -m app.migrate check
+
+      - name: A database that lacks something is refused and left alone
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          copydb legacy badcol
+          sql badcol "ALTER TABLE companies DROP COLUMN name CASCADE"
+          expect_exit 1 "missing column is refused" -- api badcol nuqati-api:ci python -m app.migrate
+          grep -q "column companies.name is missing" <<< "$OUT"
+          must_not has_version_table badcol
+          copydb legacy badtable
+          sql badtable "DROP TABLE security_audit CASCADE"
+          expect_exit 1 "missing table is refused" -- api badtable nuqati-api:ci python -m app.migrate
+          grep -q "table security_audit is missing" <<< "$OUT"
+          must_not has_version_table badtable
+          expect_exit 1 "check reports it too" -- api badtable nuqati-api:ci python -m app.migrate check
+          for db in badcol badtable; do
+            test "$(sql $db "SELECT count(*) FROM pg_namespace WHERE nspname='nuqati_baseline_check'")" = "0"
+          done
+
+      - name: Later revisions - a failing one is rolled back completely, a good one is applied
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          mkdir ci_rev
+          cat > ci_rev/0002_ci_failing.py <<'PY'
+          from alembic import op
+          revision = "0002"
+          down_revision = "0001"
+          branch_labels = None
+          depends_on = None
+          def upgrade():
+              op.execute("CREATE TABLE ci_probe (id integer)")
+              op.execute("ALTER TABLE companies ADD COLUMN ci_probe text")
+              op.execute("SELECT 1/0")
+          def downgrade():
+              pass
+          PY
+          cat > ci_rev/0002_ci_good.py <<'PY'
+          from alembic import op
+          revision = "0002"
+          down_revision = "0001"
+          branch_labels = None
+          depends_on = None
+          def upgrade():
+              op.execute("ALTER TABLE companies ADD COLUMN ci_probe text")
+          def downgrade():
+              pass
+          PY
+          mount() { echo "-v $PWD/ci_rev/$1:/app/app/migrations/versions/$1:ro"; }
+          expect_exit 1 "a failing revision stops the run" -- api fresh $(mount 0002_ci_failing.py) nuqati-api:ci python -m app.migrate
+          test "$(version_of fresh)" = "0001"
+          test -z "$(sql fresh "SELECT to_regclass('public.ci_probe')")"
+          test "$(sql fresh "SELECT count(*) FROM information_schema.columns WHERE table_name='companies' AND column_name='ci_probe'")" = "0"
+          echo "ok: nothing of the failed revision remains"
+          expect_exit 1 "status shows the database is behind" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate status
+          expect_exit 0 "a good revision is applied" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate
+          test "$(version_of fresh)" = "0002"
+          test "$(sql fresh "SELECT count(*) FROM information_schema.columns WHERE table_name='companies' AND column_name='ci_probe'")" = "1"
+          expect_exit 0 "status is current again" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate status
+          # a revision created with the helper has the next number and points at the newest revision
+          expect_exit 0 "new creates the next revision file" -- api fresh --user root nuqati-api:ci sh -c 'python -m app.migrate new "add a probe column" && cat app/migrations/versions/0002_add_a_probe_column.py'
+          grep -q 'revision = .0002.' <<< "$OUT"
+          grep -q 'down_revision = .0001.' <<< "$OUT"
+
+      - name: The API container - migrations on, off, and fail-fast
+        run: |
+          set -euo pipefail
+          . ops/ci/migrations_lib.sh
+          # 1. migrations on, brand-new database: tables are built by the migration, then the API answers
+          newdb service
+          start_api nq-svc service 1
+          ready nq-svc || { docker logs nq-svc; exit 1; }
+          test "$(version_of service)" = "0001"
+          docker logs nq-svc 2>&1 | sed 's/^/    | /' | tail -n 20
+          # 2. migrations on, database that lacks something: the container stops, the API never starts
+          start_api nq-bad badtable 1
+          code=$(timeout 120 docker wait nq-bad)
+          logs=$(docker logs nq-bad 2>&1)
+          printf '%s\n' "$logs" | sed 's/^/    | /'
+          test "$code" != "0"
+          grep -q "table security_audit is missing" <<< "$logs"
+          must_not grep -q "Uvicorn running" <<< "$logs"
+          must_not has_version_table badtable
+          # 3. migrations off (default): behaviour is unchanged, the API starts and no alembic_version table is created
+          start_api nq-off badtable 0
+          ready nq-off || { docker logs nq-off; exit 1; }
+          must_not has_version_table badtable
+          echo "ok: with NUQATI_RUN_MIGRATIONS=0 nothing is migrated and the API starts as before"
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in nq-svc nq-bad nq-off; do echo "== $c"; docker logs "$c" 2>&1 | tail -40 || true; done
+
   workers:
     name: Worker health checks
     runs-on: ubuntu-latest

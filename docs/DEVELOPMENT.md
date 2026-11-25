@@ -92,7 +92,7 @@ it cannot touch real data. Never point it at production or staging.
 
 | Workflow | Runs on | Jobs |
 |---|---|---|
-| `ci.yml` | every pull request, pushes to `main` | **Backend tests**, **Web build**, **Docker, compose and Caddy**, **Backup and restore drill** (real PostgreSQL, the backup image, a restore and the failure cases), **Worker health checks** (the real receiver and scheduler in containers, including a frozen receiver), **Lint (advisory)** |
+| `ci.yml` | every pull request, pushes to `main` | **Backend tests**, **Web build**, **Docker, compose and Caddy**, **Backup and restore drill** (real PostgreSQL, the backup image, a restore and the failure cases), **Worker health checks** (the real receiver and scheduler in containers, including a frozen receiver), **Migrations** (real PostgreSQL: the baseline equals the schema the application builds, adoption, refusal, rollback of a failing revision, the container with migrations on and off), **Lint (advisory)** |
 | `ci-flutter.yml` | pull requests that touch `driver_app/` or `manager_app/` | **Driver app analyze**, **Manager app analyze** |
 | `security.yml` | weekly (Monday), pull requests that touch dependency files, manual | **Python dependencies** (pip-audit), **Web dependencies** (npm audit), **CodeQL** (Python, JavaScript/TypeScript), **Secret scan** (gitleaks). Advisory: every job has `continue-on-error`, nothing blocks a merge or deploy; results are run artifacts |
 | `build-*.yml` | manual (and, for debug APKs, pushes to `main` that touch an app) | release and debug builds; unchanged by Phase 0 apart from folder names |
@@ -133,14 +133,22 @@ the **same commit**; installed phones keep the API URL they were built with.
 
 ## 6. Changing the database
 
-There is no migration tool yet (planned for Phase 1). Until there is:
+Since Phase 3.3 schema changes are **Alembic revisions**, not SQL in the application code.
 
-- Changes must be additive and idempotent: `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`
-  (see the existing blocks in `backend/app/api_app.py` and `backend/app/features/`). Never drop or rename a column that production data uses.
-- Test on PostgreSQL (`make test-pg`); SQLite does not understand all of the SQL.
-- Back up first (`pg_dump -Fc`) and keep the same `NUQATI_PG_VOLUME_NAME` as the running stack.
-  The default volume name is the historical staging name on purpose, because pointing Compose at
-  a new name creates an empty database. See [`DEPLOY_COOLIFY.md`](DEPLOY_COOLIFY.md).
+**Making a change**
+
+1. `cd backend && python -m app.migrate new "add vehicle colour"` creates a new revision file in `backend/app/migrations/versions/` named `0002_add_vehicle_colour` (the next number, pointing at the newest revision).
+2. Write `upgrade()` with plain SQL: `op.execute("ALTER TABLE vehicles ADD COLUMN colour varchar(30)")`. Keep it additive. Never drop or rename a column or table that production data uses in the same release that stops using it; do that one release later.
+3. Update the ORM model in `models.py` if the application reads the column through it. Do **not** add `CREATE TABLE`, `ALTER TABLE`, `CREATE INDEX` or `create_all` to application modules: `backend/test_migrations.py` freezes the old start-up SQL and fails with "add an Alembic revision instead".
+4. Open a pull request. CI job **Migrations** applies your revision to a real PostgreSQL. A revision that fails halfway is rolled back completely (PostgreSQL DDL is transactional), but test the SQL on PostgreSQL yourself first (`make test-pg`); SQLite does not understand all of it.
+
+**How it runs.** `python -m app.migrate` (or the `api` container with `NUQATI_RUN_MIGRATIONS=1`) applies every revision that is missing, one run at a time. `python -m app.migrate status` prints the current and the newest revision (exit 1 if they differ). `python -m app.migrate check` compares a database with the baseline schema.
+
+**The baseline and the existing database.** Revision `0001` is the schema the application created by itself up to Phase 3.2 (`versions/0001_baseline.sql`, an exact `pg_dump` of a database built by the old start-up code; CI proves they are the same). A database that already has Nuqati's tables but no `alembic_version` table (production, staging, your laptop) is **adopted**: it is compared with the baseline in a scratch schema that is always rolled back, and if it has every table and column it is only marked as revision `0001`. Nothing is created or changed. If something is missing it is refused with a list; start the application once with the current release (the old start-up SQL adds it), then run again. The old start-up SQL stays in the code for one more release as that safety net and is a no-op on a migrated database (CI checks this).
+
+**Backups first.** Before the first run on a database that matters, make sure a backup exists ([OPERATIONS.md](OPERATIONS.md) section 3, [BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md)). Keep the same `NUQATI_PG_VOLUME_NAME` as the running stack: the default volume name is the historical staging name on purpose, because pointing Compose at a new name creates an empty database. See [`DEPLOY_COOLIFY.md`](DEPLOY_COOLIFY.md).
+
+**There is no `downgrade`.** A revision's `downgrade()` is optional; the baseline's refuses to run. Undo a bad change with a new revision, or restore the backup.
 
 ## 7. Mobile apps
 
