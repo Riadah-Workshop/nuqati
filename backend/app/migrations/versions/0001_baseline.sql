@@ -991,9 +991,9 @@ CREATE UNIQUE INDEX ix_users_email ON public.users USING btree (email);
 
 CREATE INDEX ix_vehicles_company_id ON public.vehicles USING btree (company_id);
 
-CREATE UNIQUE INDEX uq_handover_open_driver ON public.handover_assignments USING btree (driver_id) WHERE ((status)::text = ANY ((ARRAY['active'::character varying, 'pending_receipt'::character varying, 'pending_return'::character varying])::text[]));
+CREATE UNIQUE INDEX uq_handover_open_driver ON public.handover_assignments USING btree (driver_id) WHERE (status IN ('active', 'pending_receipt', 'pending_return'));
 
-CREATE UNIQUE INDEX uq_handover_open_vehicle ON public.handover_assignments USING btree (vehicle_id) WHERE ((status)::text = ANY ((ARRAY['active'::character varying, 'pending_receipt'::character varying, 'pending_return'::character varying])::text[]));
+CREATE UNIQUE INDEX uq_handover_open_vehicle ON public.handover_assignments USING btree (vehicle_id) WHERE (status IN ('active', 'pending_receipt', 'pending_return'));
 
 CREATE UNIQUE INDEX ux_driver_connection_open_alert ON public.driver_connection_alerts USING btree (driver_id) WHERE (resolved_at IS NULL);
 

@@ -5,6 +5,8 @@ existing database is adopted without changes, a database that lacks something is
 migrations on) run in CI, job "Migrations" in .github/workflows/ci.yml.
 """
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -104,6 +106,7 @@ def test_baseline_sql_is_a_reduced_schema_dump():
     for statement in ("SET", "COPY", "GRANT", "REVOKE", "COMMENT ON", "INSERT INTO", "CREATE SCHEMA", "CREATE EXTENSION"):
         assert not re.search(rf"^\s*{re.escape(statement)}(\s|$)", sql, re.M), f"0001_baseline.sql must not contain a '{statement}' statement"
     assert not re.search(r"^\s*--", sql, re.M), "0001_baseline.sql must not contain comments"
+    assert "ANY ((ARRAY[" not in sql, "pg_dump's form of IN (...) on varchar does not round-trip: see ops/ci/baseline_rewrite.sed"
     assert not re.search(r"^\s*\\", sql, re.M), "0001_baseline.sql must not contain psql meta-commands (pg_dump 16.x adds \\restrict lines)"
     # migrate.py rebuilds the baseline in a scratch schema by replacing "public." everywhere: nothing may be unqualified.
     names = re.findall(r"^(?:CREATE (?:UNLOGGED )?(?:TABLE|SEQUENCE|VIEW)|ALTER (?:TABLE|SEQUENCE)(?: ONLY)?)\s+(\S+)", sql, re.M)
@@ -219,3 +222,27 @@ def test_alembic_options_escape_percent_signs():
             value = line.split(",", 1)[1]
             assert "%(" not in value.replace("%%(", ""), f"unescaped % in: {line.strip()}"
     assert '"file_template", "%%(rev)s_%%(slug)s"' in source
+
+
+REWRITE = ROOT / "ops" / "ci" / "baseline_rewrite.sed"
+
+
+@pytest.mark.skipif(shutil.which("sed") is None, reason="needs sed")
+def test_partial_index_predicates_are_written_back_in_their_original_form():
+    dumped = (
+        "CREATE UNIQUE INDEX uq_a ON public.t USING btree (driver_id) WHERE ((status)::text = ANY ((ARRAY['active'::character varying, "
+        "'pending_receipt'::character varying, 'pending_return'::character varying])::text[]));\n"
+        "CREATE INDEX plain ON public.t USING btree (status) WHERE (resolved_at IS NULL);\n"
+        "ALTER TABLE ONLY public.t ADD CONSTRAINT c CHECK (((kind)::text = ANY ((ARRAY['a'::character varying, 'b'::character varying])::text[])));\n"
+    )
+    out = subprocess.run(["sed", "-E", "-f", str(REWRITE)], input=dumped, capture_output=True, text=True, check=True).stdout.splitlines()
+    assert out[0] == "CREATE UNIQUE INDEX uq_a ON public.t USING btree (driver_id) WHERE (status IN ('active', 'pending_receipt', 'pending_return'));"
+    assert out[1] == "CREATE INDEX plain ON public.t USING btree (status) WHERE (resolved_at IS NULL);", "other lines are untouched"
+    assert "IN ('a', 'b')" in out[2] and "ARRAY" not in out[2]
+
+
+def test_schema_dump_script_uses_the_rewrite_and_strips_what_the_baseline_must_not_have():
+    script = (ROOT / "ops" / "ci" / "schema_dump.sh").read_text(encoding="utf-8")
+    assert "baseline_rewrite.sed" in script and REWRITE.is_file()
+    for needed in ("--schema-only", "--no-owner", "--no-privileges", "-n public", "-T public.alembic_version", "/^SET /d", "set_config", "'/^\\\\/d'"):
+        assert needed in script, f"schema_dump.sh lost '{needed}'"
