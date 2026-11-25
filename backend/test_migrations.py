@@ -209,3 +209,13 @@ def test_scratch_schema_name_matches_the_literal_sql():
     assert f'text("CREATE SCHEMA {migrate.SCRATCH_SCHEMA}")' in source, "SQL text is not assembled from variables (test_security_guards)"
     assert re.fullmatch(r"[a-z_]+", migrate.SCRATCH_SCHEMA)
     assert migrate.SCRATCH_SCHEMA != "public"
+
+
+def test_alembic_options_escape_percent_signs():
+    # Alembic stores options in a ConfigParser: a bare "%(rev)s" raises InterpolationMissingOptionError (found by CI).
+    source = (APP / "migrate.py").read_text(encoding="utf-8")
+    for line in source.splitlines():
+        if "set_main_option" in line and "%" in line:
+            value = line.split(",", 1)[1]
+            assert "%(" not in value.replace("%%(", ""), f"unescaped % in: {line.strip()}"
+    assert '"file_template", "%%(rev)s_%%(slug)s"' in source

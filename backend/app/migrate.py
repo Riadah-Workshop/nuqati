@@ -34,7 +34,7 @@ def alembic_config():
 
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
-    cfg.set_main_option("file_template", "%(rev)s_%(slug)s")
+    cfg.set_main_option("file_template", "%%(rev)s_%%(slug)s")  # %% because Alembic keeps options in a ConfigParser
     return cfg
 
 
@@ -153,6 +153,7 @@ def new_revision(message: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)  # one "setup plugin" line per plugin is noise
     action = argv[0] if argv else "upgrade"
     if action == "new":
         if len(argv) != 2 or not argv[1].strip():
