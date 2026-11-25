@@ -6,7 +6,6 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from .db import SessionLocal
-from .hardware import ensure_tables
 from . import heartbeat
 
 log=logging.getLogger('nuqati.teltonika')
@@ -153,7 +152,6 @@ async def main():
     bind_host=os.environ.get('TELTONIKA_BIND_HOST','127.0.0.1')
     if bind_host not in ('127.0.0.1','::1','localhost') and not os.environ.get('TELTONIKA_ALLOWED_CIDRS','').strip():
         raise RuntimeError('Public Teltonika TCP receiver requires TELTONIKA_ALLOWED_CIDRS or private VPN/APN')
-    ensure_tables()
     port=int(os.getenv('TELTONIKA_PORT','5027'))
     server=await asyncio.start_server(receive,'0.0.0.0',port,limit=MAX_FRAME+1024)
     if not os.environ.get('TELTONIKA_ALLOWED_CIDRS'):

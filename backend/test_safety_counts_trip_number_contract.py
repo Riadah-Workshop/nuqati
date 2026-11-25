@@ -37,8 +37,9 @@ class SafetyAndNumberingContract(unittest.TestCase):
         self.assertIn(".order_by(func.abs(func.extract('epoch',DriverLocation.recorded_at-captured))", self.backend)
 
     def test_backend_owns_driver_scoped_number(self):
-        self.assertIn('UNIQUE (company_id, driver_id, trip_number)', self.backend)
-        self.assertIn('ROW_NUMBER() OVER (PARTITION BY company_id, driver_id ORDER BY id)', self.backend)
+        baseline=(ROOT/'backend/app/migrations/versions/0001_baseline.sql').read_text()  # the schema lives in Alembic revisions
+        self.assertIn('UNIQUE (company_id, driver_id, trip_number)', baseline)
+        self.assertIn('trip_number integer NOT NULL', baseline)
         self.assertIn('db.scalar(select(Driver).where(Driver.id==d.id).with_for_update())', self.backend)
         self.assertIn('trip_number=trip_number_for(db,trip)', self.backend)
         self.assertIn("'next_trip_number':int(last_number)+1", self.backend)

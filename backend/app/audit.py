@@ -16,20 +16,6 @@ from .db import engine
 
 log = logging.getLogger(__name__)
 
-with engine.begin() as _audit_conn:
-    _audit_conn.execute(text("""CREATE TABLE IF NOT EXISTS security_audit (
-        id BIGSERIAL PRIMARY KEY,
-        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        actor_user_id INTEGER, actor_email VARCHAR(255), actor_role VARCHAR(24),
-        company_id INTEGER,
-        action VARCHAR(64) NOT NULL, outcome VARCHAR(12) NOT NULL DEFAULT 'ok',
-        target_type VARCHAR(32), target_id VARCHAR(64),
-        ip VARCHAR(64), detail TEXT
-    )"""))
-    _audit_conn.execute(text("CREATE INDEX IF NOT EXISTS idx_security_audit_time ON security_audit(created_at DESC)"))
-    _audit_conn.execute(text("CREATE INDEX IF NOT EXISTS idx_security_audit_company ON security_audit(company_id, created_at DESC)"))
-    _audit_conn.execute(text("CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON security_audit(actor_user_id, created_at DESC)"))
-
 _FORBIDDEN_SUBSTRINGS = ('password', 'token', 'secret', 'authorization', 'latitude', 'longitude', 'photo', 'logo_data')
 _FORBIDDEN_EXACT = ('lat', 'lng', 'lon')
 _MAX_DETAIL_CHARS = 1000

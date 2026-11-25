@@ -38,8 +38,11 @@ ready() {
   done
   return 1
 }
-# start_api <container> <database> <NUQATI_RUN_MIGRATIONS value>  -> starts the API image the way compose does (default CMD)
+# start_api <container> <database> [NUQATI_RUN_MIGRATIONS value]  -> starts the API image the way compose does (default CMD).
+# Without a value the variable is not set at all, which is the default of the image (migrations on).
 start_api() {
+  local flag=()
+  [ -n "${3:-}" ] && flag=(-e "NUQATI_RUN_MIGRATIONS=$3")
   docker run -d --name "$1" --network "$NET" -e "DATABASE_URL=postgresql+psycopg2://ci:ci-only@$MDB:5432/$2" \
-    -e "NUQATI_AUTH_SECRET=$SECRET" -e "NUQATI_RUN_MIGRATIONS=$3" nuqati-api:ci
+    -e "NUQATI_AUTH_SECRET=$SECRET" "${flag[@]}" nuqati-api:ci
 }

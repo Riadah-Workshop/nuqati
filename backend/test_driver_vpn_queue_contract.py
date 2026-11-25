@@ -35,8 +35,9 @@ def test_phone_queue_counts_optional_for_old_driver_apps():
 
 def test_last_reported_queue_stored_server_side_without_location():
     text=read_backend_source()
+    baseline=(ROOT/'backend/app/migrations/versions/0001_baseline.sql').read_text()
     for col in ('queued_gps_points','queued_safety_events','queued_trips'):
-        assert f"ADD COLUMN IF NOT EXISTS {{_queue_column}}" in text
+        assert f"{col} integer" in baseline  # the column exists in the schema (Alembic baseline), nullable
         assert f'{col}=EXCLUDED.{col}' in text
         assert col in text[text.index("@app.get('/api/v1/tracking-heartbeats')"):text.index("# Driver alert preferences:")]
     ui=(ROOT/'web/src/App.tsx').read_text()

@@ -7,7 +7,7 @@ How to tell that Nuqati is healthy, what to check and when, and what to do when 
 | Service (`compose.yml`) | What it does | Restarted if it crashes | Has a healthcheck |
 |---|---|---|---|
 | `web` | Serves the dashboard, forwards `/api/*` to the API | yes | no |
-| `api` | The application. With `NUQATI_RUN_MIGRATIONS=1` it applies pending database migrations before it starts and refuses to start if one fails; otherwise it creates missing tables at start | yes | **yes**: `GET /api/v1/ready` (needs the database) |
+| `api` | The application. It applies pending database migrations before it starts and refuses to start if one fails (`NUQATI_RUN_MIGRATIONS=0` skips this) | yes | **yes**: `GET /api/v1/ready` (needs the database) |
 | `db` | PostgreSQL 16 | yes | **yes**: `pg_isready` |
 | `db_backup` | One database dump a day into the `nuqati_backups` volume | yes | **yes**: red when the last good dump is older than 26 hours |
 | `teltonika` | Receives positions from tracker hardware (port 5027) | yes | **yes**: its event loop writes a heartbeat every 15 s; unhealthy after 90 s without one |
@@ -68,8 +68,8 @@ Plan for the disk to hold the database **plus room for about 15 dumps** (14 days
 | Sign-in fails for everyone, `/api/v1/ready` answers `503` | `docker ps`, `docker logs <db-container>` | Database stopped or out of disk. Free disk space, start `db`. Do not delete the database volume |
 | `/api/v1/ready` is `200` but the app misbehaves | `docker logs <api-container> --tail 200` | An error in the API; copy the last lines to the developer |
 | Coolify says "api unhealthy" after a deployment | Deployment log, then `docker logs <api-container>` | A missing file or bad import in the new version (this happened once, in the Phase 1 incident): redeploy the previous commit |
-| `api` keeps restarting and the log says `NOT adopting this database` | `docker logs <api-container> --tail 30` | The database lacks tables or columns the baseline has (listed in the log). Set `NUQATI_RUN_MIGRATIONS=0`, redeploy (the application adds what is missing), then set it to `1` again |
-| `api` keeps restarting and the log shows a Python or SQL error after `Running upgrade` | `docker logs <api-container> --tail 60` | A migration failed and was rolled back completely, the database is as before. Set `NUQATI_RUN_MIGRATIONS=0` to run the previous behaviour, or redeploy the previous commit, and send the log to the developer |
+| `api` keeps restarting and the log says `NOT adopting this database` | `docker logs <api-container> --tail 30` | The database lacks tables or columns the baseline has (listed in the log); nothing was changed. Deploy the last version that still did this (commit `56c09fe`, the merge of Phase 3.3) once (it adds what is missing by itself), then deploy the current release again |
+| `api` keeps restarting and the log shows a Python or SQL error after `Running upgrade` | `docker logs <api-container> --tail 60` | A migration failed and was rolled back completely, the database is as before. Redeploy the previous commit and send the log to the developer |
 | `db_backup` unhealthy | `docker logs <db_backup-container> --tail 50` | `ERROR pg_dump failed`: the database is down or the password changed. Fix it, then `docker exec <db_backup-container> /usr/local/bin/backup.sh once` |
 | Vehicles with trackers all offline | Is `teltonika` unhealthy in Coolify? `docker logs <teltonika-container>` | Unhealthy: the receiver is stuck, restart it. Healthy but silent: firewall, `TELTONIKA_ALLOWED_CIDRS`, SIM or APN problem |
 | Scheduled reports missing | Is `report_scheduler` unhealthy? `docker logs <report_scheduler-container>` | Unhealthy: stuck worker, restart it. Healthy: mail server settings (`last_error` of the report subscription) |
@@ -82,4 +82,4 @@ If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.
 - The worker checks show that a worker is alive, not that data is flowing. An alert for "no position from any tracker for N hours" would need a rule that knows what normal looks like for your fleet.
 - No metrics, dashboards or automatic alerts from inside the system. The uptime monitor and Coolify notifications above are the alarms.
 - Off-server backup copies are manual ([BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md) 2b).
-- Database migrations (Alembic) are in place but **off until you turn them on**: see "Turning migrations on" in [DEPLOY_COOLIFY.md](DEPLOY_COOLIFY.md). Until then the application still creates its own tables at start.
+- Database migrations (Alembic) run automatically before the API starts; there is no downgrade (undo a change with a new revision or restore a backup). The workers (`teltonika`, `report_scheduler`) do not wait for the API: on a brand-new install they log errors for the few seconds until the API has migrated, then work (the scheduler retries every 30 s, trackers resend).

@@ -100,7 +100,7 @@ def test_api_docs_are_off_unless_explicitly_enabled():
 REVIEWED_SQL_INTERPOLATIONS = {
     "features/assistance.py": {"where"},
     "features/maintenance.py": {"where"},
-    "features/mobile_audit.py": {"_queue_column", "clause", "where"},
+    "features/mobile_audit.py": {"clause", "where"},
     "features/security_audit_log.py": {"where"},
     "features/trips.py": {"table"},
 }

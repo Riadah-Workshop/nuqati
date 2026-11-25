@@ -37,7 +37,7 @@ services:
       NUQATI_SMTP_PORT: ${NUQATI_SMTP_PORT:-587}
       NUQATI_SMTP_USER: ${NUQATI_SMTP_USER:-}
       NUQATI_SMTP_PASSWORD: ${NUQATI_SMTP_PASSWORD:-}
-      NUQATI_RUN_MIGRATIONS: ${NUQATI_RUN_MIGRATIONS:-0}
+      NUQATI_RUN_MIGRATIONS: ${NUQATI_RUN_MIGRATIONS:-1}
     depends_on:
       db:
         condition: service_healthy

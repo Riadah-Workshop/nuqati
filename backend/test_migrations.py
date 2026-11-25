@@ -4,9 +4,8 @@ The checks that need PostgreSQL (the baseline builds the same schema as the appl
 existing database is adopted without changes, a database that lacks something is refused, the container starts with
 migrations on) run in CI, job "Migrations" in .github/workflows/ci.yml.
 """
+import hashlib
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,28 +13,10 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "backend" / "app"
 VERSIONS = APP / "migrations" / "versions"
+BASELINE_SHA256 = "8004be26f60cc77fdbd69a3b074f33c04a725d64d560594ee80b810d86f233c7"
 
-# SQL that the application still runs by itself while it starts (CREATE TABLE / CREATE INDEX / ALTER TABLE /
-# create_all), counted per module. This code stays for one release as a fallback and must not grow: every new table,
-# column or index is an Alembic revision from now on (python -m app.migrate new "what changes").
-LEGACY_DDL = {
-    "api_app.py": 2,
-    "audit.py": 4,
-    "auth_limits.py": 1,
-    "bootstrap_admin.py": 1,
-    "connectivity_alerts.py": 3,
-    "features/admin_records.py": 1,
-    "features/assistance.py": 1,
-    "features/auth_accounts.py": 3,
-    "features/diagnostics.py": 2,
-    "features/invitations.py": 1,
-    "features/maintenance.py": 1,
-    "features/mobile_audit.py": 9,
-    "features/trips.py": 7,
-    "hardware.py": 3,
-    "report_subscriptions.py": 1,
-    "vehicle_handover.py": 1,
-}
+# Since Phase 3.4 the application does not create or change tables by itself: every table, column and index is an
+# Alembic revision (python -m app.migrate new "what changes"; docs/DEVELOPMENT.md section 6).
 DDL = re.compile(r"\bCREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX)\b|\bALTER\s+TABLE\b|\bcreate_all\(", re.I)
 
 
@@ -54,26 +35,32 @@ def read_revision(path):
     return found
 
 
-def test_application_ddl_does_not_grow_after_the_baseline():
-    seen = {}
+def test_application_code_does_not_create_or_change_tables():
+    found = []
     for path in sorted(APP.rglob("*.py")):
         relative = path.relative_to(APP).as_posix()
         if relative.startswith("migrations/") or relative == "migrate.py":
             continue
-        count = len(DDL.findall(path.read_text(encoding="utf-8")))
-        if count:
-            seen[relative] = count
-    for relative, count in seen.items():
-        allowed = LEGACY_DDL.get(relative, 0)
-        assert count <= allowed, (
-            f"backend/app/{relative} now has {count} schema statements (allowed {allowed}). "
-            "New tables, columns and indexes are Alembic revisions: python -m app.migrate new \"what changes\" "
-            "(docs/DEVELOPMENT.md section 6)")
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if DDL.search(line):
+                found.append(f"backend/app/{relative}:{number}: {line.strip()[:90]}")
+    assert not found, (
+        "Schema statements in application code. New tables, columns and indexes are Alembic revisions: "
+        "python -m app.migrate new \"what changes\" (docs/DEVELOPMENT.md section 6).\n" + "\n".join(found))
 
 
-def test_legacy_ddl_table_lists_only_modules_that_still_exist():
-    for relative in LEGACY_DDL:
-        assert (APP / relative).is_file(), f"LEGACY_DDL names backend/app/{relative}, which no longer exists: remove it"
+def test_released_revisions_are_never_edited():
+    # An edited baseline would no longer match the databases that were adopted at revision 0001.
+    digest = hashlib.sha256((VERSIONS / "0001_baseline.sql").read_bytes()).hexdigest()
+    assert digest == BASELINE_SHA256, (
+        "0001_baseline.sql changed. Never edit a released revision: add a new one (python -m app.migrate new ...).")
+
+
+def test_integration_tests_build_their_schema_with_migrations():
+    for name in ("test_auth_runtime_postgres.py", "test_security_audit_postgres.py"):
+        text = (ROOT / "backend" / name).read_text(encoding="utf-8")
+        assert "migrate.main(['upgrade']) == 0" in text, f"{name} must run the migrations before importing the application"
+        assert text.index("migrate.main") < text.index("from app.main import app"), f"{name}: migrate before importing app.main"
 
 
 def test_revisions_form_one_unbroken_chain_starting_at_the_baseline():
@@ -106,7 +93,7 @@ def test_baseline_sql_is_a_reduced_schema_dump():
     for statement in ("SET", "COPY", "GRANT", "REVOKE", "COMMENT ON", "INSERT INTO", "CREATE SCHEMA", "CREATE EXTENSION"):
         assert not re.search(rf"^\s*{re.escape(statement)}(\s|$)", sql, re.M), f"0001_baseline.sql must not contain a '{statement}' statement"
     assert not re.search(r"^\s*--", sql, re.M), "0001_baseline.sql must not contain comments"
-    assert "ANY ((ARRAY[" not in sql, "pg_dump's form of IN (...) on varchar does not round-trip: see ops/ci/baseline_rewrite.sed"
+    assert "ANY ((ARRAY[" not in sql, "pg_dump's form of IN (...) on varchar does not round-trip: write the predicate as IN (...) (see uq_handover_open_*)"
     assert not re.search(r"^\s*\\", sql, re.M), "0001_baseline.sql must not contain psql meta-commands (pg_dump 16.x adds \\restrict lines)"
     # migrate.py rebuilds the baseline in a scratch schema by replacing "public." everywhere: nothing may be unqualified.
     names = re.findall(r"^(?:CREATE (?:UNLOGGED )?(?:TABLE|SEQUENCE|VIEW)|ALTER (?:TABLE|SEQUENCE)(?: ONLY)?)\s+(\S+)", sql, re.M)
@@ -143,16 +130,16 @@ def test_alembic_is_a_runtime_requirement():
     assert re.search(r"^alembic>=1\.\d+,<2\s*$", (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8"), re.M)
 
 
-def test_container_runs_migrations_only_when_asked_and_stops_on_failure():
+def test_container_migrates_by_default_and_stops_on_failure():
     dockerfile = (ROOT / "backend" / "Dockerfile").read_text(encoding="utf-8")
     cmd = re.search(r"^CMD\s+(.+)$", dockerfile, re.M).group(1)
-    assert "NUQATI_RUN_MIGRATIONS:-0" in cmd, "migrations must be off unless NUQATI_RUN_MIGRATIONS=1"
+    assert "NUQATI_RUN_MIGRATIONS:-1" in cmd, "migrations are on unless NUQATI_RUN_MIGRATIONS=0 (the application no longer creates tables)"
     assert "python -m app.migrate || exit 1" in cmd, "a failed migration must stop the container"
     assert cmd.index("python -m app.migrate") < cmd.index("exec uvicorn"), "migrate before the API starts"
     assert "exec uvicorn app.main:app --host 0.0.0.0 --port 8000" in cmd, "exec keeps uvicorn as PID 1 so it receives the stop signal"
     compose = (ROOT / "compose.yml").read_text(encoding="utf-8")
     api = compose.split("\n  api:", 1)[1].split("\n  teltonika", 1)[0]
-    assert "NUQATI_RUN_MIGRATIONS: ${NUQATI_RUN_MIGRATIONS:-0}" in api
+    assert "NUQATI_RUN_MIGRATIONS: ${NUQATI_RUN_MIGRATIONS:-1}" in api
     assert "NUQATI_RUN_MIGRATIONS" in (ROOT / ".env.example").read_text(encoding="utf-8")
 
 
@@ -222,27 +209,3 @@ def test_alembic_options_escape_percent_signs():
             value = line.split(",", 1)[1]
             assert "%(" not in value.replace("%%(", ""), f"unescaped % in: {line.strip()}"
     assert '"file_template", "%%(rev)s_%%(slug)s"' in source
-
-
-REWRITE = ROOT / "ops" / "ci" / "baseline_rewrite.sed"
-
-
-@pytest.mark.skipif(shutil.which("sed") is None, reason="needs sed")
-def test_partial_index_predicates_are_written_back_in_their_original_form():
-    dumped = (
-        "CREATE UNIQUE INDEX uq_a ON public.t USING btree (driver_id) WHERE ((status)::text = ANY ((ARRAY['active'::character varying, "
-        "'pending_receipt'::character varying, 'pending_return'::character varying])::text[]));\n"
-        "CREATE INDEX plain ON public.t USING btree (status) WHERE (resolved_at IS NULL);\n"
-        "ALTER TABLE ONLY public.t ADD CONSTRAINT c CHECK (((kind)::text = ANY ((ARRAY['a'::character varying, 'b'::character varying])::text[])));\n"
-    )
-    out = subprocess.run(["sed", "-E", "-f", str(REWRITE)], input=dumped, capture_output=True, text=True, check=True).stdout.splitlines()
-    assert out[0] == "CREATE UNIQUE INDEX uq_a ON public.t USING btree (driver_id) WHERE (status IN ('active', 'pending_receipt', 'pending_return'));"
-    assert out[1] == "CREATE INDEX plain ON public.t USING btree (status) WHERE (resolved_at IS NULL);", "other lines are untouched"
-    assert "IN ('a', 'b')" in out[2] and "ARRAY" not in out[2]
-
-
-def test_schema_dump_script_uses_the_rewrite_and_strips_what_the_baseline_must_not_have():
-    script = (ROOT / "ops" / "ci" / "schema_dump.sh").read_text(encoding="utf-8")
-    assert "baseline_rewrite.sed" in script and REWRITE.is_file()
-    for needed in ("--schema-only", "--no-owner", "--no-privileges", "-n public", "-T public.alembic_version", "/^SET /d", "set_config", "'/^\\\\/d'"):
-        assert needed in script, f"schema_dump.sh lost '{needed}'"

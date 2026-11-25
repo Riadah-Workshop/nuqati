@@ -20,7 +20,6 @@ from ..db import Base, engine, get_db
 from ..models import AccountInvitation, Company, User
 
 # Phase 5: Additive tables only. Existing user/company/fleet tables are untouched.
-Base.metadata.create_all(bind=engine)
 
 class InvitationIn(BaseModel):
     email: str

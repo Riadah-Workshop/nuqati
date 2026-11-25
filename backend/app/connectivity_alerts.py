@@ -28,21 +28,8 @@ POLL_SECONDS = 60
 OFFLINE_SECONDS = 15 * 60
 EMAIL_RETRY_SECONDS = 5 * 60
 
-# Each open incident is unique per driver, even if the worker runs in two pods.
-SETUP_SQL = (
-    """CREATE TABLE IF NOT EXISTS driver_connection_alerts (
-      id BIGSERIAL PRIMARY KEY,
-      driver_id INTEGER NOT NULL,
-      company_id INTEGER NOT NULL,
-      last_contact_at TIMESTAMP WITH TIME ZONE NOT NULL,
-      detected_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      resolved_at TIMESTAMP WITH TIME ZONE,
-      email_sent_at TIMESTAMP WITH TIME ZONE,
-      email_last_attempt_at TIMESTAMP WITH TIME ZONE
-    )""",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_driver_connection_open_alert ON driver_connection_alerts(driver_id) WHERE resolved_at IS NULL",
-    "CREATE INDEX IF NOT EXISTS ix_driver_connection_alert_company ON driver_connection_alerts(company_id,detected_at DESC)",
-)
+# The table driver_connection_alerts and its indexes are created by an Alembic revision. A unique partial index there
+# keeps each open incident unique per driver, even if the worker runs in two pods.
 
 # A driver's last confirmed backend contact is their latest authenticated heartbeat
 # or successful device login, whichever happened more recently. Do not produce
@@ -178,9 +165,6 @@ _monitor_thread = None
 
 def install_connection_monitor(app) -> None:
     global _monitor_thread
-    with engine.begin() as db:
-        for statement in SETUP_SQL:
-            db.execute(text(statement))
 
     def poll_forever():
         # First scan on boot; then every 60 seconds. The DB survives restarts.

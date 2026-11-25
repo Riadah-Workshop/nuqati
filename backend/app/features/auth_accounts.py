@@ -72,15 +72,6 @@ def normalize_phone(value:str)->str:
 
 # Dashboard account recovery and self-service profile changes.
 # All tokens are random, single-use and stored as SHA-256 digests only.
-with engine.begin() as _account_conn:
-    _account_conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0"))
-    _account_conn.execute(text("""CREATE TABLE IF NOT EXISTS dashboard_account_tokens (
-        id BIGSERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        purpose VARCHAR(24) NOT NULL, token_hash VARCHAR(64) NOT NULL UNIQUE,
-        new_email VARCHAR(255), expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        used_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )"""))
-    _account_conn.execute(text("CREATE INDEX IF NOT EXISTS idx_dashboard_account_tokens_user ON dashboard_account_tokens(user_id, purpose, created_at)"))
 
 def _dashboard_account(u:User):
     if u.role=='driver' or u.email.endswith('@login.nuqati.invalid'):

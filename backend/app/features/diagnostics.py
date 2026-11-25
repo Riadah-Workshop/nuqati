@@ -15,16 +15,6 @@ from ..models import User, Vehicle
 from .shared import own_driver
 
 # Location-free mobile diagnostic telemetry; authenticated and company scoped.
-with engine.begin() as _diag_conn:
-    _diag_conn.execute(text("""CREATE TABLE IF NOT EXISTS mobile_diagnostics (
-      event_id VARCHAR(64) PRIMARY KEY, company_id INTEGER NOT NULL,
-      driver_id INTEGER NOT NULL, vehicle_id INTEGER,
-      occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
-      received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      severity VARCHAR(12) NOT NULL, category VARCHAR(24) NOT NULL,
-      code VARCHAR(100) NOT NULL, detail VARCHAR(450) NOT NULL
-    )"""))
-    _diag_conn.execute(text('CREATE INDEX IF NOT EXISTS idx_mobile_diagnostics_company_time ON mobile_diagnostics(company_id,received_at DESC)'))
 
 class MobileDiagnostic(BaseModel):
     event_id: str = Field(min_length=12,max_length=64,pattern=r'^[a-f0-9]{64}$')

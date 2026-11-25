@@ -95,7 +95,6 @@ company_delete_audit = Table('company_delete_audit', _delete_audit_metadata,
     Column('backup_reference', String(255), nullable=False),
     Column('deleted_counts', JSON, nullable=False),
     Column('deleted_at', DateTime(timezone=True), nullable=False))
-_delete_audit_metadata.create_all(bind=engine)
 
 COMPANY_DELETE_MODELS = (AccountInvitation, DriverAccount, DrivingEvent, DriverLocation,
                          Trip, OdometerReading, MaintenanceSchedule, CompanyDrivingSettings,
