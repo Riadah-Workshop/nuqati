@@ -1,0 +1,16 @@
+# gitleaks configuration (used by .github/workflows/security.yml).
+# Keeps the built-in rules and silences only two known false positives found in the first scan:
+#   1. Flutter secure-storage KEY NAMES (_secureStore.read(key:'...') / .write(key:'...')), which are labels, not secrets.
+#   2. The SECRET_A / SECRET_B / SECRET_C constants in the unit test for the secret-rotation window.
+# Anything else still fails the (advisory) scan.
+title = "Nuqati gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Secure-storage key names and test-only constants"
+condition = "OR"
+regexTarget = "line"
+regexes = ['''_secureStore\.(read|write)\(key:''']
+paths = ['''backend/test_security_units\.py''']
