@@ -120,20 +120,29 @@ def install_report_subscriptions(app):
           VALUES (:company_id,:created_by,:recipient,:kind,:frequency,:scope_type,:selected_ids,:site_name,:weekday,:month_day,:anchor_month,:send_hour,:send_minute,:timezone,:next_send_at) RETURNING id'''),{
             **p,'created_by':user.id,'selected_ids':json.dumps(p['selected_ids']),'next_send_at':next_time(p)
           }).scalar_one()
+        from .audit import audit
+        audit(db,'report_subscription.create',actor=user,target_type='report_subscription',target_id=row,company_id=p['company_id'],
+              detail={'kind':p['kind'],'frequency':p['frequency'],'scope_type':p['scope_type'],'recipient_domain':p['recipient'].split('@')[-1]})
         db.commit();return {'id':row,'next_send_at':next_time(p).isoformat()}
     @app.patch('/api/v1/fleet/report-subscriptions/{sid}')
     def toggle_report(sid:int,enabled:bool,db:Session=Depends(get_db),user:User=Depends(current_user)):
         allow(user,'super_admin','company_admin','fleet_manager')
         r=db.execute(text('SELECT company_id FROM report_email_subscriptions WHERE id=:id'),{'id':sid}).first()
         if not r or (user.role!='super_admin' and r[0]!=user.company_id):raise HTTPException(404,'Subscription not found')
-        db.execute(text('UPDATE report_email_subscriptions SET enabled=:enabled WHERE id=:id'),{'id':sid,'enabled':enabled});db.commit()
+        db.execute(text('UPDATE report_email_subscriptions SET enabled=:enabled WHERE id=:id'),{'id':sid,'enabled':enabled})
+        from .audit import audit
+        audit(db,'report_subscription.toggle',actor=user,target_type='report_subscription',target_id=sid,company_id=r[0],detail={'enabled':enabled})
+        db.commit()
         return {'updated':True}
     @app.delete('/api/v1/fleet/report-subscriptions/{sid}')
     def delete_report(sid:int,db:Session=Depends(get_db),user:User=Depends(current_user)):
         allow(user,'super_admin','company_admin','fleet_manager')
         r=db.execute(text('SELECT company_id FROM report_email_subscriptions WHERE id=:id'),{'id':sid}).first()
         if not r or (user.role!='super_admin' and r[0]!=user.company_id):raise HTTPException(404,'Subscription not found')
-        db.execute(text('DELETE FROM report_email_subscriptions WHERE id=:id'),{'id':sid});db.commit()
+        db.execute(text('DELETE FROM report_email_subscriptions WHERE id=:id'),{'id':sid})
+        from .audit import audit
+        audit(db,'report_subscription.delete',actor=user,target_type='report_subscription',target_id=sid,company_id=r[0])
+        db.commit()
         return {'deleted':True}
 
 

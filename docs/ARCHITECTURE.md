@@ -28,10 +28,12 @@ imported.
 
 | Module | Contains |
 |---|---|
-| `api_app.py` | the `app` object, CORS, base tables and vehicle schema DDL; everything else imports `app` from here |
+| `api_app.py` | the `app` object, CORS, base tables and vehicle schema DDL; everything else imports `app` from here. API docs (`/docs`, `/redoc`, `/openapi.json`) are off unless `NUQATI_ENABLE_API_DOCS` is set |
+| `audit.py` | the security audit trail: creates the `security_audit` table at import and offers `audit()` / `audit_commit()`; feature modules import it, it never imports them |
+| `features/security_audit_log.py` | `GET /api/v1/security-audit`: reads the audit trail (super admin: all companies; company admin: own company) |
 | `features/mobile_audit.py` | driver-app evidence and audit trails: privacy requests, lifecycle, heartbeats, notifications |
 | `features/health.py` | `/health` (liveness) and `/ready` (checks the database) |
-| `features/auth_accounts.py` | login, password reset, e-mail change, driver login |
+| `features/auth_accounts.py` | login, logout, password reset, e-mail change, driver login |
 | `features/directory.py` | create and list users, companies, drivers, vehicles, odometer readings |
 | `features/maintenance.py` | maintenance schedules, vehicle care, tyre schedules, smart-oil estimate |
 | `features/admin_records.py` | edit and delete records; company logo on edit |
@@ -104,7 +106,19 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
 - **Brute-force protection:** database-backed rate limits on login, reset and email-change
   endpoints (`auth_limits.py`); identifiers are stored only as HMAC digests.
 - **Secrets:** `NUQATI_AUTH_SECRET` (at least 32 characters) signs every token. Changing it
-  signs everyone out.
+  signs everyone out, unless the old value is put in `NUQATI_AUTH_SECRET_PREVIOUS` for the
+  rotation window: that value is accepted for verifying only, never for signing
+  (`auth.signature_valid`). Runbook: `docs/compliance/SECRET_ROTATION.md`.
+- **Logout:** `POST /api/v1/auth/logout` raises the user's `auth_version`, so every token the
+  user holds, in every browser, stops working. The web app's **Log out** button calls it
+  (best effort) after clearing its own session.
+- **Audit trail:** `audit.py` writes one row per security-relevant event to `security_audit`:
+  sign-in successes and failures, password and e-mail changes, user, driver, vehicle and company
+  changes, device releases, invitations, live-share links, settings, report exports and scheduled
+  reports. Rows hold the actor, company, target, outcome, client IP (authentication events only)
+  and a small `detail` object; passwords, tokens and coordinates are filtered out. The insert runs
+  in a connection-level savepoint and never raises, so a failure to audit cannot fail a request.
+  `test_security_guards.py` lists which handlers must audit.
 
 ## 4. Data model
 
@@ -117,7 +131,8 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   audit, lifecycle, notification, tracking heartbeat, safety observations, admin trip actions),
   trip numbering and client-ID / sample / event receipts, driver service history, dashboard
   account tokens, workshop assistance requests, mobile diagnostics, telematics devices and
-  points, report email subscriptions, and the auth rate-limit table (`auth_limits.py`).
+  points, report email subscriptions, the security audit trail (`audit.py`) and the auth
+  rate-limit table (`auth_limits.py`).
   `vehicle_handover.py` defines its own ORM tables, including photos stored as binary rows.
 - **No migration tool.** The schema is "whatever the code creates at startup". The SQL uses
   PostgreSQL features (`BIGSERIAL`, `ON CONFLICT`, `ADD COLUMN IF NOT EXISTS`), so SQLite works
@@ -160,7 +175,8 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   public endpoint returns a position only if the trip is active, the fix is under 120 s old with
   accuracy of 100 m or better, and Privacy Mode is off.
 - **Retention:** the privacy policy and `docs/PRIVACY_SECURITY.md` talk about retention, but no
-  automatic deletion job exists yet (see section 9).
+  automatic deletion job exists yet (see section 9). A proposed schedule is in
+  `docs/compliance/RETENTION_SCHEDULE.md`; the data inventory is `docs/compliance/DATA_INVENTORY.md`.
 
 ## 8. External services
 
@@ -182,8 +198,8 @@ These are the reasons the roadmap continues after Phase 0; none is a regression.
    versioning or rollback.
 3. **One HTTP request per GPS sample**, each doing several policy lookups; one Uvicorn process.
 4. **Photos in PostgreSQL** (handover inspections): backup size and memory grow with usage.
-5. **Custom token format** without key rotation; dashboard token in `sessionStorage` while the
-   CSP still allows inline scripts.
+5. **Custom token format** (rotation works through a single previous-secret window); dashboard token
+   in `sessionStorage` while the CSP still allows inline scripts; no second factor for admin roles.
 6. **Tracker authentication is IMEI-only**; the network allow-list or a private APN / VPN is the
    real protection.
 7. **No automatic data-retention or deletion job** for GPS history.

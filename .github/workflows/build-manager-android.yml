@@ -49,6 +49,11 @@ jobs:
           p=Path('android/app/src/main/AndroidManifest.xml');s=p.read_text()
           if 'android.permission.POST_NOTIFICATIONS' not in s:
               s=s.replace('<application','<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <application',1)
+          # Backups would copy app data off the device; the session lives in secure storage and must not be backed up.
+          if 'android:allowBackup' not in s:
+              s=s.replace('<application', '<application android:allowBackup="false"',1)
+          else:
+              s=s.replace('android:allowBackup="true"', 'android:allowBackup="false"')
           p.write_text(s)
           for name in ('android/app/build.gradle.kts','android/app/build.gradle'):
               p=Path(name)

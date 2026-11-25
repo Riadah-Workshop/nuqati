@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit
 from ..auth import allow, current_user, scope
 from ..db import get_db
 from ..models import AppSetting, Company, DriverLocation, User, Vehicle
@@ -104,6 +105,7 @@ def put_phase4_settings(data:Phase4SettingsIn,company_id:int|None=None,db:Sessio
     key=f'phase4_settings:{cid}';row=db.get(AppSetting,key)
     if row: row.value=data.model_dump_json()
     else: db.add(AppSetting(key=key,value=data.model_dump_json()))
+    audit(db,'geofence.settings_update',actor=user,target_type='company',target_id=cid,company_id=cid)
     db.commit();return {'settings':phase4_settings(db,cid)}
 
 @app.post('/api/v1/fleet/phase4/zones')
@@ -120,6 +122,7 @@ def add_phase4_zone(data:GeoZoneIn,company_id:int|None=None,db:Session=Depends(g
     zones.append(zone);key=f'phase4_zones:{cid}';row=db.get(AppSetting,key)
     if row:row.value=json.dumps(zones)
     else:db.add(AppSetting(key=key,value=json.dumps(zones)))
+    audit(db,'geofence.zone_add',actor=user,target_type='geofence',target_id=zone['id'],company_id=cid,detail={'name':data.name})
     db.commit();return zone
 
 @app.put('/api/v1/fleet/phase4/zones/{zone_id}/vehicles')
@@ -136,6 +139,7 @@ def update_phase4_zone_vehicles(zone_id:str,data:ZoneVehiclesIn,company_id:int|N
     if zone is None:raise HTTPException(404,'Geofence not found')
     zone['vehicle_ids']=selected
     db.get(AppSetting,f'phase4_zones:{cid}').value=json.dumps(zones)
+    audit(db,'geofence.zone_vehicles_update',actor=user,target_type='geofence',target_id=zone_id,company_id=cid)
     db.commit()
     return zone
 
@@ -146,6 +150,7 @@ def delete_phase4_zone(zone_id:str,company_id:int|None=None,db:Session=Depends(g
     remaining=[z for z in zones if z['id']!=zone_id]
     if len(remaining)==len(zones):raise HTTPException(404,'Geofence not found')
     db.get(AppSetting,f'phase4_zones:{cid}').value=json.dumps(remaining)
+    audit(db,'geofence.zone_delete',actor=user,target_type='geofence',target_id=zone_id,company_id=cid)
     db.commit();return {'deleted':True}
 
 def _distance_m(lat1,lon1,lat2,lon2):

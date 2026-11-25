@@ -21,6 +21,23 @@ def secret():
     s = os.environ.get('NUQATI_AUTH_SECRET', '')
     if len(s) < 32: raise RuntimeError('NUQATI_AUTH_SECRET must be at least 32 characters')
     return s.encode()
+def previous_secret():
+    """Optional old signing secret, accepted for verification only (never for signing).
+
+    Rotation: set NUQATI_AUTH_SECRET_PREVIOUS to the old value, then put the new value in NUQATI_AUTH_SECRET.
+    Sessions signed with the old secret keep working until they expire; remove the variable afterwards.
+    """
+    s = os.environ.get('NUQATI_AUTH_SECRET_PREVIOUS', '')
+    if not s: return None
+    if len(s) < 32: raise RuntimeError('NUQATI_AUTH_SECRET_PREVIOUS must be at least 32 characters when set')
+    return s.encode()
+def signature_valid(body: str, sig: str) -> bool:
+    expected = hmac.new(secret(), body.encode(), hashlib.sha256).hexdigest()
+    ok = hmac.compare_digest(expected, sig)
+    old = previous_secret()
+    if old is not None:
+        ok = hmac.compare_digest(hmac.new(old, body.encode(), hashlib.sha256).hexdigest(), sig) or ok
+    return ok
 def encode_token(user: User, *, refresh: bool=False, session_id: str | None=None) -> str:
     lifetime = 30*24*3600 if refresh else 8*3600
     if user.role=='driver' and not session_id: raise ValueError('Driver device session is required')
@@ -34,7 +51,7 @@ def current_user(creds: HTTPAuthorizationCredentials | None = Depends(security),
     if creds is None: raise HTTPException(401, 'Login required', headers={'WWW-Authenticate':'Bearer'})
     try:
         body,sig=creds.credentials.split('.')
-        if not hmac.compare_digest(hmac.new(secret(),body.encode(),hashlib.sha256).hexdigest(),sig): raise ValueError()
+        if not signature_valid(body,sig): raise ValueError()
         payload=json.loads(base64.urlsafe_b64decode(body+'='*(-len(body)%4)))
         if payload['exp'] < time.time() or payload.get('typ','access')!='access': raise ValueError()
         user=db.get(User, int(payload['sub']))
@@ -55,7 +72,7 @@ def refresh_driver_session(refresh_token: str, db: Session) -> tuple[User, str]:
     # Refresh credentials are never accepted as API access tokens.
     try:
         body, sig = refresh_token.split('.')
-        if not hmac.compare_digest(hmac.new(secret(), body.encode(), hashlib.sha256).hexdigest(), sig): raise ValueError()
+        if not signature_valid(body, sig): raise ValueError()
         payload = json.loads(base64.urlsafe_b64decode(body+'='*(-len(body)%4)))
         if payload.get('typ') != 'refresh' or payload['exp'] < time.time(): raise ValueError()
         user = db.get(User, int(payload['sub']))

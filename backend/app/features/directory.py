@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit, audit_commit
 from ..auth import allow, current_user, hash_password, scope
 from ..db import get_db
 from ..models import (
@@ -57,6 +58,7 @@ def add_user(payload:UserIn,db:Session=Depends(get_db),user:User=Depends(current
     try: db.commit()
     except IntegrityError: db.rollback();raise HTTPException(409,'Email already exists')
     db.refresh(row)
+    audit_commit(db,'user.create',actor=user,target_type='user',target_id=row.id,company_id=row.company_id,detail={'role':row.role})
     return user_view(row)
 
 @app.patch('/api/v1/users/{user_id}/deactivate')
@@ -68,7 +70,9 @@ def deactivate_user(user_id:int,db:Session=Depends(get_db),user:User=Depends(cur
     if user.role!='super_admin':
         scope(user,target.company_id)
         if target.role in {'super_admin','company_admin','workshop_staff'}: raise HTTPException(403,'Cannot deactivate this role')
-    target.is_active=False;db.commit();return {'status':'deactivated'}
+    target.is_active=False
+    audit(db,'user.deactivate',actor=user,target_type='user',target_id=target.id,company_id=target.company_id,detail={'role':target.role})
+    db.commit();return {'status':'deactivated'}
 
 @app.get("/api/v1/dashboard")
 def dashboard(db: Session = Depends(get_db), user:User=Depends(current_user)):
@@ -85,7 +89,9 @@ def dashboard(db: Session = Depends(get_db), user:User=Depends(current_user)):
 def create_company(payload: CompanyCreate, db: Session = Depends(get_db), user:User=Depends(current_user)):
     allow(user,'super_admin')
     row = Company(name=payload.name.strip())
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row); db.commit()
+    audit_commit(db,'company.create',actor=user,target_type='company',target_id=row.id,company_id=row.id)
+    db.refresh(row)
     return row
 
 @app.get("/api/v1/companies", response_model=list[CompanyOut])
@@ -102,7 +108,9 @@ def create_driver(payload: DriverCreate, db: Session = Depends(get_db), user:Use
     if not db.get(Company, payload.company_id):
         raise HTTPException(404, "Company not found")
     row = Driver(**payload.model_dump())
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row); db.commit()
+    audit_commit(db,'driver.create',actor=user,target_type='driver',target_id=row.id,company_id=row.company_id)
+    db.refresh(row)
     return row
 
 # Single transaction: driver, login and vehicle assignment are created together.
@@ -142,6 +150,7 @@ def onboard_driver(data:DriverOnboarding, db:Session=Depends(get_db), user:User=
         if v is not None: v.assigned_driver_id=d.id
         # ID and site are recorded separately in the driver metadata table.
         db.add(DriverMetadata(driver_id=d.id,id_number=data.id_number.strip(),site_name=data.site_name.strip()))
+        audit(db,'driver.onboard',actor=user,target_type='driver',target_id=d.id,company_id=data.company_id,detail={'vehicle_id':v.id if v else None})
         db.commit()
     except IntegrityError: db.rollback();raise HTTPException(409,'Driver account could not be created; check existing assignments')
     return {'driver_id':d.id,'user_id':u.id,'vehicle_id':v.id if v else None,'phone':phone,'status':'ready'}
@@ -178,7 +187,9 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), user:U
         last_service_km=payload.odometer_km or 0, warning_before_km=1000))
     if payload.odometer_km is not None:
         db.add(OdometerReading(company_id=row.company_id, vehicle_id=row.id, reading_km=payload.odometer_km, source='MANUAL', note='Initial odometer at vehicle registration'))
-    db.commit(); db.refresh(row)
+    db.commit()
+    audit_commit(db,'vehicle.create',actor=user,target_type='vehicle',target_id=row.id,company_id=row.company_id)
+    db.refresh(row)
     return row
 
 @app.get("/api/v1/vehicles", response_model=list[VehicleOut])

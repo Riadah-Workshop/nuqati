@@ -67,6 +67,11 @@ jobs:
           for perm in ('android.permission.INTERNET', 'android.permission.POST_NOTIFICATIONS'):
               if perm not in s:
                   s = s.replace('<application', f'<uses-permission android:name="{perm}" />\n    <application', 1)
+          # Backups would copy app data off the device; the session lives in secure storage and must not be backed up.
+          if 'android:allowBackup' not in s:
+              s=s.replace('<application', '<application android:allowBackup="false"',1)
+          else:
+              s=s.replace('android:allowBackup="true"', 'android:allowBackup="false"')
           manifest.write_text(s)
 
           gradle = Path('android/app/build.gradle.kts')

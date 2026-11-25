@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit
 from ..auth import allow, current_user, hash_password, scope
 from ..db import get_db
 from ..models import AppSetting, Company, Driver, DriverAccount, Trip, User, Vehicle
@@ -30,7 +31,9 @@ def create_driver_account(data:DriverCredentials, db:Session=Depends(get_db), us
     u=User(email=data.email.strip().lower(),full_name=data.full_name,password_hash=hash_password(data.password),role='driver',company_id=d.company_id)
     db.add(u)
     try:
-        db.flush(); db.add(DriverAccount(driver_id=d.id,user_id=u.id)); db.commit()
+        db.flush(); db.add(DriverAccount(driver_id=d.id,user_id=u.id))
+        audit(db,'driver_account.create',actor=user,target_type='driver',target_id=d.id,company_id=d.company_id)
+        db.commit()
     except IntegrityError:
         db.rollback(); raise HTTPException(409,'Email already exists')
     return {'driver_id':d.id,'user_id':u.id,'email':u.email}
@@ -72,6 +75,7 @@ def link_existing_driver(driver_id:int, data:DriverLinkIn, db:Session=Depends(ge
         for old in previous: old.assigned_driver_id=None
         v.assigned_driver_id=d.id
     if not existing: db.add(DriverAccount(driver_id=d.id,user_id=u.id))
+    audit(db,'driver_account.link',actor=user,target_type='driver',target_id=d.id,company_id=d.company_id,detail={'vehicle_id':v.id if v else None})
     try: db.commit()
     except IntegrityError: db.rollback();raise HTTPException(409,'Driver or login already linked')
     return {'driver_id':d.id,'user_id':u.id,'vehicle_id':v.id if v else None,'status':'linked'}
@@ -127,6 +131,7 @@ def put_company_driver_logo(company_id: int, payload: CompanyDriverLogoIn,
         db.add(AppSetting(key=key, value=json.dumps({'logo_data': value})))
     else:
         record.value = json.dumps({'logo_data': value})
+    audit(db,'company.driver_logo_update',actor=user,target_type='company',target_id=company_id,company_id=company_id)
     db.commit()
     return {'company_id': company_id, 'status': 'saved', 'logo_data': value}
 

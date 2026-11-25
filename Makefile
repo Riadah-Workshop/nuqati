@@ -22,12 +22,12 @@ down: ## Stop the local stack (the database volume is kept)
 	docker compose -f docker-compose.yml down
 
 test: ## Backend unit/contract/layout tests (SQLite, no server needed)
-	$(UNIT_ENV) $(PY) -m pytest -q --ignore=backend/test_auth_runtime_postgres.py --ignore=backend/test_concept_reports.py backend
+	$(UNIT_ENV) $(PY) -m pytest -q --ignore=backend/test_auth_runtime_postgres.py --ignore=backend/test_security_audit_postgres.py --ignore=backend/test_concept_reports.py backend
 	$(UNIT_ENV) $(PY) -m unittest backend.test_concept_reports
 
 test-pg: ## API integration tests; needs NUQATI_TEST_DATABASE_URL (a DISPOSABLE db whose name contains "test")
 	@test -n "$$NUQATI_TEST_DATABASE_URL" || { echo "Set NUQATI_TEST_DATABASE_URL, e.g. postgresql+psycopg2://user:pass@localhost:5432/nuqati_test"; exit 1; }
-	PYTHONPATH=backend NUQATI_AUTH_SECRET=$(SECRET) $(PY) -m pytest -q backend/test_auth_runtime_postgres.py
+	PYTHONPATH=backend NUQATI_AUTH_SECRET=$(SECRET) $(PY) -m pytest -q backend/test_auth_runtime_postgres.py backend/test_security_audit_postgres.py
 
 hygiene: ## Fast repository-layout checks only
 	$(UNIT_ENV) $(PY) -m pytest -q backend/test_repo_hygiene.py

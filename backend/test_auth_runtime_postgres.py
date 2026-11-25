@@ -58,7 +58,9 @@ def sample_accounts():
             session=db.get(DriverDeviceSession,id_)
             if session: db.delete(session)
             db.delete(db.get(User,id_))
+        db.flush()  # the models declare no relationships, so SQLAlchemy does not order these deletes by foreign key
         for id_ in [d1,d2]:db.delete(db.get(Driver,id_))
+        db.flush()  # drivers must be gone before their companies are deleted
         for id_ in [a,b]:db.delete(db.get(Company,id_))
         db.commit()
 

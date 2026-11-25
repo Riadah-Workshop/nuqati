@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..api_app import app
+from ..audit import audit, audit_commit
 from ..auth import allow, current_user, hash_password
 from ..db import Base, engine, get_db
 from ..models import AccountInvitation, Company, User
@@ -73,6 +74,7 @@ def invite_user(payload:InvitationIn,db:Session=Depends(get_db),admin:User=Depen
     db.add(target);db.flush()
     try: issue_invitation(db,target)
     except Exception: db.rollback();raise
+    audit_commit(db,'invitation.send',actor=admin,target_type='user',target_id=target.id,company_id=cid,detail={'role':payload.role})
     return {'status':'sent','email':email}
 
 @app.post('/api/v1/invitations/{user_id}/resend')
@@ -103,6 +105,7 @@ def resend_invitation(user_id:int,db:Session=Depends(get_db),admin:User=Depends(
             raise HTTPException(502,'Email delivery failed; check SMTP settings') from exc
         return {'status':'reminder_sent'}
     issue_invitation(db,target)
+    audit_commit(db,'invitation.resend',actor=admin,target_type='user',target_id=target.id,company_id=target.company_id)
     return {'status':'sent'}
 
 class AcceptInvitationIn(BaseModel):
@@ -119,5 +122,6 @@ def accept_invitation(payload:AcceptInvitationIn,db:Session=Depends(get_db)):
     target=db.get(User,row.user_id)
     if not target or target.is_active: raise HTTPException(400,'Invitation no longer valid')
     target.password_hash=hash_password(payload.password);target.is_active=True;row.used_at=now
+    audit(db,'invitation.accept',actor=target,target_type='user',target_id=target.id,company_id=target.company_id)
     db.commit()
     return {'status':'activated'}

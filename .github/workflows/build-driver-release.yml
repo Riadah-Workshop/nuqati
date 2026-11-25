@@ -76,6 +76,11 @@ jobs:
                   )
           # Android 14 requires the foreground service type and matching permission.
           s=s.replace('<application', '<application android:usesCleartextTraffic="false"',1) if 'usesCleartextTraffic' not in s else s
+          # Backups would copy app data off the device; the session lives in secure storage and must not be backed up.
+          if 'android:allowBackup' not in s:
+              s=s.replace('<application', '<application android:allowBackup="false"',1)
+          else:
+              s=s.replace('android:allowBackup="true"', 'android:allowBackup="false"')
           if 'id.flutter.flutter_background_service.BackgroundService' not in s:
               s=s.replace('</application>', '''<service android:name="id.flutter.flutter_background_service.BackgroundService" android:foregroundServiceType="location" android:exported="false"/>\n    </application>''' ,1)
           if 'NuqatiNativeTrackingService' not in s:

@@ -47,6 +47,7 @@ app.include_router(handover_router)
 from .connectivity_alerts import install_connection_monitor
 install_connection_monitor(app)
 from .features import connection_alerts  # noqa: F401  (unreachable-driver alerts)
+from .features import security_audit_log  # noqa: F401  (read access to the security audit trail)
 
 # Already imported above, so these lines do not change the registration order.
 from .features.fleet_settings import thresholds
