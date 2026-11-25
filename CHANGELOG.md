@@ -5,6 +5,24 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 1.1: backend `main.py` split into modules (no application behaviour changed)
+
+#### Changed
+- `backend/app/main.py` (about 4,000 lines) is now a 56-line assembly file. Its code moved, statement
+  for statement and without edits, into `backend/app/api_app.py` (app object, CORS, base schema)
+  and 20 modules in `backend/app/features/`. The import order in `main.py` is the route-registration
+  and import-time-SQL order of the old file, so all routes keep their precedence. Module map:
+  `docs/ARCHITECTURE.md`, section 1a.
+- Tests that read code text from `main.py` (`test_company_one_page_editor.py`,
+  `test_handover_integration_contract.py`, `test_driver_vpn_queue_contract.py`,
+  `test_native_tracking_regression_contract.py`, `test_safety_counts_trip_number_contract.py`) now
+  read it through the new `backend/backend_source.py`.
+
+#### Added
+- `backend/test_repo_hygiene.py`: `main.py` may only assemble; every feature module that has routes
+  must be imported by `main.py`; feature modules must not import `main.py`.
+- CI Docker check also asserts that `api_app.py` and the `features/` modules are in the API image.
+
 ### Phase 0: repository hygiene and safety net (no application behaviour changed)
 
 #### Added
