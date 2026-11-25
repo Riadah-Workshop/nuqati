@@ -47,7 +47,10 @@ imported.
 Routers that were already separate (`whatsapp.py`, `hardware.py`, `vehicle_handover.py`,
 `concept_reports.py`, `report_subscriptions.py`, `connectivity_alerts.py`) are attached from `main.py`
 after the feature modules, as before. A feature module starts with `from ..api_app import app` and
-must never import `main.py` (it would be circular). Tests that check code text use
+must never import `main.py` (it would be circular). **Relative imports inside functions are one level
+deeper than they were in the old `main.py`:** write `from ..db import SessionLocal`, not
+`from .db import ...`; a wrong one only fails when the function runs (for the startup hook, at
+startup). `test_repo_hygiene.py` resolves every relative import, including those inside functions. Tests that check code text use
 `backend/backend_source.py`, which reads all of these files as one text.
 
 ## 2. Request path and the main data flow

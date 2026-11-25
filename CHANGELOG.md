@@ -9,7 +9,7 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 #### Changed
 - `backend/app/main.py` (about 4,000 lines) is now a 56-line assembly file. Its code moved, statement
-  for statement and without edits, into `backend/app/api_app.py` (app object, CORS, base schema)
+  for statement (only ten relative imports inside functions had to change, see Fixed), into `backend/app/api_app.py` (app object, CORS, base schema)
   and 20 modules in `backend/app/features/`. The import order in `main.py` is the route-registration
   and import-time-SQL order of the old file, so all routes keep their precedence. Module map:
   `docs/ARCHITECTURE.md`, section 1a.
@@ -18,8 +18,14 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
   `test_native_tracking_regression_contract.py`, `test_safety_counts_trip_number_contract.py`) now
   read it through the new `backend/backend_source.py`.
 
+#### Fixed
+- Ten relative imports inside functions (`from .vehicle_handover import ...` x9 and `from .db import
+  SessionLocal` in the startup hook `initialize_legacy_tyre_schedules`) pointed at `app.features.*` after the
+  move and would have failed at startup / on driver, vehicle and company edits. They now use `..`.
+
 #### Added
-- `backend/test_repo_hygiene.py`: `main.py` may only assemble; every feature module that has routes
+- `backend/test_repo_hygiene.py`: every relative import (also inside functions) must resolve to a real module and name;
+  the modules Docker/compose start must exist; no application code in `backend/` root; `main.py` may only assemble; every feature module that has routes
   must be imported by `main.py`; feature modules must not import `main.py`.
 - CI Docker check also asserts that `api_app.py` and the `features/` modules are in the API image.
 

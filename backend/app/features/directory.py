@@ -130,7 +130,7 @@ def onboard_driver(data:DriverOnboarding, db:Session=Depends(get_db), user:User=
     if data.vehicle_id is not None:
         if not v or v.company_id!=data.company_id: raise HTTPException(422,'Choose a vehicle from the same company')
         if v.assigned_driver_id is not None: raise HTTPException(409,'Vehicle is already assigned to a driver')
-        from .vehicle_handover import enforce_managed_link
+        from ..vehicle_handover import enforce_managed_link
         enforce_managed_link(db,vehicle_id=v.id)
     # Internal unique identifier: drivers are never required to provide an email.
     email=f'driver-{secrets.token_hex(16)}@login.nuqati.invalid'
