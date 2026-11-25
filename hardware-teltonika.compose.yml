@@ -13,5 +13,11 @@ services:
       TELTONIKA_BIND_HOST: ${TELTONIKA_BIND_HOST:-127.0.0.1}
       TELTONIKA_ALLOWED_CIDRS: ${TELTONIKA_ALLOWED_CIDRS:-}
       TELTONIKA_MAX_DB_CONCURRENCY: ${TELTONIKA_MAX_DB_CONCURRENCY:-16}
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.heartbeat", "teltonika", "90"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     ports:
       - "${TELTONIKA_BIND_HOST:-127.0.0.1}:5027:5027/tcp"

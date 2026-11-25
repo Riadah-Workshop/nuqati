@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from .db import SessionLocal
 from .hardware import ensure_tables
+from . import heartbeat
 
 log=logging.getLogger('nuqati.teltonika')
 MAX_FRAME=128*1024
@@ -138,6 +139,15 @@ async def receive(reader,writer):
         try:await writer.wait_closed()
         except Exception:pass
 
+HEARTBEAT_SECONDS=15
+
+async def keep_heartbeat():
+    # Runs on the event loop that serves the trackers: if the loop is blocked, the beats stop and the
+    # container healthcheck (compose.yml, 90 s limit) and the optional watchdog notice.
+    while True:
+        heartbeat.beat('teltonika')
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+
 async def main():
     logging.basicConfig(level=os.getenv('LOG_LEVEL','INFO'))
     bind_host=os.environ.get('TELTONIKA_BIND_HOST','127.0.0.1')
@@ -149,6 +159,9 @@ async def main():
     if not os.environ.get('TELTONIKA_ALLOWED_CIDRS'):
         log.warning('TELTONIKA_ALLOWED_CIDRS is unset: restrict host publishing to loopback/VPN only')
     log.info('Teltonika receiver listening on %s',port)
+    heartbeat.beat('teltonika')
+    beat_task=asyncio.create_task(keep_heartbeat())
+    heartbeat.start_watchdog('teltonika')
     async with server:await server.serve_forever()
 
 if __name__=='__main__':asyncio.run(main())

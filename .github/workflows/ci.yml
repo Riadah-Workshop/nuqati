@@ -234,6 +234,59 @@ jobs:
           docker volume create nq-empty
           if docker run --rm -v nq-empty:/backups nuqati-backup:ci health; then echo "health must fail without a backup"; exit 1; fi
 
+  workers:
+    name: Worker health checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start a disposable PostgreSQL and create the application's real schema
+        run: |
+          docker network create nq-w
+          docker run -d --name nq-wdb --network nq-w -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci-only -e POSTGRES_DB=ci postgres:16-alpine
+          # the official image starts a temporary server to initialise, stops it, then starts the real one
+          for i in $(seq 1 60); do [ "$(docker logs nq-wdb 2>&1 | grep -c 'ready to accept connections')" -ge 2 ] && break; sleep 1; done
+          docker exec nq-wdb pg_isready -U ci -d ci
+          docker build -f backend/Dockerfile -t nuqati-api:ci .
+          docker run --rm --network nq-w \
+            -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-wdb:5432/ci \
+            -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000 \
+            nuqati-api:ci python -c "from app.main import app; print('schema created')"
+
+      - name: Start the real tracker receiver and report scheduler
+        run: |
+          common="--network nq-w -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-wdb:5432/ci"
+          docker run -d --name nq-tel $common -e TELTONIKA_BIND_HOST=127.0.0.1 -e TELTONIKA_PORT=5027 nuqati-api:ci python -m app.teltonika_receiver
+          docker run -d --name nq-sched $common nuqati-api:ci python -m app.report_subscriptions
+          sleep 20
+          docker logs nq-tel 2>&1 | tail -5
+          docker logs nq-sched 2>&1 | tail -5
+          test "$(docker inspect -f '{{.State.Running}}' nq-tel)" = "true"
+          test "$(docker inspect -f '{{.State.Running}}' nq-sched)" = "true"
+
+      - name: Both workers report healthy with the limits compose.yml uses
+        run: |
+          docker exec nq-tel python -m app.heartbeat teltonika 90
+          docker exec nq-sched python -m app.heartbeat report_scheduler 900
+          # the healthcheck must work as the unprivileged user the containers run as
+          test "$(docker exec nq-tel id -u)" != "0"
+
+      - name: A frozen receiver turns unhealthy, and recovers when it runs again
+        run: |
+          # the receiver beats every 15 s; use a 40 s limit here so a slow runner cannot cause a false alarm
+          docker exec nq-tel python -m app.heartbeat teltonika 40
+          docker kill --signal=SIGSTOP nq-tel
+          sleep 50
+          if docker exec nq-tel python -m app.heartbeat teltonika 40; then echo "a frozen receiver must be reported as unhealthy"; exit 1; fi
+          docker kill --signal=SIGCONT nq-tel
+          sleep 25
+          docker exec nq-tel python -m app.heartbeat teltonika 40
+
+      - name: A worker that was never started has no heartbeat
+        run: |
+          if docker run --rm nuqati-api:ci python -m app.heartbeat report_scheduler 900; then echo "no heartbeat must mean unhealthy"; exit 1; fi
+
   lint:
     name: Lint (advisory)
     runs-on: ubuntu-latest
