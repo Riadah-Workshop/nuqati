@@ -160,8 +160,8 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
 | Job | Where | Cadence |
 |---|---|---|
 | Connection monitor (offline drivers, email alerts) | thread inside the API process (`connectivity_alerts.py`) | every 60 s; a driver is overdue after 15 min without a heartbeat; failed emails retry after 5 min |
-| Scheduled email reports | `report_scheduler` service | polls every 30 s |
-| Tracker ingestion | `teltonika` service | continuous TCP |
+| Scheduled email reports | `report_scheduler` service | polls every 30 s; one heartbeat per cycle |
+| Tracker ingestion | `teltonika` service | continuous TCP; heartbeat every 15 s (`app/heartbeat.py`) |
 | Database backup | `db_backup` service | daily at 23:00 UTC; prunes dumps older than 14 days |
 | Legacy tyre-schedule backfill | API startup hook | once per start |
 

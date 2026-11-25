@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from .db import engine, get_db, SessionLocal
 from .auth import current_user, allow
+from . import heartbeat
 from .models import User, Company, Driver, DriverMetadata, Vehicle, Trip, DrivingEvent
 
 CREATE='''CREATE TABLE IF NOT EXISTS report_email_subscriptions (
@@ -237,7 +238,9 @@ def run_due_once():
             db.commit()
 
 def main():
+    heartbeat.start_watchdog('report_scheduler')
     while True:
+        heartbeat.beat('report_scheduler')
         try:run_due_once()
         except Exception as exc:print('Scheduler cycle failed:',type(exc).__name__,str(exc)[:200],flush=True)
         time.sleep(30)

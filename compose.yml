@@ -62,11 +62,19 @@ services:
       TELTONIKA_BIND_HOST: ${TELTONIKA_BIND_HOST:-127.0.0.1}
       TELTONIKA_ALLOWED_CIDRS: ${TELTONIKA_ALLOWED_CIDRS:-}
       TELTONIKA_MAX_DB_CONCURRENCY: ${TELTONIKA_MAX_DB_CONCURRENCY:-16}
+      NUQATI_WORKER_WATCHDOG_SECONDS: ${NUQATI_WORKER_WATCHDOG_SECONDS:-0}
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
     logging: *default-logging
+    # Healthy while the receiver's event loop still writes its heartbeat (every 15 s; limit 90 s).
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.heartbeat", "teltonika", "90"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     ports:
       - "${TELTONIKA_BIND_HOST:-127.0.0.1}:5027:5027/tcp"
   # Scheduled email reports: private worker, no publicly exposed ports.
@@ -82,11 +90,19 @@ services:
       NUQATI_SMTP_PORT: ${NUQATI_SMTP_PORT:-587}
       NUQATI_SMTP_USER: ${NUQATI_SMTP_USER:-}
       NUQATI_SMTP_PASSWORD: ${NUQATI_SMTP_PASSWORD:-}
+      NUQATI_WORKER_WATCHDOG_SECONDS: ${NUQATI_WORKER_WATCHDOG_SECONDS:-0}
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
     logging: *default-logging
+    # Healthy while the scheduler loop still runs (one beat per cycle of about 30 s; limit 15 minutes).
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.heartbeat", "report_scheduler", "900"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   db:
     image: postgres:16-alpine
     environment:

@@ -5,6 +5,23 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 3.2: worker health checks
+
+#### Added
+- **Heartbeat for the background workers.** `backend/app/heartbeat.py` (standard library only). The tracker receiver
+  beats every 15 s from its event loop, the report scheduler once per cycle. `compose.yml` gives both services a
+  healthcheck (`python -m app.heartbeat <name> <limit>`; limits 90 s and 15 min), so a frozen receiver or a stuck
+  scheduler shows as unhealthy in Coolify instead of "running". The optional second-source file
+  `hardware-teltonika.compose.yml` gets the same check.
+- **Optional watchdog, off by default.** `NUQATI_WORKER_WATCHDOG_SECONDS` (minimum 120): a thread in each worker ends
+  the process with exit code 70 when its heartbeat is that old, so `restart: unless-stopped` starts a fresh one.
+- CI job **Worker health checks**: the real receiver and scheduler run in containers against PostgreSQL; both report
+  healthy, a receiver frozen with SIGSTOP turns unhealthy and recovers after SIGCONT. `backend/test_worker_heartbeat.py`
+  adds 37 tests (module, a real process exiting with code 70, and the wiring between `compose.yml` and the workers).
+
+#### Changed
+- `docs/OPERATIONS.md`: what the worker checks show and do not show, the watchdog, updated symptom table.
+
 ### Phase 3.1: reliability and operations
 
 #### Added
