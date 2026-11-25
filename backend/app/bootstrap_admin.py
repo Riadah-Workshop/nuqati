@@ -1,11 +1,12 @@
 import getpass, os
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from .db import SessionLocal, Base, engine
 from .models import User
 from .auth import hash_password
 
 def main():
-    Base.metadata.create_all(bind=engine)
+    if not inspect(engine).has_table('users'):
+        raise SystemExit('The database has no tables yet. Run `python -m app.migrate` first; no changes made')
     email=input('Super admin email: ').strip().lower()
     name=input('Full name: ').strip()
     password=getpass.getpass('New password (12+ characters): ')

@@ -15,15 +15,6 @@ from ..models import AppSetting, User, Vehicle
 from .shared import own_driver
 
 # Workshop assistance: company-scoped ticketing and configurable workshop contacts.
-with engine.begin() as _assist_connection:
-    _assist_connection.execute(text("""CREATE TABLE IF NOT EXISTS workshop_assistance_requests (
-      id BIGSERIAL PRIMARY KEY, company_id INTEGER NOT NULL, driver_id INTEGER NOT NULL,
-      vehicle_id INTEGER, category VARCHAR(32) NOT NULL, description TEXT NOT NULL,
-      latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, location_accuracy_m DOUBLE PRECISION,
-      status VARCHAR(32) NOT NULL DEFAULT 'new', resolution_note TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )"""))
 
 ASSISTANCE_TYPES={'manager','mechanic','electrician','towing'}
 class AssistanceCreate(BaseModel):

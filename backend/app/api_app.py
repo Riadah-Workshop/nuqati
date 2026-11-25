@@ -18,18 +18,14 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import os
 from .auth import secret, previous_secret
-from .auth_limits import ensure_rate_limit_table, enforce_auth_limit, verify_or_dummy
+from .auth_limits import enforce_auth_limit, verify_or_dummy
 from .models import AppSetting, AccountInvitation, DriverAccount, DriverDeviceSession, DrivingEvent, DriverLocation, CompanyDrivingSettings, CompanyEventCondition
 from datetime import datetime, timedelta, timezone, date
 import secrets, hashlib, smtplib, ssl, json, base64
 from email.message import EmailMessage
 secret()
 previous_secret()  # fail fast on a malformed NUQATI_AUTH_SECRET_PREVIOUS
-Base.metadata.create_all(bind=engine)
-ensure_rate_limit_table()
-# Additive migration: existing vehicles and trip histories are unchanged.
-with engine.begin() as _vehicle_schema_connection:
-    _vehicle_schema_connection.execute(text('ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS door_number VARCHAR(40)'))
+# Tables and columns are created by Alembic revisions (backend/app/migrations), never while this module is imported.
 # Interactive API docs expose the full route map; keep them off unless explicitly enabled (local development).
 _docs_enabled = os.environ.get('NUQATI_ENABLE_API_DOCS', '').strip().lower() in ('1', 'true', 'yes')
 app = FastAPI(title=settings.app_name, version="0.1.0", description="Nuqati fleet and driver performance API",

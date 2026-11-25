@@ -14,22 +14,7 @@ from .auth import current_user, allow
 from . import heartbeat
 from .models import User, Company, Driver, DriverMetadata, Vehicle, Trip, DrivingEvent
 
-CREATE='''CREATE TABLE IF NOT EXISTS report_email_subscriptions (
- id BIGSERIAL PRIMARY KEY, company_id INTEGER NOT NULL REFERENCES companies(id),
- created_by INTEGER NOT NULL REFERENCES users(id), recipient VARCHAR(254) NOT NULL,
- kind VARCHAR(30) NOT NULL, frequency VARCHAR(15) NOT NULL,
- scope_type VARCHAR(20) NOT NULL, selected_ids TEXT NOT NULL DEFAULT '[]',
- site_name VARCHAR(160), weekday INTEGER NOT NULL DEFAULT 0,
- month_day INTEGER NOT NULL DEFAULT 1, anchor_month INTEGER NOT NULL DEFAULT 1,
- send_hour INTEGER NOT NULL DEFAULT 9, send_minute INTEGER NOT NULL DEFAULT 0,
- timezone VARCHAR(80) NOT NULL DEFAULT 'Asia/Riyadh', enabled BOOLEAN NOT NULL DEFAULT TRUE,
- next_send_at TIMESTAMPTZ NOT NULL, last_sent_at TIMESTAMPTZ,
- last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-)'''
-
-def ensure_tables():
-    with engine.begin() as conn: conn.execute(text(CREATE))
-
+# The table report_email_subscriptions is created by an Alembic revision (backend/app/migrations).
 KINDS={'vehicle_utilization','driver_violations','driver_scores','rag'}
 FREQUENCIES={'daily','weekly','monthly','quarterly','yearly'}
 SCOPES={'all','selected','site'}
@@ -97,7 +82,6 @@ def read_record(r):
     return d
 
 def install_report_subscriptions(app):
-    ensure_tables()
     @app.get('/api/v1/fleet/report-subscriptions')
     def list_reports(company_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
         allow(user,'super_admin','company_admin','fleet_manager')
@@ -216,7 +200,6 @@ def deliver(p,payload,start,end):
         smtp.starttls(context=ssl.create_default_context());smtp.login(username,password);smtp.send_message(msg)
 
 def run_due_once():
-    ensure_tables()
     with SessionLocal() as db:
         now=datetime.now(timezone.utc)
         ids=db.execute(text('SELECT id FROM report_email_subscriptions WHERE enabled AND next_send_at<=:now ORDER BY next_send_at LIMIT 10'),{'now':now}).scalars().all()

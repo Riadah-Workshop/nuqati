@@ -134,13 +134,6 @@ def mobile_vehicle_care(db: Session = Depends(get_db), user: User = Depends(curr
             'service_history': [dict(row) for row in db.execute(text("SELECT service_type,knowledge,reading_type,reading_km,interval_km,submitted_at FROM driver_service_history WHERE vehicle_id=:v AND driver_id=:d"), {'v':vehicle.id,'d':driver.id}).mappings().all()]}
 
 # Driver-provided service history. Unknown answers are recorded, never guessed.
-with engine.begin() as _history_conn:
-    _history_conn.execute(text("""CREATE TABLE IF NOT EXISTS driver_service_history (
-        vehicle_id INTEGER NOT NULL, driver_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
-        service_type VARCHAR(32) NOT NULL, knowledge VARCHAR(12) NOT NULL,
-        reading_type VARCHAR(12), reading_km DOUBLE PRECISION, interval_km DOUBLE PRECISION,
-        submitted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY(vehicle_id,driver_id,service_type))"""))
 
 class DriverHistoryEntry(BaseModel):
     service_type: str

@@ -22,20 +22,6 @@ from .shared import own_driver
 # Driver/company-scoped human-facing trip numbers are separate from the global,
 # PostgreSQL-assigned trips.id. Backfill existing trips once in a transaction.
 # Existing trip numbers are stable; deleted testing trips can be reset normally.
-with engine.begin() as _trip_numbers_conn:
-    _trip_numbers_conn.execute(text('''CREATE TABLE IF NOT EXISTS mobile_trip_numbers (
-        trip_id INTEGER PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
-        company_id INTEGER NOT NULL,
-        driver_id INTEGER NOT NULL,
-        trip_number INTEGER NOT NULL CHECK (trip_number > 0),
-        UNIQUE (company_id, driver_id, trip_number)
-    )'''))
-    if not _trip_numbers_conn.scalar(text('SELECT 1 FROM mobile_trip_numbers LIMIT 1')):
-        _trip_numbers_conn.execute(text('''INSERT INTO mobile_trip_numbers
-            (trip_id, company_id, driver_id, trip_number)
-            SELECT id, company_id, driver_id,
-                   ROW_NUMBER() OVER (PARTITION BY company_id, driver_id ORDER BY id)
-            FROM trips'''))
 
 def trip_number_for(db: Session, trip: Trip) -> int:
     '''Must be called with the owner's Driver row locked for allocation.'''
@@ -76,14 +62,6 @@ def get_active_mobile_trip(db:Session=Depends(get_db),user:User=Depends(current_
             'started_at':trip.started_at.isoformat() if trip.started_at else None}
 
 # Stable device trip IDs make retries idempotent and preserve offline trip boundaries.
-with engine.begin() as _trip_conn:
-    _trip_conn.execute(text('''CREATE TABLE IF NOT EXISTS mobile_trip_client_ids (
-        driver_id INTEGER NOT NULL,
-        client_trip_id VARCHAR(90) NOT NULL,
-        trip_id INTEGER NOT NULL,
-        PRIMARY KEY (driver_id, client_trip_id),
-        UNIQUE (trip_id)
-    )'''))
 
 class OfflineTripStart(BaseModel):
     client_trip_id: str | None = Field(default=None, min_length=8, max_length=90, pattern=r'^[a-zA-Z0-9_-]+$')
@@ -155,13 +133,6 @@ def start_mobile_trip(payload:OfflineTripStart | None=None,db:Session=Depends(ge
 
 # Phase 1B: persist client sample IDs so reconnect retries cannot duplicate GPS points.
 # This additive table does not modify existing trip/location schemas.
-with engine.begin() as _conn:
-    _conn.execute(text('''CREATE TABLE IF NOT EXISTS mobile_gps_sample_receipts (
-        trip_id INTEGER NOT NULL,
-        sample_id VARCHAR(80) NOT NULL,
-        captured_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        PRIMARY KEY (trip_id, sample_id)
-    )'''))
 
 class Sample(BaseModel):
     sample_id: str | None = Field(default=None, min_length=8, max_length=80)
@@ -296,10 +267,6 @@ def submit_sample(trip_id:int,data:Sample,db:Session=Depends(get_db),user:User=D
     db.commit();return {'accepted':True,'events': [x[0] for x in qualified], 'rejected_events': rejected}
 
 # Stable receipts for locally detected events. Each receipt is scoped to the authenticated driver.
-with engine.begin() as _conn:
-    _conn.execute(text("""CREATE TABLE IF NOT EXISTS mobile_safety_event_receipts (
-        driver_id INTEGER NOT NULL, event_id VARCHAR(160) NOT NULL,
-        trip_id INTEGER NOT NULL, PRIMARY KEY(driver_id,event_id))"""))
 
 class LocalSafetyEvent(BaseModel):
     event_id: str = Field(min_length=8,max_length=160)
@@ -395,12 +362,6 @@ def fleet_speeding_sessions(company_id:int|None=None,driver_id:int|None=None,lim
 class AdminTripEnd(BaseModel):
     reason: str = Field(min_length=8,max_length=500)
 
-with engine.begin() as _force_end_conn:
-    _force_end_conn.execute(text("""CREATE TABLE IF NOT EXISTS admin_trip_end_audit (
-      id BIGSERIAL PRIMARY KEY, trip_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
-      performed_by INTEGER NOT NULL, reason TEXT NOT NULL,
-      performed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP)"""))
-
 @app.post('/api/v1/fleet/trips/{trip_id}/force-end')
 def force_end_fleet_trip(trip_id:int,payload:AdminTripEnd,db:Session=Depends(get_db),user:User=Depends(current_user)):
     allow(user,'super_admin','company_admin','fleet_manager')
@@ -427,16 +388,6 @@ def force_end_fleet_trip(trip_id:int,payload:AdminTripEnd,db:Session=Depends(get
 # Explicit administrative removal; GPS receipt and client-trip mappings must not
 # survive a deleted trip. A small tombstone prevents delayed offline replay from
 # recreating it (the driver app must discard 410 Gone before trying again).
-with engine.begin() as _trip_deletion_conn:
-    _trip_deletion_conn.execute(text("""CREATE TABLE IF NOT EXISTS admin_trip_deletion_audit (
-      id BIGSERIAL PRIMARY KEY, trip_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
-      performed_by INTEGER NOT NULL, action VARCHAR(24) NOT NULL, event_id INTEGER,
-      reason TEXT NOT NULL, performed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )"""))
-    _trip_deletion_conn.execute(text("""CREATE TABLE IF NOT EXISTS deleted_mobile_trip_clients (
-      driver_id INTEGER NOT NULL, client_trip_id VARCHAR(90) NOT NULL,
-      PRIMARY KEY (driver_id, client_trip_id)
-    )"""))
 
 class AdminTripDelete(BaseModel):
     confirm_trip_id: int

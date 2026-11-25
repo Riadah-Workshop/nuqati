@@ -24,16 +24,6 @@ def verify_or_dummy(password: str, stored_hash: str | None) -> bool:
     return bool(stored_hash) and result
 
 
-def ensure_rate_limit_table():
-    with engine.begin() as db:
-        db.execute(text('''CREATE TABLE IF NOT EXISTS auth_attempt_buckets (
-            key_hash VARCHAR(64) PRIMARY KEY,
-            window_start TIMESTAMP WITH TIME ZONE NOT NULL,
-            attempts INTEGER NOT NULL,
-            blocked_until TIMESTAMP WITH TIME ZONE
-        )'''))
-
-
 def _client_ip(request: Request) -> str:
     peer = request.client.host if request.client else 'unknown'
     try:

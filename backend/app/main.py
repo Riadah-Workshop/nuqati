@@ -25,8 +25,7 @@ from .features import assistance  # noqa: F401  (roadside/workshop assistance)
 from .features import fleet_overview  # noqa: F401  (fleet overview summaries)
 
 # Optional second-source vehicle hardware telemetry (read-only to trip/odometer data).
-from .hardware import router as hardware_router, ensure_tables as ensure_hardware_tables
-ensure_hardware_tables()
+from .hardware import router as hardware_router
 app.include_router(hardware_router)
 
 

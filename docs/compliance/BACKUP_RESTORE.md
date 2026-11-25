@@ -65,7 +65,7 @@ Use this for a real recovery. For practice, use section 4 instead.
    docker exec -i <db-container> pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error < nuqati-<stamp>.dump
    ```
    To overwrite a damaged but non-empty database add `--clean --if-exists`, **after** taking a dump of the current state, however damaged.
-5. Start `api`. The application adds any missing tables or columns by itself at start-up (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`), so a dump taken from an older version is brought up to date when the API starts.
+5. Start `api`. Before the API starts, the container runs the database migrations (`python -m app.migrate`): a dump taken after the migrations were switched on is brought up to date to the newest revision; a dump taken earlier (no `alembic_version` table) is checked against the baseline schema and, if it matches, adopted. If the log says `NOT adopting this database` with a list, the dump is too old for this release (it lacks tables or columns): restore it, start the last version that still did this (commit `56c09fe`, the merge of Phase 3.3) once (it adds what is missing by itself), then deploy the current release again.
 6. Check: `GET /api/v1/ready` answers, dashboard login works, a company's vehicles and last trips are present, the newest `security_audit` row is from the expected time.
 7. Start the other services; tell users what period of data was lost (anything after the dump).
 8. Write the incident log. If the cause was an attack, follow [INCIDENT_RESPONSE.md](INCIDENT_RESPONSE.md) before bringing the system back online.

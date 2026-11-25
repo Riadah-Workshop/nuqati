@@ -16,16 +16,6 @@ from ..models import User, Vehicle
 from .shared import own_driver
 
 # Privacy evidence: append-only, idempotent, and intentionally location-free.
-with engine.begin() as _privacy_conn:
-    _privacy_conn.execute(text('''CREATE TABLE IF NOT EXISTS mobile_privacy_audit (
-        event_id VARCHAR(90) PRIMARY KEY,
-        company_id INTEGER NOT NULL,
-        driver_id INTEGER NOT NULL,
-        vehicle_id INTEGER,
-        privacy_enabled BOOLEAN NOT NULL,
-        selected_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )'''))
 
 class PrivacyEvidence(BaseModel):
     event_id: str = Field(min_length=8, max_length=90, pattern=r'^[a-zA-Z0-9_-]+$')
@@ -54,14 +44,6 @@ def record_privacy_evidence(payload: PrivacyEvidence, db: Session=Depends(get_db
     return {'accepted':True,'duplicate':False}
 
 # Server-authoritative privacy approval. Pending requests never disable tracking.
-with engine.begin() as _approval_conn:
-    _approval_conn.execute(text("""CREATE TABLE IF NOT EXISTS driver_privacy_requests (
-      id BIGSERIAL PRIMARY KEY, company_id INTEGER NOT NULL, driver_id INTEGER NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'pending', reason VARCHAR(500) NOT NULL DEFAULT '',
-      requested_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      decided_at TIMESTAMP WITH TIME ZONE, decided_by INTEGER,
-      activated_at TIMESTAMP WITH TIME ZONE, ended_at TIMESTAMP WITH TIME ZONE)"""))
-    _approval_conn.execute(text("CREATE INDEX IF NOT EXISTS ix_driver_privacy_requests_driver ON driver_privacy_requests(driver_id,id DESC)"))
 
 class DriverPrivacyRequestIn(BaseModel):
     reason: str = Field(default='',max_length=500)
@@ -135,11 +117,6 @@ def revoke_driver_privacy_request(request_id:int,db:Session=Depends(get_db),user
     db.commit();return {'status':'revoked'}
 
 # Non-location device lifecycle and preference audit (separate from Privacy Mode selection).
-with engine.begin() as _lifecycle_conn:
-    _lifecycle_conn.execute(text("""CREATE TABLE IF NOT EXISTS mobile_lifecycle_audit (
-      event_id VARCHAR(90) PRIMARY KEY, company_id INTEGER NOT NULL, driver_id INTEGER NOT NULL,
-      event_type VARCHAR(40) NOT NULL, occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
-      received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP)"""))
 class MobileLifecycleEvent(BaseModel):
     event_id: str = Field(min_length=8,max_length=90,pattern=r'^[a-zA-Z0-9_-]+$')
     event_type: Literal['first_authenticated_launch','camera_monitoring_disabled','camera_monitoring_enabled','login','logout']
@@ -181,19 +158,6 @@ def list_privacy_audit(limit:int=100,db:Session=Depends(get_db),user:User=Depend
     return [dict(row) for row in rows]
 
 # Latest device heartbeat (no coordinates). Updated by the background location service.
-with engine.begin() as _heartbeat_conn:
-    _heartbeat_conn.execute(text("""CREATE TABLE IF NOT EXISTS mobile_tracking_heartbeat (
-        driver_id INTEGER PRIMARY KEY, company_id INTEGER NOT NULL, vehicle_id INTEGER,
-        screen_state VARCHAR(12) NOT NULL, trip_active BOOLEAN NOT NULL,
-        gps_fix_age_s INTEGER, captured_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        connectivity_policy_version INTEGER NOT NULL DEFAULT 1
-    )"""))
-    # Old Driver apps heartbeat only hourly when idle. Do not falsely alert on
-    # those apps until they have upgraded and successfully opted into v2.
-    _heartbeat_conn.execute(text('ALTER TABLE mobile_tracking_heartbeat ADD COLUMN IF NOT EXISTS connectivity_policy_version INTEGER NOT NULL DEFAULT 1'))
-    for _queue_column in ('queued_gps_points','queued_safety_events','queued_trips'):
-        _heartbeat_conn.execute(text(f'ALTER TABLE mobile_tracking_heartbeat ADD COLUMN IF NOT EXISTS {_queue_column} INTEGER'))
 
 class TrackingHeartbeatIn(BaseModel):
     screen_state: Literal['locked','unlocked','unknown']
@@ -246,14 +210,6 @@ def list_tracking_heartbeats(db:Session=Depends(get_db),user:User=Depends(curren
     return [dict(row) for row in rows]
 
 # Driver alert preferences: separate from GPS privacy, append-only and location-free.
-with engine.begin() as _alerts_conn:
-    _alerts_conn.execute(text('''CREATE TABLE IF NOT EXISTS mobile_notification_audit (
-        event_id VARCHAR(90) PRIMARY KEY, company_id INTEGER NOT NULL,
-        driver_id INTEGER NOT NULL, vehicle_id INTEGER,
-        notifications_enabled BOOLEAN NOT NULL,
-        selected_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )'''))
 
 class NotificationEvidence(BaseModel):
     event_id: str = Field(min_length=8,max_length=90,pattern=r'^[a-zA-Z0-9_-]+$')
@@ -292,14 +248,6 @@ def list_notification_audit(limit:int=500,db:Session=Depends(get_db),user:User=D
     return [dict(row) for row in rows]
 
 # Camera activity: metadata only, never audio, photographs or video.
-with engine.begin() as _camera_conn:
-    _camera_conn.execute(text("""CREATE TABLE IF NOT EXISTS mobile_safety_observation (
-        event_id VARCHAR(90) PRIMARY KEY, company_id INTEGER NOT NULL,
-        driver_id INTEGER NOT NULL, vehicle_id INTEGER,
-        event_type VARCHAR(50) NOT NULL, speed_kmh FLOAT,
-        observed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-        received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )"""))
 
 class SafetyObservation(BaseModel):
     event_id: str = Field(min_length=8,max_length=90,pattern=r'^[a-zA-Z0-9_-]+$')

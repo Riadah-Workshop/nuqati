@@ -5,6 +5,34 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 3.4: the application no longer creates tables itself
+
+#### Changed
+- **Alembic is now the only way the schema changes.** The 38 SQL statements and 5 `create_all` calls that ran while the
+  application modules were imported (16 modules) are removed. Tables, columns and indexes come from the Alembic
+  baseline (`0001`) and later revisions. A test fails if application code contains `CREATE TABLE`, `ALTER TABLE`,
+  `CREATE INDEX` or `create_all`.
+- **Migrations run by default.** The `api` container applies pending migrations before it starts
+  (`NUQATI_RUN_MIGRATIONS` now defaults to `1`; `0` skips it). `python -m app.bootstrap_admin` no longer creates tables;
+  it asks you to run `python -m app.migrate` first.
+- The integration tests (`test_auth_runtime_postgres.py`, `test_security_audit_postgres.py`) and the CI jobs for backups and
+  workers build their database with `python -m app.migrate`.
+- CI job **Migrations**: a database built only by migrations; importing the whole application changes nothing in the schema;
+  every table and column of the ORM models exists in the migrated schema (`ops/ci/check_models.py`); an existing database
+  (the baseline applied without `alembic_version`) is adopted unchanged; incomplete databases are refused; failing and
+  good revisions; the container with migrations on by default, failing fast, and switched off (then no table is created).
+- A test pins the SHA-256 of `0001_baseline.sql`: a released revision is never edited.
+
+#### Removed
+- The one-off backfill of `mobile_trip_numbers` (it ran only while that table was empty, which production has long
+  passed; trips get their number when first needed). The temporary baseline tools `ops/ci/schema_dump.sh` and
+  `baseline_rewrite.sed`.
+
+#### Upgrade note
+- Before merging, set `NUQATI_RUN_MIGRATIONS=1` on the Phase 3.3 deployment and check for `Existing database adopted`
+  in the `api` log (`docs/DEPLOY_COOLIFY.md`). A database too old for the baseline can be brought up to date once with commit
+  `56c09fe`, the last version that still creates missing tables itself.
+
 ### Phase 3.3: database migrations (Alembic)
 
 #### Added

@@ -23,6 +23,8 @@ os.environ.setdefault('NUQATI_AUTH_SECRET', 'security-runtime-test-secret-only-2
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import delete, text  # noqa: E402
+from app import migrate  # noqa: E402
+assert migrate.main(['upgrade']) == 0, 'migrations failed on the test database'  # the app no longer creates tables
 from app.main import app  # noqa: E402
 from app.auth import hash_password  # noqa: E402
 from app.db import SessionLocal  # noqa: E402

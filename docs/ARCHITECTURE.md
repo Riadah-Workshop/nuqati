@@ -22,8 +22,7 @@ reviewer can check them.
 
 `backend/app/main.py` is only an assembly file. The code that used to be in it now lives in
 `api_app.py` and `features/`. **The order of the imports in `main.py` is the order in which routes
-are registered and in which import-time SQL runs.** FastAPI uses the first route that matches a path,
-and several tables are created or altered by SQL at import time, so do not reorder the imports
+are registered.** FastAPI uses the first route that matches a path, so do not reorder the imports
 without a reason; `test_repo_hygiene.py` fails if `main.py` gains code or a route module is not
 imported.
 
@@ -127,20 +126,20 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   readings, maintenance schedules, users, driver accounts and device sessions, driving events,
   driver locations, per-company driving settings and event conditions, app settings,
   account invitations.
-- **Tables created by raw SQL at import time** (`CREATE TABLE IF NOT EXISTS` in `api_app.py`, the
-  `features/` modules, `hardware.py`, `report_subscriptions.py`): audit and evidence tables (privacy requests and
+- **Tables without an ORM model** (created by SQL until Phase 3.2, now part of the baseline revision; the code in `api_app.py`, the
+  `features/` modules, `hardware.py`, `report_subscriptions.py` reads and writes them with `text()` SQL): audit and evidence tables (privacy requests and
   audit, lifecycle, notification, tracking heartbeat, safety observations, admin trip actions),
   trip numbering and client-ID / sample / event receipts, driver service history, dashboard
   account tokens, workshop assistance requests, mobile diagnostics, telematics devices and
   points, report email subscriptions, the security audit trail (`audit.py`) and the auth
   rate-limit table (`auth_limits.py`).
   `vehicle_handover.py` defines its own ORM tables, including photos stored as binary rows.
-- **Migrations (Alembic, since Phase 3.3).** `backend/app/migrations/` holds numbered revisions; `0001` is the baseline, the
-  schema that the start-up SQL above builds. `python -m app.migrate` applies them and adopts an existing database without
-  changing it (`docs/DEVELOPMENT.md` section 6). The container runs it before the API when `NUQATI_RUN_MIGRATIONS=1`.
-  The start-up SQL is frozen (a test fails if it grows) and stays for one release as a fallback; new schema changes are
-  revisions only. The SQL uses PostgreSQL features (`BIGSERIAL`, `ON CONFLICT`, `ADD COLUMN IF NOT EXISTS`), so SQLite works
-  only for a subset of tests.
+- **Migrations (Alembic, since Phase 3.3; the only way the schema changes since Phase 3.4).** `backend/app/migrations/` holds
+  numbered revisions; `0001` is the baseline, the schema the application used to build by itself. `python -m app.migrate`
+  applies them and adopts an existing database without changing it (`docs/DEVELOPMENT.md` section 6). The `api` container
+  runs it before the API starts (`NUQATI_RUN_MIGRATIONS=0` skips it). The application code creates no table, column or index:
+  a test fails if it tries, and CI checks that the ORM models match the migrated schema. The SQL uses PostgreSQL features
+  (`BIGSERIAL`, `ON CONFLICT`), so SQLite works only for a subset of tests.
 - **Settings as JSON:** per-company policies and live-share tokens live in `app_settings` under
   keys such as `safety_score_policy:{company_id}`, `flexible_rag_policy:{company_id}` and
   `live_share:{sha256(token)}`.

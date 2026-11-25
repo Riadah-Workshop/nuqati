@@ -98,9 +98,7 @@ class HandoverAudit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
-# Additive tables only: no alteration or removal of pre-existing fleet data.
-Base.metadata.create_all(bind=engine, tables=[HandoverAssignment.__table__, HandoverInspection.__table__,
-                                              HandoverPhoto.__table__, HandoverAudit.__table__])
+# The handover tables are created by an Alembic revision (backend/app/migrations).
 
 REQUIRED_PHOTOS = {'front', 'rear', 'left', 'right', 'cabin_front', 'cabin_rear', 'dashboard', 'odometer'}
 PHOTO_KINDS = REQUIRED_PHOTOS | {'damage', 'engine', 'equipment', 'other'}
