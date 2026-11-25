@@ -61,6 +61,8 @@ driver_app/     Flutter driver app + Android (Kotlin) and iOS (Swift) tracking s
 manager_app/    Flutter manager app
 docs/           Architecture, development guide, deployment runbook, product docs
 docs/compliance/  Data inventory, retention proposal, incident response, data-subject requests, backup and secret-rotation runbooks
+docs/OPERATIONS.md  Day-to-day operation: health signals, monitoring, backups, what to check and when
+ops/backup/     Daily database backup service and restore-drill script (run by compose.yml)
 docs/history/   Patch notes and audits from the ZIP-patch era (read-only history)
 .github/        CI (ci.yml, ci-flutter.yml), release builds (build-*.yml), Dependabot
 compose.yml     PRODUCTION stack (Coolify). docker-compose.yml is the LOCAL dev stack
