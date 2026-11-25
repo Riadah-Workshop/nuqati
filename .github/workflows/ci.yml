@@ -261,13 +261,6 @@ jobs:
           echo "legacy database has $tables tables"
           test "$tables" -ge 40
 
-      - name: TEMPORARY - print the baseline schema (removed in the next commit)
-        run: |
-          set -euo pipefail
-          echo "=====BASELINE-BEGIN====="
-          ops/ci/schema_dump.sh nq-mdb legacy
-          echo "=====BASELINE-END====="
-
       - name: The committed baseline is exactly what the application's own code builds
         run: |
           set -euo pipefail
