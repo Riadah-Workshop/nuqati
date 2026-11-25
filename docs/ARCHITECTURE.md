@@ -16,6 +16,7 @@ reviewer can check them.
 | Tracker receiver | asyncio TCP server, Teltonika Codec 8 / 8E | `backend/app/teltonika_receiver.py`, `hardware.py` | `teltonika` service, port 5027, bound to `127.0.0.1` unless configured |
 | Report scheduler | Python loop | `backend/app/report_subscriptions.py` | `report_scheduler` service; checks for due email reports every 30 seconds |
 | Database | PostgreSQL 16 | models in `backend/app/models.py` plus SQL executed at import time | `db` service with a named volume |
+| Database backup | POSIX shell on `postgres:16-alpine` | `ops/backup/` (`backup.sh`, `restore_drill.sh`) | `db_backup` service: daily dump into the `nuqati_backups` volume, health goes red when the last good dump is older than 26 hours (see [docs/OPERATIONS.md](OPERATIONS.md)) |
 
 ## 1a. Backend module map
 
@@ -161,6 +162,7 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
 | Connection monitor (offline drivers, email alerts) | thread inside the API process (`connectivity_alerts.py`) | every 60 s; a driver is overdue after 15 min without a heartbeat; failed emails retry after 5 min |
 | Scheduled email reports | `report_scheduler` service | polls every 30 s |
 | Tracker ingestion | `teltonika` service | continuous TCP |
+| Database backup | `db_backup` service | daily at 23:00 UTC; prunes dumps older than 14 days |
 | Legacy tyre-schedule backfill | API startup hook | once per start |
 
 ## 7. Privacy features

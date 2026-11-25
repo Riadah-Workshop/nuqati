@@ -167,6 +167,73 @@ jobs:
           docker run --rm -v "$PWD/web/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine
           caddy adapt --config /etc/caddy/Caddyfile > /dev/null
 
+  backup:
+    name: Backup and restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the backup image through compose (same definition Coolify uses)
+        env:
+          # Dummy values only to satisfy the `${VAR:?}` guards in compose.yml.
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: ci
+          NUQATI_PUBLIC_ORIGIN: https://example.invalid
+          NUQATI_AUTH_SECRET: ci-only-secret-at-least-32-characters-long-0000
+          VITE_MAPTILER_API_KEY: ci-placeholder
+        run: docker compose -f compose.yml build db_backup
+
+      - name: Start a disposable PostgreSQL and create the application's real schema
+        run: |
+          docker network create nq-ci
+          docker run -d --name nq-db --network nq-ci -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci-only -e POSTGRES_DB=ci postgres:16-alpine
+          # the official image starts a temporary server to initialise, stops it, then starts the real one:
+          # wait for the second "ready" line, otherwise the next step can hit the shutdown
+          for i in $(seq 1 60); do [ "$(docker logs nq-db 2>&1 | grep -c 'ready to accept connections')" -ge 2 ] && break; sleep 1; done
+          docker exec nq-db pg_isready -U ci -d ci
+          docker build -f backend/Dockerfile -t nuqati-api:ci .
+          docker run --rm --network nq-ci \
+            -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-db:5432/ci \
+            -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000 \
+            nuqati-api:ci python -c "
+          from app.main import app
+          from app.db import SessionLocal
+          from app.models import Company
+          with SessionLocal() as db:
+              db.add(Company(name='Backup drill company')); db.commit()
+          print('schema created and one company inserted')"
+
+      - name: Take a backup, check the health signal, run the restore drill
+        run: |
+          docker build -t nuqati-backup:ci ops/backup
+          docker volume create nq-backups
+          backup_image() {
+            docker run --rm --network nq-ci -e PGHOST=nq-db -e PGUSER=ci -e PGPASSWORD=ci-only -e PGDATABASE=ci -v nq-backups:/backups "$@"
+          }
+          backup_image nuqati-backup:ci once
+          backup_image nuqati-backup:ci health
+          backup_image --entrypoint /usr/local/bin/restore_drill.sh nuqati-backup:ci | tee drill.txt
+          grep -q '^RESULT: OK' drill.txt
+          grep -q '^companies ' drill.txt
+          left=$(docker exec nq-db psql -U ci -d ci -Atc "SELECT count(*) FROM pg_database WHERE datname='nuqati_restore_drill'")
+          test "$left" = "0"   # the restored copy of personal data must not be left behind
+
+      - name: Failure cases
+        run: |
+          backup_image() {
+            docker run --rm --network nq-ci -e PGHOST=nq-db -e PGUSER=ci -e PGDATABASE=ci -v nq-backups:/backups "$@"
+          }
+          # wrong password: the backup must fail, keep the previous good dump and leave no partial file
+          before=$(docker run --rm -v nq-backups:/backups alpine sh -c 'ls -A /backups | sort')
+          if backup_image -e PGPASSWORD=wrong nuqati-backup:ci once; then echo "a backup with the wrong password must fail"; exit 1; fi
+          after=$(docker run --rm -v nq-backups:/backups alpine sh -c 'ls -A /backups | sort')
+          test "$before" = "$after"
+          # an empty volume has no backup yet: the health signal must be red
+          docker volume create nq-empty
+          if docker run --rm -v nq-empty:/backups nuqati-backup:ci health; then echo "health must fail without a backup"; exit 1; fi
+
   lint:
     name: Lint (advisory)
     runs-on: ubuntu-latest

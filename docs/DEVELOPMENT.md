@@ -92,7 +92,7 @@ it cannot touch real data. Never point it at production or staging.
 
 | Workflow | Runs on | Jobs |
 |---|---|---|
-| `ci.yml` | every pull request, pushes to `main` | **Backend tests**, **Web build**, **Docker, compose and Caddy**, **Lint (advisory)** |
+| `ci.yml` | every pull request, pushes to `main` | **Backend tests**, **Web build**, **Docker, compose and Caddy**, **Backup and restore drill** (real PostgreSQL, the backup image, a restore and the failure cases), **Lint (advisory)** |
 | `ci-flutter.yml` | pull requests that touch `driver_app/` or `manager_app/` | **Driver app analyze**, **Manager app analyze** |
 | `security.yml` | weekly (Monday), pull requests that touch dependency files, manual | **Python dependencies** (pip-audit), **Web dependencies** (npm audit), **CodeQL** (Python, JavaScript/TypeScript), **Secret scan** (gitleaks). Advisory: every job has `continue-on-error`, nothing blocks a merge or deploy; results are run artifacts |
 | `build-*.yml` | manual (and, for debug APKs, pushes to `main` that touch an app) | release and debug builds; unchanged by Phase 0 apart from folder names |

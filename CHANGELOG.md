@@ -5,6 +5,37 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 3.1: reliability and operations
+
+#### Added
+- **Daily database backup.** New `db_backup` service in `compose.yml` (code in `ops/backup/`). It writes one
+  `pg_dump` custom-format dump a day (23:00 UTC) into the new volume `nuqati_backups`, reads each dump back with
+  `pg_restore --list` before accepting it, writes under a temporary name so a half-written file is never taken for a
+  backup, keeps 14 days (never fewer than 3 dumps) and logs a warning when a dump is less than half the size of the
+  previous one. Its healthcheck turns red when the last good dump is older than 26 hours. Settings:
+  `NUQATI_BACKUP_HOUR_UTC`, `NUQATI_BACKUP_KEEP_DAYS`. The dumps are on the same server; the off-server copy
+  stays manual.
+- **Restore drill in one command.** `docker exec <db_backup-container> /usr/local/bin/restore_drill.sh` restores the
+  newest dump into a throw-away database, compares the main tables with the live database (read-only), prints a
+  `RESULT:` line for the drill log and always drops the copy again.
+- `docs/OPERATIONS.md`: services and what is monitored, external uptime monitoring on `/api/v1/ready`, weekly checks,
+  disk growth, a symptom table and what is not covered yet.
+- CI job **Backup and restore drill**: real PostgreSQL with the application's real schema, the backup image built
+  through `compose.yml`, a backup, the health signal, a restore drill, and the failure cases (wrong password,
+  empty volume). `backend/test_ops_backup_scripts.py` adds 33 fast logic tests with stand-in PostgreSQL programs.
+
+#### Changed
+- **Container logs are capped** at 5 files of 10 MB per service (`x-logging` in `compose.yml`). Docker's default has no
+  limit and can fill the disk.
+- **Database connections** give up after 5 seconds (`connect_timeout`, PostgreSQL only), so `/api/v1/ready` answers
+  `503` quickly when the database does not respond instead of waiting for the operating system's default.
+- Compliance documents: `BACKUP_RESTORE.md` (automatic on-server dumps, one-command drill), `RETENTION_SCHEDULE.md`
+  (R15: 14 days on the server, 30 days off the server), `DATA_INVENTORY.md` (backups row).
+
+#### After merging
+The first deployment builds one more image and creates the `nuqati_backups` volume; the first dump is taken a few
+minutes after `db_backup` starts. Run the first restore drill and record it in `BACKUP_RESTORE.md` section 6.
+
 ### Phase 2.1: security audit trail, hardening and compliance documents
 
 #### Added

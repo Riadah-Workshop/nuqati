@@ -1,3 +1,11 @@
+# Docker keeps every container's output in a log file that grows without limit by default.
+# These settings cap each container at 5 files of 10 MB so logs can never fill the server disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   web:
     build:
@@ -8,6 +16,7 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
     expose:
       - "80"
   api:
@@ -32,6 +41,7 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=4)"]
       interval: 15s
@@ -56,6 +66,7 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "${TELTONIKA_BIND_HOST:-127.0.0.1}:5027:5027/tcp"
   # Scheduled email reports: private worker, no publicly exposed ports.
@@ -75,6 +86,7 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
   db:
     image: postgres:16-alpine
     environment:
@@ -89,7 +101,37 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    logging: *default-logging
+  # Daily PostgreSQL dump into the nuqati_backups volume (same host as the database).
+  # This protects against mistakes and corruption. It does NOT protect against losing the server:
+  # keep an encrypted copy elsewhere (docs/compliance/BACKUP_RESTORE.md). Restore drill:
+  #   docker exec <db_backup container> /usr/local/bin/restore_drill.sh
+  db_backup:
+    build:
+      context: ./ops/backup
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:?Set DB user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set DB password}
+      PGDATABASE: ${POSTGRES_DB:?Set DB name}
+      NUQATI_BACKUP_HOUR_UTC: ${NUQATI_BACKUP_HOUR_UTC:-23}
+      NUQATI_BACKUP_KEEP_DAYS: ${NUQATI_BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - nuqati_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/backup.sh", "health"]
+      interval: 10m
+      timeout: 10s
+      retries: 1
+      start_period: 15m
 volumes:
+  nuqati_backups:
+    # Daily dumps written by the db_backup service. Deleting this volume deletes the on-host backups.
   nuqati_staging_pgdata:
     # Reuses your original staging volume by default, but creates it on new hosts.
     # Override NUQATI_PG_VOLUME_NAME with the exact backed-up production volume.

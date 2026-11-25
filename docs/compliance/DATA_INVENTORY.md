@@ -31,6 +31,7 @@ Built from the database definitions and handlers in the code as of Phase 2.1. It
 | Reports and sharing | `report_email_subscriptions`, `app_settings` (`live_share:*`, hashed token) | **External e-mail address of the recipient**, scope of the report | Medium | Scheduled e-mail reports; live-share links | Admins and managers of that company |
 | Security and audit | `security_audit` (new), `company_delete_audit`, `admin_trip_end_audit`, `admin_trip_deletion_audit`, `handover_audit`, `auth_attempt_buckets` | Actor id and e-mail, role, company, action, **client IP address** (authentication events only), HMAC digests of sign-in identifiers | Medium | Accountability, investigations, abuse protection | Admins (`security_audit` of their company); super admin |
 | Trackers | `telematics_devices` | IMEI, vehicle | Low–Medium | Receive tracker positions | Admins of that company |
+| Database backups | Docker volume `nuqati_backups` (daily dumps by the `db_backup` service) and any off-server copy | Everything in the database, including the fields above | As the data they contain (High) | Recovery after loss or damage | Whoever has access to the server; off-server copies: whoever holds the key (BACKUP_RESTORE.md 2b) |
 
 Not stored: plain-text passwords, plain-text reset or invitation tokens (only SHA-256 hashes), card or payment data, audio, video, contacts, SMS.
 
