@@ -88,6 +88,25 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 - No QR code (the setup screen shows the key to type and an `otpauth://` link that opens the authenticator app on the same phone); no push or SMS codes;
   drivers are not covered (they sign in with their own flow and a bound device).
 
+### Phase 5.2: no third-party script in the map frames (security finding S5)
+
+#### Changed
+- The two map frames (`FleetPositionMap.tsx`, `TripLiveMap.tsx`) no longer load Leaflet from `unpkg.com`. Leaflet 1.9.4 (same version) comes
+  from the locked npm package and is written into each frame (`web/src/leafletInline.ts`). A compromised or unreachable CDN can no longer
+  read fleet positions or blank the maps, and unpkg no longer sees dashboard users' addresses.
+- Content-Security-Policy (`web/Caddyfile`): `unpkg.com` removed from `script-src` and `style-src`; `connect-src` narrowed from
+  `'self' https: wss:` to `'self'` (every request the dashboard makes goes to its own origin; map tiles are images).
+- The frame HTML is now built by two exported functions (`buildFleetMapHtml`, `buildTripMapHtml`); the markup and script are unchanged.
+
+#### Added
+- CI step "Map frames render in a real browser with no network" (`web/scripts/check-map-frames.mjs`): builds both frames with the real
+  code, opens them in headless Chrome with every host name unresolvable, counts the drawn vehicles, events and geofences, and runs a
+  control without the Leaflet script that must fail the same checks.
+- `backend/test_web_csp.py`: the policy allows no script host and `connect-src 'self'`; no `unpkg.com` anywhere in `web/`.
+
+#### Not verified
+- How the maps look in the production dashboard (CI renders both frames in Chrome and counts shapes, it does not compare pixels).
+
 ### Phase 3.4: the application no longer creates tables itself
 
 #### Changed
