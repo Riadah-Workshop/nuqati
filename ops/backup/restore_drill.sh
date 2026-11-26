@@ -3,6 +3,8 @@
 # compares it with the live database, prints a result line for the drill log, and drops the copy again.
 #
 #   restore_drill.sh [path-to-dump]     (default: the newest dump in /backups)
+#   restore_drill.sh --offsite [name]   download the newest (or the named) copy from the off-server destination, decrypt it,
+#                                       and run the drill on that: proves the off-server copy and its passphrases work
 #
 # Run it from the backup container, ideally outside working hours (the restore uses CPU and disk):
 #   docker exec <db_backup-container> /usr/local/bin/restore_drill.sh
@@ -23,12 +25,25 @@ die() { say "RESULT: FAILED - $*"; exit 1; }
 [ "$DRILL_DB" != "$LIVE_DB" ] || die "the drill database must not be the live database"
 case "$DRILL_DB" in *[!A-Za-z0-9_]*|'') die "NUQATI_DRILL_DB may only contain letters, digits and underscores" ;; esac
 
-DUMP="${1:-}"
-[ -n "$DUMP" ] || DUMP=$(ls -1t "$DIR"/nuqati-*.dump 2>/dev/null | head -n 1)
-[ -n "$DUMP" ] && [ -f "$DUMP" ] || die "no dump found in $DIR"
+OFFSITE_SH="${NUQATI_OFFSITE_SCRIPT:-$(dirname "$0")/offsite.sh}"
+FETCH_DIR=""
+SOURCE=""
+if [ "${1:-}" = "--offsite" ]; then
+  shift
+  FETCH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuqati-drill.XXXXXX") || die "cannot create a temporary directory"
+  # the downloaded dump holds real personal data: it is deleted at the end, whatever happens
+  # fetch prints only the path on stdout (its messages go to stderr, so they stay visible)
+  DUMP=$(sh "$OFFSITE_SH" fetch "${1:-latest}" "$FETCH_DIR") || { rm -rf "$FETCH_DIR"; die "cannot fetch the off-server copy (see the messages above)"; }
+  SOURCE=" | source=off-server"
+else
+  DUMP="${1:-}"
+  [ -n "$DUMP" ] || DUMP=$(ls -1t "$DIR"/nuqati-*.dump 2>/dev/null | head -n 1)
+fi
+[ -n "$DUMP" ] && [ -f "$DUMP" ] || { [ -z "$FETCH_DIR" ] || rm -rf "$FETCH_DIR"; die "no dump found in $DIR"; }
 
 admin_sql() { psql -d postgres -v ON_ERROR_STOP=1 -X -q -c "$1"; }
 cleanup() {
+  [ -z "$FETCH_DIR" ] || { rm -rf "$FETCH_DIR" && say "cleanup: the downloaded copy was deleted"; }
   admin_sql "DROP DATABASE IF EXISTS \"$DRILL_DB\"" >/dev/null 2>&1 && say "cleanup: the restored copy \"$DRILL_DB\" was dropped"
 }
 trap cleanup EXIT
@@ -78,5 +93,5 @@ say "tables in public schema: live ${TABLES_LIVE:--}, restored ${TABLES_COPY}"
 [ -z "$WARNINGS" ] || say "WARNINGS:$WARNINGS"
 
 say ""
-say "RESULT: $STATUS | dump=$(basename "$DUMP") | restore_seconds=$SECS | tables=$TABLES_COPY | $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+say "RESULT: $STATUS | dump=$(basename "$DUMP") | restore_seconds=$SECS | tables=$TABLES_COPY$SOURCE | $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 [ "$STATUS" = "OK" ]

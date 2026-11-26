@@ -17,7 +17,7 @@
 ## Backups and monitoring (since Phase 3.1)
 
 - `compose.yml` now also runs `db_backup`: one database dump a day into the volume `nuqati_backups` (kept 14 days). It needs
-  no extra settings in Coolify; `NUQATI_BACKUP_HOUR_UTC` and `NUQATI_BACKUP_KEEP_DAYS` are optional. The first deployment
+  no extra settings in Coolify (an encrypted copy to Google Drive is available but **off** until you set `NUQATI_OFFSITE`: [BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md) 2b); `NUQATI_BACKUP_HOUR_UTC` and `NUQATI_BACKUP_KEEP_DAYS` are optional. The first deployment
   builds one more small image and creates the volume.
 - The dumps are on the same server. Copy them off the server and run a restore drill: [compliance/BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md).
 - Add an external uptime monitor on `https://nuqati.al-riadah.sa/api/v1/ready` and read [OPERATIONS.md](OPERATIONS.md).

@@ -5,6 +5,32 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 4.2: encrypted off-server backup copy (Google Drive)
+
+#### Added
+- `ops/backup/offsite.sh`: after every good dump, `db_backup` can copy it to Google Drive (or any folder, `NUQATI_OFFSITE=local`)
+  **encrypted on the server first** (rclone `crypt`, two passphrases only the owner holds). The upload is verified against the
+  checksum the destination holds for the encrypted file (`rclone cryptcheck`) before it counts; a failed copy is retried every
+  hour; copies older than 30 days are deleted (the newest 3 always kept, only dump-named files touched, a failed listing deletes
+  nothing). **Off by default**: nothing leaves the server until `NUQATI_OFFSITE` is set.
+- Google Drive through a service account on a Shared Drive (Google Workspace) or through the owner's own OAuth client with the
+  narrow `drive.file` scope (personal account). Setup guide, key custody and the data-location question for counsel:
+  `docs/compliance/BACKUP_RESTORE.md` 2b and `docs/compliance/DATA_INVENTORY.md`.
+- `offsite.sh test` (uploads a small file, reads it back, checks it is unreadable at the destination, deletes it),
+  `offsite.sh fetch`, `offsite.sh list`, `restore_drill.sh --offsite` (restore from the off-server copy alone, with the
+  passphrases from the password manager), `backup.sh offsite-retry`.
+- The `db_backup` health status also turns red when the last good off-server copy is older than 50 hours or the off-server
+  settings are wrong (local backups continue either way). `backup.sh once` exits 3 when the backup is good but the copy failed.
+- The backup image now contains rclone (`apk add rclone`). Twelve optional settings, all empty = off/default
+  (`NUQATI_OFFSITE*`, see `.env.example`).
+- CI: the job "Backup and restore drill" now also runs the real rclone against a second volume: encrypted upload, verification,
+  the stored file shows no plain text, restore from the off-server copy alone, wrong passphrases, a damaged copy detected and
+  replaced, retention, a whole cycle, and invalid settings. 62 stand-in tests in `backend/test_ops_offsite.py`.
+
+#### Not covered
+- The Google Drive side itself (credentials, quota, token expiry) cannot be tried in CI: it needs real credentials and this
+  repository is public. `offsite.sh test` does it on the server.
+
 ### Phase 4.1: request limits per user (security finding S9)
 
 #### Added
