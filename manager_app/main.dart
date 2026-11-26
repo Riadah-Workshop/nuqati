@@ -20,6 +20,10 @@ const Map<String,String> _arLabels = {
   'Remember me · automatic sign in': 'تذكرني · تسجيل دخول تلقائي',
   'Signing in…': 'جارٍ تسجيل الدخول…',
   'Sign in': 'تسجيل الدخول',
+  'Two-step sign-in': 'تسجيل الدخول بخطوتين',
+  'Enter the 6-digit code from your authenticator app, or a recovery code.': 'أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة، أو رمز استرداد.',
+  'Code': 'الرمز',
+  'Back': 'رجوع',
   'Fleet & maintenance access for authorized company admins.': 'الأسطول والصيانة متاحان لمسؤولي الشركات المصرح لهم.',
   'Fleet': 'الأسطول',
   'Maintenance': 'الصيانة',
@@ -169,6 +173,8 @@ class ManagerHome extends StatefulWidget { const ManagerHome({super.key}); @over
 class _ManagerHomeState extends State<ManagerHome> {
   static const storage = FlutterSecureStorage();
   final email = TextEditingController(); final password = TextEditingController();
+  // Two-step sign-in: the short-lived token of the password step while the code is asked for (see docs/OPERATIONS.md section 9).
+  final mfaCode = TextEditingController(); String mfaToken = '';
   String token = '', userName = '', companyName = '', message = '', search = '';
   int companyId = 0, page = 0; bool busy = false, showPassword = false, rememberMe = true;
   final alertPlugin = FlutterLocalNotificationsPlugin();
@@ -299,19 +305,41 @@ class _ManagerHomeState extends State<ManagerHome> {
     setState(() { busy = true; message = ''; });
     try {
       final auth = jsonMap(await request('/api/v1/auth/login',method:'POST',body:{'email':email.text.trim().toLowerCase(),'password':password.text}));
-      final user = jsonMap(auth['user']);
-      if (user['role'] != 'company_admin') throw Exception('Only Company Admin accounts can access Nuqati Manager.');
-      if (user['company_id'] == null) throw Exception('This account has no assigned company.');
-      final access = asText(auth['access_token']);
-      if (access.isEmpty) throw Exception('No access token received.');
-      token = access;
-      await _initialize();
-      await storage.write(key:'nuqati_manager_remember',value:rememberMe?'true':'false');
-      await storage.write(key:'nuqati_manager_email',value:email.text.trim());
-      if(rememberMe) { await storage.write(key:'nuqati_manager_token',value:token); } else { await storage.delete(key:'nuqati_manager_token'); }
-      password.clear();
+      if (auth['mfa_setup_required'] == true) throw Exception('Your role requires two-step sign-in. Set it up once in the Nuqati web dashboard (My account), then sign in here.');
+      if (auth['mfa_required'] == true) {
+        final challenge = asText(auth['mfa_token']);
+        if (challenge.isEmpty) throw Exception('No sign-in token received.');
+        if (mounted) setState(() { mfaToken = challenge; message = ''; });
+        password.clear();
+        return;
+      }
+      await _finishLogin(auth);
     } catch (e) { if(mounted) setState(() { token = ''; message = '$e'; }); }
     finally { if(mounted) setState(() => busy = false); }
+  }
+  Future<void> completeMfa() async {
+    if (busy || mfaCode.text.trim().isEmpty || mfaToken.isEmpty) return;
+    setState(() { busy = true; message = ''; });
+    try {
+      final auth = jsonMap(await request('/api/v1/auth/login/mfa',method:'POST',body:{'mfa_token':mfaToken,'code':mfaCode.text.trim()}));
+      await _finishLogin(auth);
+      if(mounted) setState(() { mfaToken = ''; });
+      mfaCode.clear();
+    } catch (e) { if(mounted) setState(() { token = ''; message = '$e'; }); }
+    finally { if(mounted) setState(() => busy = false); }
+  }
+  Future<void> _finishLogin(Map<String,dynamic> auth) async {
+    final user = jsonMap(auth['user']);
+    if (user['role'] != 'company_admin') throw Exception('Only Company Admin accounts can access Nuqati Manager.');
+    if (user['company_id'] == null) throw Exception('This account has no assigned company.');
+    final access = asText(auth['access_token']);
+    if (access.isEmpty) throw Exception('No access token received.');
+    token = access;
+    await _initialize();
+    await storage.write(key:'nuqati_manager_remember',value:rememberMe?'true':'false');
+    await storage.write(key:'nuqati_manager_email',value:email.text.trim());
+    if(rememberMe) { await storage.write(key:'nuqati_manager_token',value:token); } else { await storage.delete(key:'nuqati_manager_token'); }
+    password.clear();
   }
   Future<void> _initialize() async {
     final me = jsonMap(await request('/api/v1/auth/me'));
@@ -377,6 +405,15 @@ class _ManagerHomeState extends State<ManagerHome> {
   Widget little(String label,String value,IconData icon) => Container(padding:const EdgeInsets.all(13),decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(16),border:Border.all(color:Colors.white12)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:lime,size:21),const SizedBox(height:9),LText(value,style:const TextStyle(fontSize:24,color:white,fontWeight:FontWeight.bold)),LText(label,style:const TextStyle(fontSize:12,color:dim))]));
   Widget section(String heading,String subtitle) => Padding(padding:const EdgeInsets.only(top:8,bottom:14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[title(heading,size:22),const SizedBox(height:4),LText(subtitle,style:const TextStyle(color:dim,fontSize:12))]));
   Widget searchField(String hint) => TextField(onChanged:(v)=>setState(()=>search=v),style:const TextStyle(color:white),decoration:InputDecoration(prefixIcon:const Icon(Icons.search,color:lime),hintText:tr(hint),filled:true,fillColor:blue,border:OutlineInputBorder(borderRadius:BorderRadius.circular(15),borderSide:BorderSide.none),contentPadding:const EdgeInsets.symmetric(vertical:12)));
+  Widget mfaView() => Center(child:SingleChildScrollView(padding:const EdgeInsets.all(22),child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:440),child:Column(children:[
+    Align(alignment:AlignmentDirectional.centerEnd,child:languageButton()),
+    Image.asset('assets/nuqati_icon.png',height:90,width:90),const SizedBox(height:15),title('NUQATI MANAGER',size:28,color:lime),const SizedBox(height:25),
+    panel(Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[title('Two-step sign-in',size:19),const SizedBox(height:7),const LText('Enter the 6-digit code from your authenticator app, or a recovery code.',style:TextStyle(color:dim,fontSize:12)),const SizedBox(height:20),
+    TextField(controller:mfaCode,autocorrect:false,autofocus:true,onSubmitted:(_)=>completeMfa(),decoration:InputDecoration(labelText:tr('Code'),prefixIcon:const Icon(Icons.verified_user_outlined))),const SizedBox(height:16),
+    FilledButton(onPressed:busy?null:completeMfa,style:FilledButton.styleFrom(backgroundColor:lime,foregroundColor:navy,minimumSize:const Size.fromHeight(50)),child:LText(busy?'Signing in…':'Sign in',style:const TextStyle(fontWeight:FontWeight.bold))),
+    TextButton(onPressed:busy?null:()=>setState((){ mfaToken=''; mfaCode.clear(); message=''; }),child:const LText('Back')),
+    ])), if(message.isNotEmpty)Padding(padding:const EdgeInsets.all(10),child:LText(message,style:const TextStyle(color:Colors.orangeAccent),textAlign:TextAlign.center)),
+  ]))));
   Widget loginView() => Center(child:SingleChildScrollView(padding:const EdgeInsets.all(22),child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:440),child:Column(children:[
     Align(alignment:AlignmentDirectional.centerEnd,child:languageButton()),
     Image.asset('assets/nuqati_icon.png',height:90,width:90),const SizedBox(height:15),title('NUQATI MANAGER',size:28,color:lime),
@@ -597,7 +634,7 @@ class _ManagerHomeState extends State<ManagerHome> {
   @override Widget build(BuildContext context) => Directionality(textDirection:managerArabic.value?TextDirection.rtl:TextDirection.ltr,child:Scaffold(
     appBar: token.isEmpty ? null : AppBar(backgroundColor:navy,toolbarHeight:77,title:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const LText('NUQATI MANAGER',style:TextStyle(fontWeight:FontWeight.w900,fontSize:20)),LText(companyName,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:lime,fontSize:12)),const LText('By Al-Riadah Workshop',style:TextStyle(color:dim,fontSize:10))]),actions:[languageButton(),IconButton(onPressed:busy?null:loadData,icon:const Icon(Icons.refresh),tooltip:'Refresh'),IconButton(onPressed:logout,icon:const Icon(Icons.logout),tooltip:'Sign out')]),
     bottomNavigationBar: token.isEmpty ? null : SafeArea(child:Container(color:blue,padding:const EdgeInsets.symmetric(vertical:7,horizontal:14),child:Row(children:[Expanded(child:_nav(Icons.directions_car_filled_outlined,'Fleet',0)),Expanded(child:_nav(Icons.build_circle_outlined,'Maintenance',1)),Expanded(child:_nav(Icons.map_outlined,'Live',2)),Expanded(child:_nav(Icons.history,'History',3))]))),
-    body: token.isEmpty ? loginView() : RefreshIndicator(color:lime,onRefresh:loadData,child:ListView(padding:const EdgeInsets.fromLTRB(16,14,16,25),children:[
+    body: token.isEmpty ? (mfaToken.isNotEmpty ? mfaView() : loginView()) : RefreshIndicator(color:lime,onRefresh:loadData,child:ListView(padding:const EdgeInsets.fromLTRB(16,14,16,25),children:[
       if(busy)const LinearProgressIndicator(minHeight:2,color:lime),
       if(message.isNotEmpty)panel(LText(message,style:const TextStyle(color:Colors.orangeAccent))),
       if(page==0)fleetView() else if(page==1)maintenanceView() else if(page==2)trackingView(historical:false) else trackingView(historical:true),

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { TwoStepAdminReset } from './TwoStep';
 import { ArrowLeft, ArrowRight, BadgeCheck, Building2, ClipboardList, IdCard, KeyRound, LockKeyhole, Mail, Save, ShieldCheck, UserCog, UserRound } from 'lucide-react';
 
 export type EditableUser = {
@@ -22,6 +23,9 @@ type Props = {
   lang: 'en' | 'ar';
   onClose: () => void;
   onSave: (changes:UserUpdate) => Promise<void>;
+  /** With these two the page shows the two-step sign-in status and the reset button (super admin only; the server enforces it). */
+  api?: string;
+  token?: string;
 };
 const ROLES = ['super_admin', 'company_admin', 'fleet_manager', 'representative', 'driver', 'workshop_staff'] as const;
 const ROLE_NAMES:Record<string,[string,string]> = {
@@ -33,7 +37,7 @@ const ROLE_NAMES:Record<string,[string,string]> = {
   workshop_staff:['Workshop Staff','موظف الورشة']
 };
 
-export default function UserEditPage({user,companies,currentUserId,lang,onClose,onSave}:Props){
+export default function UserEditPage({user,companies,currentUserId,lang,onClose,onSave,api,token}:Props){
   const ar=lang==='ar';
   const t=(en:string,arabic:string)=>ar?arabic:en;
   const [name,setName]=useState(user.full_name);
@@ -104,6 +108,9 @@ export default function UserEditPage({user,companies,currentUserId,lang,onClose,
           <section className="nq-ve-section" id="nq-user-status"><div className="nq-ve-section-heading"><span className="nq-ve-section-icon"><KeyRound size={19}/></span><div><h3>{t('Access status','حالة الوصول')}</h3><p>{t('Manage whether the account can sign in','تحديد إمكانية تسجيل دخول المستخدم')}</p></div></div>
             <div className="nq-ve-fields"><label>{t('Account status','حالة الحساب')}<select value={active?'active':'inactive'} onChange={e=>setActive(e.target.value==='active')} disabled={isSelf}><option value="active">{t('Active','نشط')}</option><option value="inactive">{t('Inactive / pending','غير نشط / بانتظار التفعيل')}</option></select></label><div className="nq-ve-info"><LockKeyhole size={17}/>{t('Activating an account does not set or change a password. Invitations, reminders and password resets stay separate.','تفعيل الحساب لا يُنشئ كلمة مرور ولا يغيرها؛ تبقى الدعوات والتذكيرات وإعادة التعيين عمليات منفصلة.')}</div></div>
           </section>
+          {api&&token&&!isSelf&&user.role!=='driver'&&<section className="nq-ve-section" id="nq-user-mfa"><div className="nq-ve-section-heading"><span className="nq-ve-section-icon"><ShieldCheck size={19}/></span><div><h3>{t('Two-step sign-in','تسجيل الدخول بخطوتين')}</h3><p>{t('Authenticator-app code in addition to the password. Reset it if this person lost their phone and recovery codes.','رمز من تطبيق المصادقة إضافة إلى كلمة المرور. أعد تعيينه إذا فقد هذا الشخص هاتفه ورموز الاسترداد.')}</p></div></div>
+            <TwoStepAdminReset lang={lang} api={api} token={token} userId={user.id}/>
+          </section>}
           {error&&<div role="alert" className="nq-ve-error">{error}</div>}
           <footer className="nq-ve-footer"><span>{changed?t('Unsaved changes','تغييرات غير محفوظة'):t('All fields are up to date','البيانات محدثة')}</span><div><button type="button" className="nq-ve-cancel" disabled={busy} onClick={close}>{t('Cancel','إلغاء')}</button><button type="submit" className="nq-ve-save" disabled={!changed||busy}><Save size={17}/>{busy?t('Saving…','جارٍ الحفظ…'):t('Save all changes','حفظ جميع التغييرات')}</button></div></footer>
         </div>

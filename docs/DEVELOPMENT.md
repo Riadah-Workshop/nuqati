@@ -62,7 +62,9 @@ What the backend test files cover:
 | `test_security_units.py` | unit | audit helper (what is stored and what is filtered, never raises); secret-rotation window |
 | `test_vehicle_handover.py` | API (SQLite) | handover receive / return, flags, authorization |
 | `test_concept_reports.py` | API (in-memory SQLite) | report suite queries and Excel / CSV / PDF export |
+| `test_mfa_units.py` | unit | two-step sign-in: TOTP against the RFC 6238 test vectors, replay refusal, encrypted secrets and key rotation, recovery codes, guessing lock, settings checks, step tokens |
 | `test_auth_runtime_postgres.py` | API (PostgreSQL) | login, scoping, drivers, maintenance; imports `app.main`, so it proves the app boots on PostgreSQL |
+| `test_mfa_postgres.py` | API (PostgreSQL) | two-step sign-in end to end: enrolment, second step, recovery codes, lock, required roles, authenticator change, reset (button and `app.mfa_tools`), encrypted storage, fail-closed on a lost key |
 | `test_security_audit_postgres.py` | API (PostgreSQL) | audit rows for sign-ins and edits, logout revokes the token, company-scoped audit endpoint, secret rotation end to end, API docs off |
 
 **`test_security_guards.py` fails on purpose when you add a route without a login, build SQL text from a
@@ -147,6 +149,8 @@ Since Phase 3.3 schema changes are **Alembic revisions**, not SQL in the applica
 **The baseline and the existing database.** Revision `0001` is the schema the application created by itself up to Phase 3.2 (`versions/0001_baseline.sql`, an exact `pg_dump` of a database built by the application's own start-up code, proven identical in Phase 3.3; a test pins the file's checksum, so it can never be edited). A database that already has Nuqati's tables but no `alembic_version` table (production, staging, your laptop) is **adopted**: it is compared with the baseline in a scratch schema that is always rolled back, and if it has every table and column it is only marked as revision `0001`. Nothing is created or changed. If something is missing it is refused with a list and the container does not start; a database that old can be brought up to date by starting the last version that still did this (commit `56c09fe`, the merge of Phase 3.3) once (it still creates missing tables and columns by itself). Since Phase 3.4 the application code no longer does that, so on a **new** database nothing exists until `python -m app.migrate` has run. The integration tests do this themselves; for your own SQLite or PostgreSQL scratch database run it first.
 
 **Backups first.** Before the first run on a database that matters, make sure a backup exists ([OPERATIONS.md](OPERATIONS.md) section 3, [BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md)). Keep the same `NUQATI_PG_VOLUME_NAME` as the running stack: the default volume name is the historical staging name on purpose, because pointing Compose at a new name creates an empty database. See [`DEPLOY_COOLIFY.md`](DEPLOY_COOLIFY.md).
+
+**Revision `0002`** (two-step sign-in: `user_mfa`, `user_mfa_recovery_codes`) is the first real revision. The first start of a release that contains it on a pre-Alembic production database does both in one run: it adopts the database at `0001` and then applies `0002`. CI proves exactly that (job **Migrations**, step "An existing database ... is adopted": nothing that existed changes, only objects of `0002` appear, and the result equals a new database).
 
 **There is no `downgrade`.** A revision's `downgrade()` is optional; the baseline's refuses to run. Undo a bad change with a new revision, or restore the backup.
 

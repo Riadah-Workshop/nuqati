@@ -25,6 +25,8 @@ import secrets, hashlib, smtplib, ssl, json, base64
 from email.message import EmailMessage
 secret()
 previous_secret()  # fail fast on a malformed NUQATI_AUTH_SECRET_PREVIOUS
+from . import mfa as _mfa
+_mfa.validate_settings()  # fail fast on a malformed NUQATI_MFA_* setting (see app/mfa.py)
 # Tables and columns are created by Alembic revisions (backend/app/migrations), never while this module is imported.
 # Interactive API docs expose the full route map; keep them off unless explicitly enabled (local development).
 _docs_enabled = os.environ.get('NUQATI_ENABLE_API_DOCS', '').strip().lower() in ('1', 'true', 'yes')

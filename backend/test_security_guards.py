@@ -44,6 +44,7 @@ def _routes():
 # (verified by its own signature) and the read-only live-share link (a random, expiring, revocable token).
 PUBLIC_ROUTES = {
     ("features/auth_accounts.py", "POST", "/api/v1/auth/login"),
+    ("features/mfa_accounts.py", "POST", "/api/v1/auth/login/mfa"),  # second step: needs the token of the password step
     ("features/auth_accounts.py", "POST", "/api/v1/auth/password-reset/request"),
     ("features/auth_accounts.py", "POST", "/api/v1/auth/password-reset/confirm"),
     ("features/auth_accounts.py", "POST", "/api/v1/auth/email-change/confirm"),
@@ -63,7 +64,7 @@ PUBLIC_ROUTES = {
 # Public routes that take a secret or an identifier must be throttled.
 THROTTLED_PUBLIC_HANDLERS = {
     "login", "request_dashboard_password_reset", "confirm_dashboard_password_reset", "confirm_dashboard_email_change",
-    "driver_phone_login", "driver_iqama_login",
+    "driver_phone_login", "driver_iqama_login", "login_mfa",
 }
 
 
@@ -155,6 +156,12 @@ AUDITED_HANDLERS = {
     "request_dashboard_email_change": "account.email_change_requested",
     "confirm_dashboard_email_change": "account.email_changed",
     "dashboard_logout": "auth.logout",
+    "login_mfa": "auth.login",
+    "mfa_enroll": "auth.mfa_enroll",
+    "mfa_confirm": "auth.mfa_enroll",
+    "mfa_new_recovery_codes": "auth.mfa_recovery",
+    "mfa_disable": "auth.mfa_disable",
+    "admin_reset_mfa": "auth.mfa_reset",
     "driver_phone_login": "auth.driver_login",
     "driver_iqama_login": "auth.driver_login",
     "driver_online_logout": "auth.driver_logout",
@@ -197,6 +204,13 @@ AUDITED_HANDLERS = {
     "delete_report": "report_subscription.delete",
 }
 
+# Functions that are not routes but write audit rows for the routes that call them (two-step sign-in, reviewed).
+AUDIT_HELPERS = {
+    "verify_second_factor": "auth.mfa",  # app/mfa_db.py: every check of a code: ok, failed, locked, error
+    "_check_password": "auth.mfa_password",  # features/mfa_accounts.py: a wrong password on an account-security action
+    "main": "auth.mfa_reset",  # app/mfa_tools.py: the server command
+}
+
 
 def _audit_calls():
     """(file, enclosing handler, call node) for every audit()/audit_commit() call outside audit.py."""
@@ -229,14 +243,14 @@ def test_sensitive_handlers_record_audit_events():
         if len(call.args) >= 2 and isinstance(call.args[1], ast.Constant):
             recorded.setdefault(handler, set()).add(call.args[1].value)
     problems = [f"{handler}: expected audit action '{action}', found {sorted(recorded.get(handler, []))}"
-                for handler, action in AUDITED_HANDLERS.items() if action not in recorded.get(handler, set())]
+                for handler, action in {**AUDITED_HANDLERS, **AUDIT_HELPERS}.items() if action not in recorded.get(handler, set())]
     assert not problems, "Audit trail calls missing:\n" + "\n".join(problems)
 
 
 def test_every_audited_handler_is_a_known_route_and_every_call_is_listed():
     route_names = {r["name"] for r in _routes()}
     assert set(AUDITED_HANDLERS) <= route_names, sorted(set(AUDITED_HANDLERS) - route_names)
-    unlisted = sorted({handler for _rel, handler, _call in _audit_calls()} - set(AUDITED_HANDLERS))
+    unlisted = sorted({handler for _rel, handler, _call in _audit_calls()} - set(AUDITED_HANDLERS) - set(AUDIT_HELPERS))
     assert not unlisted, f"audit() is called from handler(s) not listed in AUDITED_HANDLERS: {unlisted}"
 
 

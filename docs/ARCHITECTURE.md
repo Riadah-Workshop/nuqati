@@ -115,6 +115,13 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   signs everyone out, unless the old value is put in `NUQATI_AUTH_SECRET_PREVIOUS` for the
   rotation window: that value is accepted for verifying only, never for signing
   (`auth.signature_valid`). Runbook: `docs/compliance/SECRET_ROTATION.md`.
+- **Two-step sign-in (TOTP, optional, since Phase 4.3):** with `NUQATI_MFA_KEY` set, a dashboard account can add a 6-digit authenticator code to its password;
+  roles in `NUQATI_MFA_REQUIRED_ROLES` must. `POST /api/v1/auth/login` then answers `mfa_required` (or `mfa_setup_required`) with a short-lived
+  token that `current_user` refuses (type `mfa` / `mfa_setup`), and `POST /api/v1/auth/login/mfa` exchanges it plus a code for the session. The secret is stored
+  AES-256-GCM encrypted under `NUQATI_MFA_KEY` (`user_mfa`), a code works once (last time step is stored), wrong codes lock the second step for longer and
+  longer, recovery codes are stored as salted PBKDF2 hashes. An enrolled account is never let in with the password alone, also when the key is lost.
+  Code: `mfa.py` (algorithm, no database), `mfa_db.py` (storage), `features/mfa_accounts.py` (routes), `mfa_tools.py` (server command).
+  Runbook: `docs/OPERATIONS.md` section 9.
 - **Logout:** `POST /api/v1/auth/logout` raises the user's `auth_version`, so every token the
   user holds, in every browser, stops working. The web app's **Log out** button calls it
   (best effort) after clearing its own session.
@@ -136,12 +143,12 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   `features/` modules, `hardware.py`, `report_subscriptions.py` reads and writes them with `text()` SQL): audit and evidence tables (privacy requests and
   audit, lifecycle, notification, tracking heartbeat, safety observations, admin trip actions),
   trip numbering and client-ID / sample / event receipts, driver service history, dashboard
-  account tokens, workshop assistance requests, mobile diagnostics, telematics devices and
+  account tokens, two-step sign-in (`user_mfa`, `user_mfa_recovery_codes`; accessed by `mfa_db.py`), workshop assistance requests, mobile diagnostics, telematics devices and
   points, report email subscriptions, the security audit trail (`audit.py`) and the auth
   rate-limit table (`auth_limits.py`).
   `vehicle_handover.py` defines its own ORM tables, including photos stored as binary rows.
 - **Migrations (Alembic, since Phase 3.3; the only way the schema changes since Phase 3.4).** `backend/app/migrations/` holds
-  numbered revisions; `0001` is the baseline, the schema the application used to build by itself. `python -m app.migrate`
+  numbered revisions; `0001` is the baseline, the schema the application used to build by itself, `0002` adds the two-step sign-in tables. `python -m app.migrate`
   applies them and adopts an existing database without changing it (`docs/DEVELOPMENT.md` section 6). The `api` container
   runs it before the API starts (`NUQATI_RUN_MIGRATIONS=0` skips it). The application code creates no table, column or index:
   a test fails if it tries, and CI checks that the ORM models match the migrated schema. The SQL uses PostgreSQL features
