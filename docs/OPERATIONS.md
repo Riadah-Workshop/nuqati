@@ -54,9 +54,13 @@ Also in Coolify: enable its notifications (e-mail, Telegram or similar, where yo
 Database size and the biggest tables:
 
 ```bash
-docker exec <db-container> psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT pg_size_pretty(pg_database_size(current_database()))"
-docker exec <db-container> psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT relname, pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace ORDER BY pg_total_relation_size(oid) DESC LIMIT 10"
+echo "SELECT pg_size_pretty(pg_database_size(current_database()));" | docker exec -i <db-container> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+echo "SELECT relname, pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace ORDER BY pg_total_relation_size(oid) DESC LIMIT 10;" | docker exec -i <db-container> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
+
+The name `<db-container>` is the one that starts with `db-` in `docker ps --format '{{.Names}}'` (not `db_backup-...`). The `sh -c '...'` matters:
+`POSTGRES_USER` and `POSTGRES_DB` exist inside the database container, so they must be expanded there, not by the shell on the server
+(typed directly, `-U "$POSTGRES_USER"` would be empty on the server and the command would fail).
 
 Plan for the disk to hold the database **plus room for about 15 dumps** (14 days plus the one being written). If the disk is more than 70 percent full, act before it reaches 90.
 
