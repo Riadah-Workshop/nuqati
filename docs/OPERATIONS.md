@@ -185,6 +185,9 @@ setting is wrong.
    enters the first code, and **saves the 10 recovery codes** (shown once; print or put in the password manager).
 4. Check that each of them can sign out and in again with a code.
 5. Set `NUQATI_MFA_REQUIRED_ROLES` (start with `super_admin`, later add `company_admin`), redeploy. A person who has not set it up is led through the setup after their password.
+   Until a person has finished the setup, only their password protects the account, and whoever signs in first with that password can set up the
+   authenticator (the setup screen asks for nothing more). So enrol the people of a newly required role yourself, the same day, and look at the audit
+   trail (`auth.mfa_enroll`) for setups nobody expected; a super admin can reset an account that was enrolled by the wrong person.
 
 **People**
 - Signing in: e-mail and password, then the 6-digit code. A recovery code works instead of a code, once. A code is accepted for 30 seconds

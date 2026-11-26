@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import ProgrammingError
 
 from . import mfa
 from .audit import audit, audit_commit
@@ -38,14 +38,16 @@ def login_step(db, user) -> str:
 
     An enrolled account is asked for its code even if the key was removed from the settings (it then fails
     closed: the code cannot be checked). Only when the tables do not exist yet (migrations switched off) and no
-    key is set, the password alone is enough, as before this feature."""
+    key is set, the password alone is enough, as before this feature. "Do not exist" means PostgreSQL's
+    undefined-table error (a ProgrammingError); a lost connection, a lock timeout or any other database error
+    is not an answer to "is this account enrolled?", so it stops the sign-in instead of letting a password through."""
     if mfa.enabled():
         enrolled = is_enrolled(db, user.id)
     else:
         try:
             with db.begin_nested():
                 enrolled = is_enrolled(db, user.id)
-        except SQLAlchemyError:
+        except ProgrammingError:
             log.warning("two-step sign-in tables are not available; signing in with the password only")
             enrolled = False
     if enrolled:

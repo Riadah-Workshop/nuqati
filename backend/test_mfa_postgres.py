@@ -158,6 +158,27 @@ def test_without_a_key_nothing_changes_for_anyone(world):
         assert client.post('/api/v1/auth/mfa/enroll', json={'password': PASSWORD}, headers=headers).status_code == 503
 
 
+def test_without_a_key_only_missing_tables_fall_back_to_the_password_alone(world, monkeypatch):
+    """The fallback exists for a server whose migrations were switched off (the two-step tables do not exist).
+    Any other database error while asking "is this account enrolled?" must stop the sign-in, not open it."""
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+    from app import mfa_db
+
+    def failing(error):
+        def raise_it(db, user_id):
+            raise error
+        return raise_it
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        monkeypatch.setattr(mfa_db, 'is_enrolled', failing(ProgrammingError('SELECT 1', {}, Exception('relation "user_mfa" does not exist'))))
+        missing = login(client, world['admin_a']['email'])
+        assert missing.status_code == 200 and missing.json()['access_token']
+
+        monkeypatch.setattr(mfa_db, 'is_enrolled', failing(OperationalError('SELECT 1', {}, Exception('server closed the connection unexpectedly'))))
+        broken = login(client, world['admin_a']['email'])
+        assert broken.status_code == 500 and 'access_token' not in broken.text
+
+
 def test_every_two_step_route_needs_a_session(world):
     with TestClient(app) as client:
         for method, path in (('get', '/api/v1/auth/mfa'), ('post', '/api/v1/auth/mfa/enroll'), ('post', '/api/v1/auth/mfa/confirm'),
