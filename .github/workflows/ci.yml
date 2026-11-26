@@ -136,6 +136,13 @@ jobs:
       - name: Build the API image
         run: docker build -f backend/Dockerfile -t nuqati-api:ci .
 
+      # The dashboard image as compose/Coolify build it: npm ci from the lock file on node:22-alpine, type-check, bundle, Caddy.
+      - name: Build the web image
+        run: docker build -f web/Dockerfile --build-arg VITE_MAPTILER_API_KEY=ci-placeholder -t nuqati-web:ci web
+
+      - name: Web image contains the built dashboard
+        run: docker run --rm --entrypoint sh nuqati-web:ci -c 'test -s /srv/index.html && ls /srv/assets | head -5'
+
       - name: API image contains the app and its dependencies
         run: >-
           docker run --rm --entrypoint python nuqati-api:ci -c
