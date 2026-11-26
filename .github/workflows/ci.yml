@@ -238,6 +238,88 @@ jobs:
           docker volume create nq-empty
           if docker run --rm -v nq-empty:/backups nuqati-backup:ci health; then echo "health must fail without a backup"; exit 1; fi
 
+      - name: Encrypted off-server copy (real rclone, a folder on another volume plays the other provider)
+        run: |
+          set -uo pipefail
+          docker volume create nq-offsite
+          docker run --rm -v nq-offsite:/offsite alpine sh -c 'mkdir -p /offsite/nuqati-backups && chown -R 70:70 /offsite'   # 70 = postgres in the image
+          P1='ci-first-passphrase-0123456789'; P2='ci-second-passphrase-9876543210'
+          tool() { # tool <image args...>: the backup image with the off-server copy switched on
+            docker run --rm --network nq-ci -e PGHOST=nq-db -e PGUSER=ci -e PGPASSWORD=ci-only -e PGDATABASE=ci \
+              -v nq-backups:/backups -v nq-offsite:/offsite \
+              -e NUQATI_OFFSITE=local -e NUQATI_OFFSITE_PATH=/offsite/nuqati-backups \
+              -e NUQATI_OFFSITE_PASSWORD="$P1" -e NUQATI_OFFSITE_PASSWORD2="$P2" "$@"
+          }
+          offsite() { tool --entrypoint /usr/local/bin/offsite.sh nuqati-backup:ci "$@"; }
+          stored() { docker run --rm -v nq-offsite:/offsite alpine sh -c "$1"; }
+
+          docker run --rm --entrypoint rclone nuqati-backup:ci version | head -n 1
+
+          # 1. the health signal is red while the copy is switched on but nothing has been copied yet; local dumps are fine
+          if tool nuqati-backup:ci health; then echo "health must fail until the first off-server copy exists"; exit 1; fi
+          offsite check-config
+          offsite test | tee test.txt
+          grep -q "TEST OK" test.txt
+
+          # 2. copy the dump taken earlier, then look at what the other provider really holds
+          offsite push | tee push.txt
+          grep -q " OK nuqati-.*encrypted and verified" push.txt
+          tool nuqati-backup:ci health | tee health.txt
+          grep -q "ok: last off-server copy" health.txt
+          test "$(offsite list | wc -l)" = "1"
+          stored 'f=$(ls /offsite/nuqati-backups/nuqati-*.dump.bin); echo "stored: $f"; head -c 6 "$f" | grep -q RCLONE'   # rclone crypt header
+          # the local dump is readable (custom-format header and a table name in its table of contents) ...
+          docker run --rm -v nq-backups:/backups alpine sh -c 'f=$(ls /backups/nuqati-*.dump | head -n 1); head -c 5 "$f" | grep -q PGDMP && grep -aq companies "$f"'
+          # ... the copy at the destination shows neither (a `! cmd` would be ignored by set -e, so the checks are explicit)
+          stored 'f=$(ls /offsite/nuqati-backups/nuqati-*.dump.bin); if head -c 5 "$f" | grep -q PGDMP || grep -aq companies "$f"; then echo "the stored copy contains plain text"; exit 1; fi'
+
+          # 3. restore from the off-server copy alone (the local dump is not used)
+          tool --entrypoint /usr/local/bin/restore_drill.sh nuqati-backup:ci --offsite | tee drill-offsite.txt
+          grep -q '^RESULT: OK.*source=off-server' drill-offsite.txt
+          grep -q 'the downloaded copy was deleted' drill-offsite.txt
+          grep -q '^companies ' drill-offsite.txt
+
+          # 4. wrong passphrases: nothing is restored, nothing is left behind
+          if tool -e NUQATI_OFFSITE_PASSWORD='another-passphrase-0000000' --entrypoint /usr/local/bin/restore_drill.sh nuqati-backup:ci --offsite > wrong.txt; then
+            echo "a restore with the wrong passphrases must fail"; exit 1
+          fi
+          grep -q '^RESULT: FAILED' wrong.txt
+          left=$(docker exec nq-db psql -U ci -d ci -Atc "SELECT count(*) FROM pg_database WHERE datname='nuqati_restore_drill'")
+          test "$left" = "0"
+
+          # 5. a damaged copy at the destination is detected, and the next push replaces it
+          stored 'f=$(ls /offsite/nuqati-backups/nuqati-*.dump.bin); printf "DAMAGEDDAMAGED" | dd of="$f" bs=1 seek=3000 conv=notrunc 2>/dev/null'
+          if offsite fetch latest /tmp/x > /dev/null 2> fetch-damaged.txt; then echo "a damaged copy must not be restored"; exit 1; fi
+          cat fetch-damaged.txt
+          offsite push | tee push2.txt
+          grep -q "encrypted and verified" push2.txt
+          offsite fetch latest /tmp/y | tail -n 1 | grep -q 'nuqati-.*\.dump$'
+
+          # 6. retention at the destination: old copies go, recent ones and the newest few stay, other files are never touched
+          for d in 2020-01-01 2020-02-01 2020-03-01 2020-04-01 2020-05-01; do
+            n="nuqati-$(date -u -d "$d" +%Y%m%dT%H%M%SZ).dump.bin"
+            stored "head -c 300 /dev/zero > /offsite/nuqati-backups/$n"
+          done
+          yesterday="nuqati-$(date -u -d '1 day ago' +%Y%m%dT%H%M%SZ).dump.bin"
+          stored "head -c 300 /dev/zero > /offsite/nuqati-backups/$yesterday; head -c 300 /dev/zero > /offsite/nuqati-backups/notes-from-the-owner.bin"
+          offsite push | tee prune1.txt
+          # the newest 3 copies overall are always kept (today's, yesterday's and the newest of the old ones)
+          test "$(stored 'ls /offsite/nuqati-backups | grep -c "^nuqati-20200"')" = "1"
+          stored 'ls /offsite/nuqati-backups'
+          docker run --rm --network nq-ci -e PGHOST=nq-db -e PGUSER=ci -e PGPASSWORD=ci-only -e PGDATABASE=ci -v nq-backups:/backups -v nq-offsite:/offsite \
+            -e NUQATI_OFFSITE=local -e NUQATI_OFFSITE_PATH=/offsite/nuqati-backups -e NUQATI_OFFSITE_PASSWORD="$P1" -e NUQATI_OFFSITE_PASSWORD2="$P2" \
+            -e NUQATI_OFFSITE_MIN_KEEP=1 --entrypoint /usr/local/bin/offsite.sh nuqati-backup:ci push | tee prune2.txt
+          test "$(stored 'ls /offsite/nuqati-backups | grep -c "^nuqati-20200"')" = "0"
+          stored "test -f /offsite/nuqati-backups/$yesterday && test -f /offsite/nuqati-backups/notes-from-the-owner.bin"
+
+          # 7. a whole backup cycle with the copy on: new dump, copied, readable; settings that are wrong keep local backups going
+          tool nuqati-backup:ci once
+          tool nuqati-backup:ci health
+          if tool -e NUQATI_OFFSITE=drive nuqati-backup:ci once; then echo "invalid off-server settings must be reported"; exit 1; else status=$?; fi
+          test "$status" = "3"   # 3 = the backup is good, the off-server copy is not
+          if tool -e NUQATI_OFFSITE=drive nuqati-backup:ci health > bad-config.txt; then echo "health must be red with invalid settings"; exit 1; fi
+          grep -q "invalid settings" bad-config.txt
+
   migrations:
     name: Migrations
     runs-on: ubuntu-latest

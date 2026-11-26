@@ -45,11 +45,12 @@ Not stored: plain-text passwords, plain-text reset or invitation tokens (only SH
 | Meta (WhatsApp Cloud API) | Webhook calls from Meta to Nuqati; what Nuqati sends back depends on the integration | Meta | Whether any personal data is sent to Meta |
 | MapTiler | Map tile requests from the browser and the Manager app: the browser's IP address and the map area viewed (not driver names) | MapTiler | Cross-border transfer review |
 | unpkg.com (third-party script CDN) | Browser's IP address when the map pages load Leaflet | Outside the Kingdom (confirm) | Planned to be removed by self-hosting Leaflet (open item S5) |
+| Google Drive (only if the off-server backup copy is switched on, `NUQATI_OFFSITE=drive`) | The daily database dump, **encrypted on the server before upload** (rclone crypt, key held only by the owner): so it holds all personal data of the database, in a form Google cannot read. File names are a timestamp; sizes and upload times are visible to Google | Google data centres (country: confirm) | Whether sending encrypted personal data abroad is a cross-border transfer for PDPL purposes (counsel); who holds the Google account and the passphrases; Drive trash keeps deleted copies up to 30 days (R15) |
 | GitHub | Source code, CI logs, build secrets. No production personal data. | GitHub | Keep personal data out of issues and logs |
 
 ## 4. Cross-border transfers
 
-Transfers outside the Kingdom are governed by PDPL Article 29 and the Transfer Regulations (per public legal summaries). Today the flows to review are: the hosting location, the SMTP provider, MapTiler and unpkg. SDAIA published **draft** amendments in October 2026 proposing data-localisation requirements and stricter breach notification; treat them as drafts until counsel confirms they are in force.
+Transfers outside the Kingdom are governed by PDPL Article 29 and the Transfer Regulations (per public legal summaries). Today the flows to review are: the hosting location, the SMTP provider, MapTiler and unpkg, and, if it is switched on, the encrypted off-server backup copy at Google Drive (the files are unreadable to Google, but counsel should confirm how that is treated). SDAIA published **draft** amendments in October 2026 proposing data-localisation requirements and stricter breach notification; treat them as drafts until counsel confirms they are in force.
 
 ## 5. Impact assessment
 
