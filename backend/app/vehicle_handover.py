@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .auth import allow, current_user, scope
 from .db import Base, engine, get_db
 from .models import Company, Driver, DriverAccount, Trip, User, Vehicle, OdometerReading
+from .rate_limits import limit
 
 router = APIRouter(prefix='/api/v1/handover', tags=['Vehicle handover'])
 
@@ -494,7 +495,7 @@ def administrative_release(vehicle_id: int, payload: ReleaseInput, db: Session =
     return {'status': 'released', 'vehicle_id': v.id}
 
 
-@router.get('/assignments/{assignment_id}/report')
+@router.get('/assignments/{assignment_id}/report', dependencies=[Depends(limit('export'))])
 def pdf_report(assignment_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     allow(user, 'super_admin', 'company_admin', 'fleet_manager')
     a = db.get(HandoverAssignment, assignment_id)
