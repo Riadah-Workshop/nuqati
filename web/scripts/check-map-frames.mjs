@@ -66,7 +66,8 @@ function render(name, html) {
 // strings), so every check looks at the rendered markup only.
 const rendered = dom => dom.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<style\b[\s\S]*?<\/style>/g, '');
 const count = (dom, pattern) => (dom.match(pattern) || []).length;
-const paths = dom => count(dom, /<path\b/g);
+// Only the shapes Leaflet draws on the map (its overlay <svg>); the attribution control has a small flag icon with 3 <path>s of its own.
+const paths = dom => count((dom.match(/<svg\b[^>]*leaflet-zoom-animated[\s\S]*?<\/svg>/) || [''])[0], /<path\b/g);
 // Match the class attribute only: the inlined Leaflet stylesheet also contains these class names as text.
 const hasClass = (dom, name) => new RegExp(`class="[^"]*\\b${name}\\b`).test(dom);
 const markers = dom => count(dom, /class="[^"]*\bleaflet-marker-icon\b/g);
@@ -90,7 +91,7 @@ expect('fleet: the legend is there', fleetDom.includes('class="legend"'));
 
 const tripDom = render('trip', tripHtml);
 expect('trip: the map container exists', hasClass(tripDom, 'leaflet-container'));
-expect('trip: route, travelled line and event are drawn', paths(tripDom) >= 3, `${paths(tripDom)} shapes`);
+expect('trip: route, travelled line, start, end, vehicle and event are drawn (6 shapes)', paths(tripDom) === 6, `${paths(tripDom)} shapes`);
 expect('trip: the library error message is absent', !/id="map"[^>]*>\s*Map library unavailable/.test(tripDom));
 expect('trip: the playback bar has timed data', tripDom.includes('id="playback"') && !tripDom.includes('Not enough timed points') && !/<output id="progress"[^>]*>—/.test(tripDom));
 
