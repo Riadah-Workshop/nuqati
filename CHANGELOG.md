@@ -25,7 +25,7 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
   (`NUQATI_OFFSITE*`, see `.env.example`).
 - CI: the job "Backup and restore drill" now also runs the real rclone against a second volume: encrypted upload, verification,
   the stored file shows no plain text, restore from the off-server copy alone, wrong passphrases, a damaged copy detected and
-  replaced, retention, a whole cycle, and invalid settings. 60 stand-in tests in `backend/test_ops_offsite.py`.
+  replaced, retention, a whole cycle, and invalid settings. 62 stand-in tests in `backend/test_ops_offsite.py`.
 
 #### Not covered
 - The Google Drive side itself (credentials, quota, token expiry) cannot be tried in CI: it needs real credentials and this

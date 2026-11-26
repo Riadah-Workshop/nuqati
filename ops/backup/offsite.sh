@@ -271,7 +271,7 @@ fetch() {
   esac
   if ! _out=$(rc copyto "nqcrypt:$_want" "$_dest/.$_want.part" 2>&1); then
     rm -f "$_dest/.$_want.part"
-    elog "ERROR download or decryption of $_want failed (wrong passphrases?): $(last_line "$_out")"
+    elog "ERROR download or decryption of $_want failed (wrong passphrases, or a damaged copy?): $(last_line "$_out")"
     return 1
   fi
   if command -v pg_restore >/dev/null 2>&1 && ! pg_restore --list "$_dest/.$_want.part" >/dev/null 2>&1; then
