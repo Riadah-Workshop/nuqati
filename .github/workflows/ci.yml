@@ -549,25 +549,6 @@ jobs:
           docker logs nq-lapi 2>&1 | tail -5
           exit "$status"
 
-      - name: Control run (informational) - the same burst with the request limit switched off, which shows what the limit fixes
-        if: always()
-        run: |
-          set -uo pipefail
-          docker run -d --name nq-lcontrol --network nq-l -p 18002:8000 \
-            -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-ldb:5432/ci -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000 \
-            -e NUQATI_RATE_LIMIT_INGEST=enforce -e NUQATI_DB_REQUEST_SLOTS=0 nuqati-api:ci
-          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18002/api/v1/ready >/dev/null 2>&1 && break; sleep 2; done
-          timeout 200 python3 ops/loadtest/gps_load.py burst --base-url http://127.0.0.1:18002 --seed seed.json --tag control \
-            --clients 300 --offset 900 --rounds 3 --timeout 30 > control.json || true
-          queue_errors=$(docker logs nq-lcontrol 2>&1 | grep -c "QueuePool limit" || true)
-          if [ -s control.json ]; then
-            line=$(jq -c --arg q "$queue_errors" '{statuses, p50_ms, p95_ms, max_ms, queuepool_errors: $q}' control.json)
-          else
-            line="no result (the control run did not finish in time), queuepool_errors: $queue_errors"
-          fi
-          echo "control (limit off): $line"
-          { echo "### Control: burst of 300 phones with NUQATI_DB_REQUEST_SLOTS=0"; echo; echo "\`$line\`"; } >> "$GITHUB_STEP_SUMMARY"
-
   lint:
     name: Lint (advisory)
     runs-on: ubuntu-latest

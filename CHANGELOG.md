@@ -27,7 +27,10 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
   repeated. It could happen in production when all phones upload their backlog after an API restart. `get_db` is now asynchronous
   and admits only as many requests as the pool can serve (10 of 15 connections; the rest are kept for the readiness check and
   routes that open their own connection), the others wait in the event loop without holding a thread. Phones kept their data
-  during the stalls (the app retries), so nothing was lost, but the API was unusable.
+  during the stalls (the app retries), so nothing was lost, but the API was unusable. Measured in CI with 300 phones sending at
+  once: before, 600 of 900 requests failed; with the limit switched off in a control run, 731 of 900 failed (107 pool errors);
+  after, 0 of 900 failed (p95 1.6 s). 400 phones (170 requests per second) now complete with a median answer of 2 s instead of
+  failing.
 
 ### Phase 3.4: the application no longer creates tables itself
 

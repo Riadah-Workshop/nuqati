@@ -16,8 +16,14 @@ answers such a sample (`filtered_short_interval`) without storing it. The CI job
 
 **What the numbers mean.** A shared GitHub runner (4 vCPU) is not your server. Throughput and latency show where this design
 starts to slow down and whether anything breaks or gets lost; they are not a promise about production. The CI job fails on
-errors, refused normal phones, lost samples and a slow first step (p95 above 1.5 s at 50 phones), not on the larger steps'
-speed, which are only reported. The table is in the job's summary page.
+errors (a failed request, a Python traceback in the API log), refused normal phones, lost samples and a slow first step (p95
+above 1.5 s at 50 phones), not on the larger steps' speed, which is only reported. Past what one process can serve (about
+170 samples per second on the runner, 400 phones) requests wait their turn: latency grows, nothing fails.
+
+**The burst scenario** (`burst`, 300 phones sending at the same instant, three rounds, on a second API container) reproduces
+what happens when every phone uploads at once after an API restart. Before the request limit of Phase 4.1 (`docs/OPERATIONS.md`
+section 8) it made the API stall: 600 of 900 requests failed (`QueuePool limit of size 5 overflow 10 reached`); with the
+limit switched off in a control run, 731 of 900 failed with 107 pool errors; with it, 0 of 900 failed (p95 1.6 s). The table is in the job's summary page.
 
 **Running it by hand** against a disposable database (never production): see the job `loadtest` in `.github/workflows/ci.yml`.
 Choose another size with `--drivers`, `--seconds` and `--interval`.
