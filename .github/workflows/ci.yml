@@ -495,8 +495,10 @@ jobs:
           # 1 request every 2 seconds per driver, like the app. 50, 100, 200, 400 drivers = 25, 50, 100, 200 requests per second.
           measure ramp-50  18 steady --drivers 50  --offset 0   --seconds 30 --gate --p95-ms 1500 || failed=1
           measure ramp-100 18 steady --drivers 100 --offset 50  --seconds 30 --gate || failed=1
-          measure ramp-200 18 steady --drivers 200 --offset 150 --seconds 30 || true
-          measure ramp-400 18 steady --drivers 400 --offset 350 --seconds 30 || true
+          measure ramp-200 18 steady --drivers 200 --offset 150 --seconds 30 --gate || failed=1
+          # 400 phones (200 requests per second) is about what one process can serve: latency is reported, not judged, but
+          # no request may fail or be lost
+          measure ramp-400 18 steady --drivers 400 --offset 350 --seconds 30 --gate || failed=1
           # 20 phones that were offline each send 100 queued points back to back (the app's replay batch)
           measure replay   6  replay --drivers 20 --offset 750 --samples 100 --gate || failed=1
           # one client sends 700 samples as fast as it can while 50 normal phones keep working
@@ -510,13 +512,17 @@ jobs:
         run: |
           set -uo pipefail
           . ops/loadtest/lib.sh
-          # a second API container with the same image and settings, so a stall in this scenario cannot disturb the others
+          # a second API container with the same image and settings, so a problem in this scenario cannot disturb the others
           docker run -d --name nq-lburst --network nq-l -p 18001:8000 \
             -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-ldb:5432/ci -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000 \
             -e NUQATI_RATE_LIMIT_INGEST=enforce nuqati-api:ci
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18001/api/v1/ready >/dev/null 2>&1 && break; sleep 2; done
-          BASE=http://127.0.0.1:18001 API_CONTAINER=nq-lburst measure burst 6 burst --clients 300 --offset 900 --rounds 3 --timeout 30 --gate || true
+          # Before Phase 4.1 the API stalled here: every worker thread waited for a database connection that another waiting
+          # request held (docs/OPERATIONS.md section 8). Now not one request may fail.
+          failed=0
+          BASE=http://127.0.0.1:18001 API_CONTAINER=nq-lburst measure burst 6 burst --clients 300 --offset 900 --rounds 3 --timeout 30 --gate || failed=1
           tail -n 1 results.jsonl | jq -c '{label, requests, statuses, p50_ms, p95_ms, max_ms, db_connections}'
+          exit "$failed"
 
       - name: Results, and checks on the whole run
         if: always()
@@ -525,8 +531,8 @@ jobs:
           test -s results.jsonl || { echo "no results were recorded"; exit 1; }
           db_rows=$(docker exec nq-ldb psql -U ci -d ci -Atc "SELECT count(*) FROM driver_locations")
           refused=$(docker logs nq-lapi 2>&1 | grep -c "rate_limit REFUSED" || true)
-          tracebacks=$(docker logs nq-lapi 2>&1 | grep -c "Traceback" || true)
-          echo "database rows: $db_rows, logged refusals: $refused, tracebacks: $tracebacks"
+          tracebacks=$(( $(docker logs nq-lapi 2>&1 | grep -c "Traceback" || true) + $(docker logs nq-lburst 2>&1 | grep -c "Traceback" || true) ))
+          echo "database rows: $db_rows, logged refusals: $refused, tracebacks (both API containers): $tracebacks"
           set +e
           python3 ops/loadtest/summary.py results.jsonl --db-rows "$db_rows" --refused-logged "$refused" --tracebacks "$tracebacks" > summary.md
           status=$?
@@ -542,6 +548,25 @@ jobs:
           done
           docker logs nq-lapi 2>&1 | tail -5
           exit "$status"
+
+      - name: Control run (informational) - the same burst with the request limit switched off, which shows what the limit fixes
+        if: always()
+        run: |
+          set -uo pipefail
+          docker run -d --name nq-lcontrol --network nq-l -p 18002:8000 \
+            -e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-ldb:5432/ci -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000 \
+            -e NUQATI_RATE_LIMIT_INGEST=enforce -e NUQATI_DB_REQUEST_SLOTS=0 nuqati-api:ci
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18002/api/v1/ready >/dev/null 2>&1 && break; sleep 2; done
+          timeout 200 python3 ops/loadtest/gps_load.py burst --base-url http://127.0.0.1:18002 --seed seed.json --tag control \
+            --clients 300 --offset 900 --rounds 3 --timeout 30 > control.json || true
+          queue_errors=$(docker logs nq-lcontrol 2>&1 | grep -c "QueuePool limit" || true)
+          if [ -s control.json ]; then
+            line=$(jq -c --arg q "$queue_errors" '{statuses, p50_ms, p95_ms, max_ms, queuepool_errors: $q}' control.json)
+          else
+            line="no result (the control run did not finish in time), queuepool_errors: $queue_errors"
+          fi
+          echo "control (limit off): $line"
+          { echo "### Control: burst of 300 phones with NUQATI_DB_REQUEST_SLOTS=0"; echo; echo "\`$line\`"; } >> "$GITHUB_STEP_SUMMARY"
 
   lint:
     name: Lint (advisory)

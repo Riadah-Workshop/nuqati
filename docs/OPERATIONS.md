@@ -74,6 +74,7 @@ Plan for the disk to hold the database **plus room for about 15 dumps** (14 days
 | Vehicles with trackers all offline | Is `teltonika` unhealthy in Coolify? `docker logs <teltonika-container>` | Unhealthy: the receiver is stuck, restart it. Healthy but silent: firewall, `TELTONIKA_ALLOWED_CIDRS`, SIM or APN problem |
 | Scheduled reports missing | Is `report_scheduler` unhealthy? `docker logs <report_scheduler-container>` | Unhealthy: stuck worker, restart it. Healthy: mail server settings (`last_error` of the report subscription) |
 | Drivers' phones show GPS points waiting to upload, `api` log has `rate_limit REFUSED` | `docker logs <api-container> --tail 200 \| grep rate_limit` | Section 7: a limit is too tight for real traffic. Set `NUQATI_RATE_LIMIT_INGEST=log` (or `off`) and redeploy; the phones keep their points and send them afterwards |
+| Many `500` answers at once, `api` log has `QueuePool limit ... reached` | `docker logs <api-container> 2>&1 \| grep -c QueuePool` | Section 8: the API ran out of database connections. It recovers by itself; send the lines to the developer. Check that `NUQATI_DB_REQUEST_SLOTS` is not `0` or very high |
 | Disk nearly full | `docker system df`, section 4 | Old images and build cache: `docker image prune`. Do **not** run `docker volume prune` |
 
 If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.md](compliance/INCIDENT_RESPONSE.md): the 72-hour clock starts when you become aware.
@@ -118,10 +119,39 @@ no name, e-mail or location.
 themselves are in `backend/app/rate_limits.py` (`RULES`) and need a code change to move.
 
 **Measured in CI.** The job "Load test (GPS ingestion)" runs the real API against PostgreSQL with up to 400 simulated phones
-(about 200 requests per second), a 100-sample backlog replay, an abusive client, and exports during ingestion, and prints a
+(about 200 requests per second), 300 phones at the same instant, a 100-sample backlog replay, an abusive client, and exports during ingestion, and prints a
 table (throughput, latency, API CPU and memory, database connections) in its summary page. It runs on a shared GitHub runner,
 so read it as "where does this design start to slow down", not as a promise about your server. See `ops/loadtest/README.md`.
 
 **Not covered:** login and password reset (they have their own database-backed throttling, `auth_limits.py`), the
 tracker receiver (a TCP service for hardware trackers, protected by `TELTONIKA_ALLOWED_CIDRS`), and unauthenticated
 routes (public branding, shared live-location links, the WhatsApp webhook).
+
+## 8. Many requests at once (database connections)
+
+The API keeps a small pool of database connections (5, plus up to 10 more when busy) and runs each request on one of 40
+worker threads. A request needs several of those threads one after another and keeps its connection from the login check until
+it has finished. When a few hundred requests arrived in the same instant (for example every phone uploading its backlog right
+after the API restarted), the first CI load test showed the workers all waiting for a connection while the requests that owned
+the connections waited for a worker: the API did nothing for 30 seconds, then answered the waiting requests with HTTP 500
+(`QueuePool limit of size 5 overflow 10 reached` in the `api` log), and then did it again. Phones keep their data and retry, but
+the API was unusable for minutes.
+
+Since Phase 4.1 a request is admitted only when a slot is free; the others wait in the event loop (no thread, no connection)
+for milliseconds. By default there are 10 slots, which is the 15 connections minus 5 kept free for the readiness check
+(`/api/v1/ready`), routes that open their own connection, and the migration. The CI job "Load test (GPS ingestion)" fires 300
+phones at the same instant (scenario "burst") and fails if any request is lost.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `NUQATI_DB_POOL_SIZE` | 5 | Connections kept open. |
+| `NUQATI_DB_MAX_OVERFLOW` | 10 | Extra connections opened when busy and closed afterwards. |
+| `NUQATI_DB_REQUEST_SLOTS` | pool total minus 5 (at least 1) | Requests handled at once. `0` switches the limit off (only for experiments; it brings the stall back). |
+
+Leave them empty. Raise `NUQATI_DB_POOL_SIZE` only together with the database's `max_connections` (PostgreSQL default 100;
+the API, the tracker receiver, the report scheduler and the backup job each take some). A request count above the pool total
+minus 1 is lowered automatically with a warning, because that is the setting that stalls.
+
+**Reading it in production.** `docker logs <api-container> 2>&1 | grep -c "QueuePool"` should be `0`. If it is not, send the
+lines to the developer. Slow answers under load with no such lines mean the requests are queuing for a slot: the database
+or the server is the limit, not the setting.
