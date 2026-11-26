@@ -1,8 +1,8 @@
 FROM node:22-alpine AS build
 WORKDIR /src
-COPY package*.json ./
-# Prefer the exact lockfile once generated; do not break this release before it exists.
-RUN if test -f package-lock.json; then npm ci; else npm install --no-audit --no-fund; fi
+COPY package.json package-lock.json ./
+# Exactly the versions in the committed lock file; the build fails if the lock file and package.json disagree.
+RUN npm ci --no-audit --no-fund
 COPY . .
 ENV VITE_API_BASE_URL=""
 ARG VITE_MAPTILER_API_KEY

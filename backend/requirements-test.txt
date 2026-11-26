@@ -1,6 +1,6 @@
 # Test-only dependencies. Install with:  pip install -r backend/requirements-test.txt
 # (docs/history/SECURITY_AUDIT_FIXES_2026-11-12.md refers to this file, but it was not in the repo.)
--r requirements.txt
+-r requirements.in
 pytest>=8,<9
 # fastapi.testclient.TestClient needs httpx
 httpx>=0.27,<1

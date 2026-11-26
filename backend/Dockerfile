@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# requirements.txt is generated from requirements.in with exact versions and checksums; pip refuses anything else.
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY backend/app ./app
 RUN useradd --create-home --uid 10001 nuqati
 USER nuqati

@@ -127,7 +127,7 @@ def test_migrations_are_inside_the_docker_build_context():
 
 
 def test_alembic_is_a_runtime_requirement():
-    assert re.search(r"^alembic>=1\.\d+,<2\s*$", (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8"), re.M)
+    assert re.search(r"^alembic>=1\.\d+,<2\s*$", (ROOT / "backend" / "requirements.in").read_text(encoding="utf-8"), re.M)
 
 
 def test_container_migrates_by_default_and_stops_on_failure():

@@ -55,7 +55,7 @@ Details, data flow and the trade-offs behind them: [`docs/ARCHITECTURE.md`](docs
 ## Repository layout
 
 ```
-backend/        FastAPI app (app/), tests (test_*.py), Dockerfile, requirements*.txt
+backend/        FastAPI app (app/), tests (test_*.py), Dockerfile, requirements.in (ranges) + requirements.txt (generated lock)
 web/            React + TypeScript dashboard (Vite), Caddyfile, Dockerfile
 driver_app/     Flutter driver app + Android (Kotlin) and iOS (Swift) tracking sources
 manager_app/    Flutter manager app

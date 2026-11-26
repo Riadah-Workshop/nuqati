@@ -46,11 +46,15 @@ jobs:
           python-version: "3.12" # same minor version as backend/Dockerfile
           cache: pip
           cache-dependency-path: |
+            backend/requirements.in
             backend/requirements.txt
             backend/requirements-test.txt
 
+      # The tests run on exactly the versions the Docker image installs (hashes checked), then the test-only tools are added.
       - name: Install dependencies
-        run: python -m pip install -r backend/requirements-test.txt
+        run: |
+          python -m pip install --require-hashes -r backend/requirements.txt
+          python -m pip install -r backend/requirements-test.txt
 
       - name: Byte-compile the application
         run: python -m compileall -q backend/app
@@ -98,17 +102,9 @@ jobs:
         with:
           node-version: 22 # same major version as web/Dockerfile
 
-      - name: Is a lockfile committed?
-        id: lock
-        run: echo "committed=$(test -f package-lock.json && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
+      # Exactly the committed lock file (the same command as web/Dockerfile).
       - name: Install dependencies
-        run: |
-          if [ "${{ steps.lock.outputs.committed }}" = "true" ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
 
       # `npm run build` is `tsc -b && vite build`: strict type-check, then bundle.
       - name: Type-check and build
@@ -120,18 +116,6 @@ jobs:
         env:
           VITE_MAPTILER_API_KEY: ci-placeholder
         run: node scripts/check-map-frames.mjs
-
-      - name: Publish the generated lockfile
-        if: steps.lock.outputs.committed == 'false'
-        run: echo "::notice::web/package-lock.json is not committed. Download the 'web-package-lock' artifact from this run and commit it, then CI and Docker will use 'npm ci'."
-
-      - name: Upload the generated lockfile
-        if: steps.lock.outputs.committed == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-package-lock
-          path: web/package-lock.json
-          if-no-files-found: warn
 
   docker:
     name: Docker, compose and Caddy
@@ -158,6 +142,13 @@ jobs:
       # Same context and Dockerfile as Coolify: this is what the activated .dockerignore must satisfy.
       - name: Build the API image
         run: docker build -f backend/Dockerfile -t nuqati-api:ci .
+
+      # The dashboard image as compose/Coolify build it: npm ci from the lock file on node:22-alpine, type-check, bundle, Caddy.
+      - name: Build the web image
+        run: docker build -f web/Dockerfile --build-arg VITE_MAPTILER_API_KEY=ci-placeholder -t nuqati-web:ci web
+
+      - name: Web image contains the built dashboard
+        run: docker run --rm --entrypoint sh nuqati-web:ci -c 'test -s /srv/index.html && ls /srv/assets | head -5'
 
       - name: API image contains the app and its dependencies
         run: >-

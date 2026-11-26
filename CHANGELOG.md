@@ -5,6 +5,24 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.1: lock files (reproducible builds)
+
+#### Changed
+- **Backend:** `backend/requirements.in` now holds the version ranges; `backend/requirements.txt` is generated from it
+  (`pip-compile --generate-hashes`, Python 3.12) with the exact version and the SHA-256 of every file, 34 packages. The Docker
+  image installs it with `pip install --require-hashes`, so a redeploy can no longer pull a newer or tampered package.
+  CI installs the same file before the test-only tools, so the tests run on what ships.
+- **Web:** `web/package-lock.json` is committed; `web/Dockerfile` and CI run `npm ci` (no more `npm install` fallback; the build
+  fails if the lock file and `package.json` disagree).
+- `backend/test_lock_files.py` (7 tests): every range is satisfied by the locked version, every pin has checksums, the lock was made
+  for the image's Python, the web lock matches `package.json` and has integrity hashes, images and CI install exactly the lock files.
+- Weekly `pip-audit` now audits the locked versions, i.e. what is deployed.
+
+#### Notes
+- Dependabot updates `requirements.in` and `requirements.txt` together (pip-compile support) and `package.json` with `package-lock.json`.
+  Its open "update requirement" pull requests for the backend (#7, #9, #10, #12, #14) are superseded: the lock already resolves to the
+  newest versions their ranges allowed.
+
 ### Phase 4.2: encrypted off-server backup copy (Google Drive)
 
 #### Added
