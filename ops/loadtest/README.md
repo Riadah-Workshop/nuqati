@@ -18,7 +18,7 @@ answers such a sample (`filtered_short_interval`) without storing it. The CI job
 starts to slow down and whether anything breaks or gets lost; they are not a promise about production. The CI job fails on
 errors (a failed request, a Python traceback in the API log), refused normal phones, lost samples and a slow first step (p95
 above 1.5 s at 50 phones), not on the larger steps' speed, which is only reported. Past what one process can serve (about
-170 samples per second on the runner, 400 phones) requests wait their turn: latency grows, nothing fails.
+140 to 170 samples per second on the runner, 400 phones) requests wait their turn: latency grows, nothing fails.
 
 **The burst scenario** (`burst`, 300 phones sending at the same instant, three rounds, on a second API container) reproduces
 what happens when every phone uploads at once after an API restart. Before the request limit of Phase 4.1 (`docs/OPERATIONS.md`

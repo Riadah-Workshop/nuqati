@@ -152,9 +152,9 @@ Leave them empty. Raise `NUQATI_DB_POOL_SIZE` only together with the database's 
 the API, the tracker receiver, the report scheduler and the backup job each take some). A request count above the pool total
 minus 1 is lowered automatically with a warning, because that is the setting that stalls.
 
-**How much one API process serves.** On the CI runner (shared, 4 vCPU) one process handled about 170 GPS samples per second,
-roughly 340 phones that are driving at once (one sample every 2 seconds). Above that the requests wait their turn (400 phones:
-median answer 2 seconds) and none fails or is lost. If the fleet grows toward that size, tell the developer before it is
+**How much one API process serves.** On the CI runner (shared, 4 vCPU) one process handled about 140 to 170 GPS samples per second
+in two runs, roughly 280 to 340 phones that are driving at once (one sample every 2 seconds). Above that the requests wait
+their turn (400 phones: median answer 2 to 3 seconds) and none fails or is lost. If the fleet grows toward that size, tell the developer before it is
 reached: the next step is a second API process, which also needs the per-user limits to move out of memory.
 
 **Reading it in production.** `docker logs <api-container> 2>&1 | grep -c "QueuePool"` should be `0`. If it is not, send the
