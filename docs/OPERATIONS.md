@@ -117,6 +117,11 @@ no name, e-mail or location.
 **If people are refused who should not be.** Set the setting to `log` (or `off`) in Coolify and redeploy; the limits
 themselves are in `backend/app/rate_limits.py` (`RULES`) and need a code change to move.
 
+**Measured in CI.** The job "Load test (GPS ingestion)" runs the real API against PostgreSQL with up to 400 simulated phones
+(about 200 requests per second), a 100-sample backlog replay, an abusive client, and exports during ingestion, and prints a
+table (throughput, latency, API CPU and memory, database connections) in its summary page. It runs on a shared GitHub runner,
+so read it as "where does this design start to slow down", not as a promise about your server. See `ops/loadtest/README.md`.
+
 **Not covered:** login and password reset (they have their own database-backed throttling, `auth_limits.py`), the
 tracker receiver (a TCP service for hardware trackers, protected by `TELTONIKA_ALLOWED_CIDRS`), and unauthenticated
 routes (public branding, shared live-location links, the WhatsApp webhook).

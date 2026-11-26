@@ -1,0 +1,19 @@
+# GPS ingestion load test
+
+Measures the real API container (one process, as in `compose.yml`) with a real PostgreSQL 16 and simulated driver phones.
+It runs as the CI job **Load test (GPS ingestion)** on every pull request. Standard library only, no packages to install.
+
+| File | What it does |
+|---|---|
+| `seed.py` | Run inside the API image. Creates one company with N drivers (user, device session, vehicle, active trip) and a few administrators and prints their signed tokens as JSON. Refuses to run unless `NUQATI_LOADTEST_DISPOSABLE=1`, so it cannot be pointed at production by accident. |
+| `gps_load.py` | The load generator. Scenarios: `steady` (N phones, one sample every 2 s, like the app), `replay` (phones that were offline send 100 queued samples back to back), `abuse` (one client as fast as it can while normal phones keep working), `mixed` (normal phones while administrators export monthly reports). `--gate` makes it exit 1 when the scenario's expectations fail. |
+| `summary.py` | Turns the results into a table and checks the whole run: every accepted sample is in the database, no normal phone was ever refused, the abusive client's refusals were logged, no Python traceback in the API log. |
+| `lib.sh` | `measure`: runs one scenario while sampling the API's CPU and memory and the number of database connections. |
+
+**What the numbers mean.** A shared GitHub runner (4 vCPU) is not your server. Throughput and latency show where this design
+starts to slow down and whether anything breaks or gets lost; they are not a promise about production. The CI job fails on
+errors, refused normal phones, lost samples and a slow first step (p95 above 1.5 s at 50 phones), not on the larger steps'
+speed, which are only reported. The table is in the job's summary page.
+
+**Running it by hand** against a disposable database (never production): see the job `loadtest` in `.github/workflows/ci.yml`.
+Choose another size with `--drivers`, `--seconds` and `--interval`.
