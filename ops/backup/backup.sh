@@ -2,12 +2,15 @@
 # Nuqati scheduled PostgreSQL backup. POSIX sh: it runs on Alpine (busybox), so no bash-only features.
 #
 #   backup.sh loop    run forever: one backup at start if none is recent, then one per day (default)
-#   backup.sh once    take one backup now and exit (0 = ok, 1 = failed)
-#   backup.sh health  exit 0 only if the last successful backup is recent (used by the container healthcheck)
+#   backup.sh once    take one backup now (and copy it off the server when that is on) and exit
+#                     (0 = ok, 1 = the backup failed, 3 = the backup is good but the off-server copy failed)
+#   backup.sh health  exit 0 only if the last successful backup is recent (used by the container healthcheck); when the
+#                     off-server copy is switched on (NUQATI_OFFSITE, see offsite.sh) its age is checked as well
 #
 # Connection settings come from the standard libpq variables (PGHOST, PGUSER, PGPASSWORD, PGDATABASE).
 # A dump only counts as successful after `pg_restore --list` has read it back. It is written under a
 # temporary name and renamed at the end, so a half-written file is never mistaken for a backup.
+# After every good backup the dump is also copied, encrypted, to another provider when NUQATI_OFFSITE is set (offsite.sh).
 set -u
 
 DIR="${BACKUP_DIR:-/backups}"
@@ -16,6 +19,7 @@ KEEP_DAYS="${NUQATI_BACKUP_KEEP_DAYS:-14}"    # dumps older than this are delete
 MIN_KEEP="${NUQATI_BACKUP_MIN_KEEP:-3}"       # ... but the newest N are always kept
 MAX_AGE_H="${NUQATI_BACKUP_MAX_AGE_HOURS:-26}" # health fails when the last good backup is older
 RETRY_SECONDS="${NUQATI_BACKUP_RETRY_SECONDS:-3600}"
+OFFSITE_SH="${NUQATI_OFFSITE_SCRIPT:-$(dirname "$0")/offsite.sh}"
 
 log() { printf '%s backup: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -93,6 +97,27 @@ run_backup() {
   return 0
 }
 
+# ---- off-server copy (a no-op unless NUQATI_OFFSITE is set; all the work is in offsite.sh, which logs its own errors) ----
+
+offsite_configured() { case "${NUQATI_OFFSITE:-}" in ''|off) return 1 ;; *) return 0 ;; esac; }
+
+offsite_push() {
+  offsite_configured || return 0
+  sh "$OFFSITE_SH" push
+}
+
+# Called every minute while waiting for the next backup: a copy that failed (destination down, expired token) is retried
+# every RETRY_SECONDS until it works, without blocking the next backup on this server.
+offsite_retry_due() {
+  offsite_configured || return 0
+  sh "$OFFSITE_SH" pending || return 0
+  if [ -f "$DIR/OFFSITE_LAST_ATTEMPT" ] && [ $(( $(date +%s) - $(stat -c %Y "$DIR/OFFSITE_LAST_ATTEMPT" 2>/dev/null || echo 0) )) -lt "$RETRY_SECONDS" ]; then
+    return 0
+  fi
+  offsite_push || log "the off-server copy failed, retrying in ${RETRY_SECONDS}s"
+  return 0
+}
+
 wait_for_db() {
   until pg_isready -q; do
     log "waiting for the database"
@@ -113,6 +138,7 @@ health() {
   _age=$(hours_since "$DIR/LAST_OK")
   if [ "$_age" -ge "$MAX_AGE_H" ]; then echo "the last successful backup is ${_age} hours old (limit ${MAX_AGE_H})"; exit 1; fi
   echo "ok: last successful backup ${_age} hours ago"
+  if offsite_configured; then sh "$OFFSITE_SH" status || exit 1; fi
 }
 
 loop() {
@@ -122,6 +148,7 @@ loop() {
   wait_for_db
   if ! fresh_enough 20; then
     until run_backup; do log "retrying in ${RETRY_SECONDS}s"; nap "$RETRY_SECONDS"; done
+    offsite_push || log "the off-server copy failed, retrying in ${RETRY_SECONDS}s"
   fi
   while :; do
     _wait=$(seconds_until_next_run)
@@ -130,14 +157,19 @@ loop() {
       _chunk=60; [ "$_wait" -lt 60 ] && _chunk=$_wait
       nap "$_chunk"
       _wait=$(( _wait - _chunk ))
+      offsite_retry_due
     done
     until run_backup; do log "retrying in ${RETRY_SECONDS}s"; nap "$RETRY_SECONDS"; done
+    offsite_push || log "the off-server copy failed, retrying in ${RETRY_SECONDS}s"
   done
 }
 
 case "${1:-loop}" in
   loop)   loop ;;
-  once)   run_backup; exit $? ;;
+  once)   run_backup || exit 1
+          offsite_push || exit 3   # 3 = the backup is good but the off-server copy failed
+          exit 0 ;;
   health) health ;;
-  *)      echo "usage: backup.sh [loop|once|health]" >&2; exit 2 ;;
+  offsite-retry) offsite_retry_due; exit 0 ;;   # what the loop does every minute: copy off the server if one is pending and due
+  *)      echo "usage: backup.sh [loop|once|health|offsite-retry]" >&2; exit 2 ;;
 esac
