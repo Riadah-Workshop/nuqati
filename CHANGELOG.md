@@ -31,6 +31,33 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 - The Google Drive side itself (credentials, quota, token expiry) cannot be tried in CI: it needs real credentials and this
   repository is public. `offsite.sh test` does it on the server.
 
+### Phase 4.1: request limits per user (security finding S9)
+
+#### Added
+- `backend/app/rate_limits.py`: in-memory token buckets per user for GPS samples, safety events, tracking heartbeats,
+  exports and report screens (nine routes). `NUQATI_RATE_LIMIT_INGEST` (default `log`: only logs what it would refuse)
+  and `NUQATI_RATE_LIMIT_REPORTS` (default `enforce`); `off` / `log` / `enforce`. See `docs/OPERATIONS.md` section 7.
+- CI job **Load test (GPS ingestion)** (`ops/loadtest/`): the real API container and PostgreSQL with 50, 100, 200 and 400 simulated
+  phones, a 20-phone backlog replay (2,000 samples), an abusive client next to 50 normal phones, and exports during ingestion.
+  It fails on errors, refused normal phones, lost samples or tracebacks; speed is reported in the job summary, not judged.
+- `backend/app/db_pool.py`: the database connection pool is now explicit (`NUQATI_DB_POOL_SIZE` 5, `NUQATI_DB_MAX_OVERFLOW` 10, the
+  same numbers as before) and a request is admitted only when a slot is free (`NUQATI_DB_REQUEST_SLOTS`, default 10). See
+  `docs/OPERATIONS.md` section 8.
+- A refused request answers HTTP 429 with `Retry-After`. The driver app keeps the data and retries; the text never contains the one
+  phrase the app uses to drop a GPS point, and a test reads `driver_app/main.dart` to keep it that way.
+
+#### Fixed
+- **The API stalled when many requests arrived at once.** The load test (300 phones sending at the same instant, and 400 phones
+  at 200 requests per second) made every worker thread wait for a database connection that another waiting request held; the API
+  did nothing for 30 seconds, answered the waiting requests with HTTP 500 (`QueuePool limit of size 5 overflow 10 reached`) and
+  repeated. It could happen in production when all phones upload their backlog after an API restart. `get_db` is now asynchronous
+  and admits only as many requests as the pool can serve (10 of 15 connections; the rest are kept for the readiness check and
+  routes that open their own connection), the others wait in the event loop without holding a thread. Phones kept their data
+  during the stalls (the app retries), so nothing was lost, but the API was unusable. Measured in CI with 300 phones sending at
+  once: before, 600 of 900 requests failed; with the limit switched off in a control run, 731 of 900 failed (107 pool errors);
+  after, 0 of 900 failed (p95 1.6 s). 400 phones (140 to 170 requests per second) now complete with a median answer of 2 to 3 s instead
+  of failing.
+
 ### Phase 3.4: the application no longer creates tables itself
 
 #### Changed

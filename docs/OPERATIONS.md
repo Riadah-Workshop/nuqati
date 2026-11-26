@@ -74,6 +74,8 @@ Plan for the disk to hold the database **plus room for about 15 dumps** (14 days
 | `db_backup` unhealthy and `docker exec <db_backup-container> /usr/local/bin/backup.sh health` says `off-server copy: ...` | `docker logs <db_backup-container> --tail 50 \| grep offsite`, then `docker exec <db_backup-container> /usr/local/bin/offsite.sh test` | The local dumps are fine; the copy to Google Drive is not. `invalid settings`: fix the named setting in Coolify. `upload ... failed`: expired or revoked Google token (a personal-account token expires after 7 days when the Google app is left in "Testing"), full Drive, or a removed Shared Drive membership: see [BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md) 2b. The copy is retried every hour by itself |
 | Vehicles with trackers all offline | Is `teltonika` unhealthy in Coolify? `docker logs <teltonika-container>` | Unhealthy: the receiver is stuck, restart it. Healthy but silent: firewall, `TELTONIKA_ALLOWED_CIDRS`, SIM or APN problem |
 | Scheduled reports missing | Is `report_scheduler` unhealthy? `docker logs <report_scheduler-container>` | Unhealthy: stuck worker, restart it. Healthy: mail server settings (`last_error` of the report subscription) |
+| Drivers' phones show GPS points waiting to upload, `api` log has `rate_limit REFUSED` | `docker logs <api-container> --tail 200 \| grep rate_limit` | Section 7: a limit is too tight for real traffic. Set `NUQATI_RATE_LIMIT_INGEST=log` (or `off`) and redeploy; the phones keep their points and send them afterwards |
+| Many `500` answers at once, `api` log has `QueuePool limit ... reached` | `docker logs <api-container> 2>&1 \| grep -c QueuePool` | Section 8: the API ran out of database connections. It recovers by itself; send the lines to the developer. Check that `NUQATI_DB_REQUEST_SLOTS` is not `0` or very high |
 | Disk nearly full | `docker system df`, section 4 | Old images and build cache: `docker image prune`. Do **not** run `docker volume prune` |
 
 If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.md](compliance/INCIDENT_RESPONSE.md): the 72-hour clock starts when you become aware.
@@ -84,3 +86,78 @@ If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.
 - No metrics, dashboards or automatic alerts from inside the system. The uptime monitor and Coolify notifications above are the alarms.
 - Off-server backup copies are manual ([BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md) 2b).
 - Database migrations (Alembic) run automatically before the API starts; there is no downgrade (undo a change with a new revision or restore a backup). The workers (`teltonika`, `report_scheduler`) do not wait for the API: on a brand-new install they log errors for the few seconds until the API has migrated, then work (the scheduler retries every 30 s, trackers resend).
+
+## 7. Rate limits (per user)
+
+The API limits how fast one logged-in user can call the routes that are cheap to abuse or expensive to run. The count
+is kept in memory by user id, so it does not depend on the proxy setup and adds no database work. The API runs as one
+process; if it is ever started with several workers, each counts separately and the effective limit is that many times
+looser. A restart resets all counters.
+
+| What | Burst, then per second | Setting | Default |
+|---|---|---|---|
+| GPS samples (`/mobile/trips/{id}/sample`) | 300, then 5 | `NUQATI_RATE_LIMIT_INGEST` | `log` |
+| Safety events | 100, then 2 | same | `log` |
+| Tracking heartbeats | 20, then 0.5 | same | `log` |
+| Exports (xlsx, csv, pdf, handover PDF) | 10, then 0.2 (12 per minute) | `NUQATI_RATE_LIMIT_REPORTS` | `enforce` |
+| Report screens (fleet, monthly, concept reports) | 60, then 1 | same | `enforce` |
+
+Values: `off` (no counting), `log` (log a line, let the request through), `enforce` (answer HTTP 429 with `Retry-After`).
+An unknown value is ignored and the default applies, so a typo cannot switch protection off.
+
+**Why ingestion starts in `log`.** The numbers come from reading the driver app (about one GPS request every 2 seconds
+while driving, up to 100 in a row when it replays a backlog, a heartbeat each minute), not from measuring your fleet.
+In `log` mode nothing is refused; the `api` log shows `rate_limit WOULD_REFUSE ... scope=... user=...` (at most one line
+per user and scope per minute) when a user would have been. After about a week with no such lines, set
+`NUQATI_RATE_LIMIT_INGEST=enforce`. With `enforce`, a refused GPS point is **not lost**: the app treats the 429 as a
+temporary failure, keeps the point and sends it at its next sync (every 30 to 60 seconds). The one 429 text the app
+treats as "drop this point" is never used by the server (a test checks both sides).
+
+**Reading the log.** `docker logs <api-container> 2>&1 | grep rate_limit`. The line names the user id and the scope only;
+no name, e-mail or location.
+
+**If people are refused who should not be.** Set the setting to `log` (or `off`) in Coolify and redeploy; the limits
+themselves are in `backend/app/rate_limits.py` (`RULES`) and need a code change to move.
+
+**Measured in CI.** The job "Load test (GPS ingestion)" runs the real API against PostgreSQL with up to 400 simulated phones
+(about 200 requests per second), 300 phones at the same instant, a 100-sample backlog replay, an abusive client, and exports during ingestion, and prints a
+table (throughput, latency, API CPU and memory, database connections) in its summary page. It runs on a shared GitHub runner,
+so read it as "where does this design start to slow down", not as a promise about your server. See `ops/loadtest/README.md`.
+
+**Not covered:** login and password reset (they have their own database-backed throttling, `auth_limits.py`), the
+tracker receiver (a TCP service for hardware trackers, protected by `TELTONIKA_ALLOWED_CIDRS`), and unauthenticated
+routes (public branding, shared live-location links, the WhatsApp webhook).
+
+## 8. Many requests at once (database connections)
+
+The API keeps a small pool of database connections (5, plus up to 10 more when busy) and runs each request on one of 40
+worker threads. A request needs several of those threads one after another and keeps its connection from the login check until
+it has finished. When a few hundred requests arrived in the same instant (for example every phone uploading its backlog right
+after the API restarted), the first CI load test showed the workers all waiting for a connection while the requests that owned
+the connections waited for a worker: the API did nothing for 30 seconds, then answered the waiting requests with HTTP 500
+(`QueuePool limit of size 5 overflow 10 reached` in the `api` log), and then did it again. Phones keep their data and retry, but
+the API was unusable for minutes.
+
+Since Phase 4.1 a request is admitted only when a slot is free; the others wait in the event loop (no thread, no connection)
+for milliseconds. By default there are 10 slots, which is the 15 connections minus 5 kept free for the readiness check
+(`/api/v1/ready`), routes that open their own connection, and the migration. The CI job "Load test (GPS ingestion)" fires 300
+phones at the same instant (scenario "burst") and fails if any request is lost.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `NUQATI_DB_POOL_SIZE` | 5 | Connections kept open. |
+| `NUQATI_DB_MAX_OVERFLOW` | 10 | Extra connections opened when busy and closed afterwards. |
+| `NUQATI_DB_REQUEST_SLOTS` | pool total minus 5 (at least 1) | Requests handled at once. `0` switches the limit off (only for experiments; it brings the stall back). |
+
+Leave them empty. Raise `NUQATI_DB_POOL_SIZE` only together with the database's `max_connections` (PostgreSQL default 100;
+the API, the tracker receiver, the report scheduler and the backup job each take some). A request count above the pool total
+minus 1 is lowered automatically with a warning, because that is the setting that stalls.
+
+**How much one API process serves.** On the CI runner (shared, 4 vCPU) one process handled about 140 to 170 GPS samples per second
+in two runs, roughly 280 to 340 phones that are driving at once (one sample every 2 seconds). Above that the requests wait
+their turn (400 phones: median answer 2 to 3 seconds) and none fails or is lost. If the fleet grows toward that size, tell the developer before it is
+reached: the next step is a second API process, which also needs the per-user limits to move out of memory.
+
+**Reading it in production.** `docker logs <api-container> 2>&1 | grep -c "QueuePool"` should be `0`. If it is not, send the
+lines to the developer. Slow answers under load with no such lines mean the requests are queuing for a slot: the database
+or the server is the limit, not the setting.

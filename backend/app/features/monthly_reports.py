@@ -15,6 +15,7 @@ from ..audit import audit_commit
 from ..auth import allow, current_user, scope
 from ..db import get_db
 from ..models import Company, Driver, DrivingEvent, Trip, User, Vehicle
+from ..rate_limits import limit
 from .fleet_settings import thresholds
 from .scoring import calculate_safety_score, flexible_rag_policy, score_policy
 
@@ -53,7 +54,7 @@ def _monthly_fleet_data(db, cid, year, month, driver_id=None):
         rows.append({'driver_id':d.id,'driver_name':d.full_name,'trip_count':len(dt),'distance_km':round(km,2),'driving_hours':round(seconds/3600,2),'active_days':len({t.started_at.date() for t in dt}),'score':score['score'],'rag':rag,'score_model':score.get('score_model','legacy_100'),'score_breakdown':score,'risk':score['risk'],'violations':counts,'total_violations':sum(counts[k] for k in ('speeding','harsh_braking','harsh_acceleration','harsh_cornering')),'vehicles':by_vehicle})
     return {'company_id':cid,'company_name':company.name if company else '', 'year':year,'month':month,'month_label':f'{year}-{month:02d}','period_start':start.isoformat(),'period_end_exclusive':end.isoformat(),'score_model':'flexible_rag' if flexible_rag_policy(db,cid)['enabled'] else 'legacy_100','vehicles':vehicle_rows,'drivers':rows,'notes':['All times are UTC. Only completed trips are counted for utilization.','Driving hours are elapsed trip durations, not engine-on hours.','Excessive speeding is included in speeding totals and must not be added again.','No score means insufficient distance; no RAG color is assigned.','Vehicle assignment is current; monthly vehicle usage is based on recorded trips.']}
 
-@app.get('/api/v1/fleet/monthly-reports')
+@app.get('/api/v1/fleet/monthly-reports',dependencies=[Depends(limit('report'))])
 def monthly_fleet_reports(year:int,month:int,company_id:int|None=None,driver_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
     allow(user,'super_admin','company_admin','fleet_manager','representative','workshop_staff')
     if year<2020 or year>2100 or month<1 or month>12:raise HTTPException(422,'Invalid year or month')
@@ -62,7 +63,7 @@ def monthly_fleet_reports(year:int,month:int,company_id:int|None=None,driver_id:
     scope(user,cid)
     return _monthly_fleet_data(db,cid,year,month,driver_id)
 
-@app.get('/api/v1/fleet/monthly-reports/export')
+@app.get('/api/v1/fleet/monthly-reports/export',dependencies=[Depends(limit('export'))])
 def monthly_fleet_export(year:int,month:int,format:Literal['pdf','csv','xlsx'],kind:Literal['vehicles','utilization','rag','violations'],company_id:int|None=None,driver_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
     data=monthly_fleet_reports(year,month,company_id,driver_id,db,user)
     audit_commit(db,'report.export',actor=user,target_type='monthly_report',target_id=f'{year}-{month:02d}',company_id=(company_id if user.role=='super_admin' else user.company_id),detail={'kind':kind,'format':format,'driver_id':driver_id})

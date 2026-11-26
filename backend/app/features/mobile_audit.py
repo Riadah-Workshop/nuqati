@@ -13,6 +13,7 @@ from ..api_app import app
 from ..auth import allow, current_user
 from ..db import engine, get_db
 from ..models import User, Vehicle
+from ..rate_limits import limit
 from .shared import own_driver
 
 # Privacy evidence: append-only, idempotent, and intentionally location-free.
@@ -170,7 +171,7 @@ class TrackingHeartbeatIn(BaseModel):
     queued_trips: int | None = Field(default=None,ge=0,le=10000000)
     captured_at: datetime
 
-@app.post('/api/v1/mobile/tracking-heartbeat')
+@app.post('/api/v1/mobile/tracking-heartbeat',dependencies=[Depends(limit('heartbeat'))])
 def mobile_tracking_heartbeat(payload: TrackingHeartbeatIn, db: Session=Depends(get_db), user: User=Depends(current_user)):
     driver=own_driver(db,user)
     captured=payload.captured_at
