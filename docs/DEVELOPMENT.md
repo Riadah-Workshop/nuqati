@@ -105,11 +105,15 @@ Notes:
   GitHub when they were added. If the first run is red, read the log: it is either a typo in a
   workflow or a real problem the old process never checked (for example a TypeScript error the
   production Docker build would also have hit). Fix forward in a small pull request.
-- **Web lockfile.** `web/package-lock.json` is not committed, so CI uses `npm install` and
-  uploads the generated lockfile as the artifact `web-package-lock`. Download it from the first
-  green run and commit it; from then on CI and the Docker build use `npm ci`.
+- **Lock files.** Both are committed, so CI and Docker install exactly the same versions (`test_lock_files.py` guards this).
+  *Web:* `web/package-lock.json`, installed with `npm ci`; to change a dependency edit `web/package.json` and run
+  `npm install --package-lock-only --ignore-scripts` with Node 22, then commit both files.
+  *Backend:* edit the ranges in `backend/requirements.in`; `backend/requirements.txt` is generated from it and has the exact
+  versions with SHA-256 hashes (`pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in`, run with
+  **Python 3.12**, the image's version, e.g. in `python:3.12-slim`). Never edit `requirements.txt` by hand. Dependabot updates both
+  files together. If `test_lock_files.py` fails after a dependency change, the lock file is out of date.
 - **Security checks are advisory.** Read the artifacts of the latest `security.yml` run now and then (the Python job
-  also attaches `backend-requirements.lock.txt`, today's resolved versions, for when you want pinned dependencies).
+  also attaches the audited list of locked versions).
   The CodeQL job also tries to show results under *Security → Code scanning*; that needs a public repository or GitHub
   Advanced Security, so on a private repository without it only the downloadable SARIF file exists.
 - **Lint is advisory.** Ruff runs with a minimal rule set (syntax errors, undefined names). To make
