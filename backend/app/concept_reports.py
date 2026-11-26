@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from .auth import allow, current_user, scope
 from .db import get_db
 from .models import Company, Driver, DriverLocation, DriverMetadata, DrivingEvent, Trip, User, Vehicle
+from .rate_limits import limit
 
 RIYADH = ZoneInfo('Asia/Riyadh')
 KINDS = ('movement', 'daily-trips', 'utilization', 'daily-rag')
@@ -412,12 +413,12 @@ def register_concept_reports(app, **deps):
         if db.get(Company,cid) is None:raise HTTPException(404,'Company not found')
         return _dataset(db,cid,kind,start_date,end_date,driver_id,vehicle_id,deps)
 
-    @app.get('/api/v1/fleet/concept-reports/{kind}')
+    @app.get('/api/v1/fleet/concept-reports/{kind}',dependencies=[Depends(limit('report'))])
     def concept_report(kind:str,start_date:date,end_date:date,driver_id:int|None=None,vehicle_id:int|None=None,
                        company_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
         return read(kind,start_date,end_date,driver_id,vehicle_id,company_id,db,user)
 
-    @app.get('/api/v1/fleet/concept-reports/{kind}/export')
+    @app.get('/api/v1/fleet/concept-reports/{kind}/export',dependencies=[Depends(limit('export'))])
     def concept_report_export(kind:str,start_date:date,end_date:date,format:str='xlsx',lang:str='en',
                               driver_id:int|None=None,vehicle_id:int|None=None,company_id:int|None=None,
                               db:Session=Depends(get_db),user:User=Depends(current_user)):

@@ -73,6 +73,7 @@ Plan for the disk to hold the database **plus room for about 15 dumps** (14 days
 | `db_backup` unhealthy | `docker logs <db_backup-container> --tail 50` | `ERROR pg_dump failed`: the database is down or the password changed. Fix it, then `docker exec <db_backup-container> /usr/local/bin/backup.sh once` |
 | Vehicles with trackers all offline | Is `teltonika` unhealthy in Coolify? `docker logs <teltonika-container>` | Unhealthy: the receiver is stuck, restart it. Healthy but silent: firewall, `TELTONIKA_ALLOWED_CIDRS`, SIM or APN problem |
 | Scheduled reports missing | Is `report_scheduler` unhealthy? `docker logs <report_scheduler-container>` | Unhealthy: stuck worker, restart it. Healthy: mail server settings (`last_error` of the report subscription) |
+| Drivers' phones show GPS points waiting to upload, `api` log has `rate_limit REFUSED` | `docker logs <api-container> --tail 200 \| grep rate_limit` | Section 7: a limit is too tight for real traffic. Set `NUQATI_RATE_LIMIT_INGEST=log` (or `off`) and redeploy; the phones keep their points and send them afterwards |
 | Disk nearly full | `docker system df`, section 4 | Old images and build cache: `docker image prune`. Do **not** run `docker volume prune` |
 
 If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.md](compliance/INCIDENT_RESPONSE.md): the 72-hour clock starts when you become aware.
@@ -83,3 +84,39 @@ If personal data may have been exposed, switch to [compliance/INCIDENT_RESPONSE.
 - No metrics, dashboards or automatic alerts from inside the system. The uptime monitor and Coolify notifications above are the alarms.
 - Off-server backup copies are manual ([BACKUP_RESTORE.md](compliance/BACKUP_RESTORE.md) 2b).
 - Database migrations (Alembic) run automatically before the API starts; there is no downgrade (undo a change with a new revision or restore a backup). The workers (`teltonika`, `report_scheduler`) do not wait for the API: on a brand-new install they log errors for the few seconds until the API has migrated, then work (the scheduler retries every 30 s, trackers resend).
+
+## 7. Rate limits (per user)
+
+The API limits how fast one logged-in user can call the routes that are cheap to abuse or expensive to run. The count
+is kept in memory by user id, so it does not depend on the proxy setup and adds no database work. The API runs as one
+process; if it is ever started with several workers, each counts separately and the effective limit is that many times
+looser. A restart resets all counters.
+
+| What | Burst, then per second | Setting | Default |
+|---|---|---|---|
+| GPS samples (`/mobile/trips/{id}/sample`) | 300, then 5 | `NUQATI_RATE_LIMIT_INGEST` | `log` |
+| Safety events | 100, then 2 | same | `log` |
+| Tracking heartbeats | 20, then 0.5 | same | `log` |
+| Exports (xlsx, csv, pdf, handover PDF) | 10, then 0.2 (12 per minute) | `NUQATI_RATE_LIMIT_REPORTS` | `enforce` |
+| Report screens (fleet, monthly, concept reports) | 60, then 1 | same | `enforce` |
+
+Values: `off` (no counting), `log` (log a line, let the request through), `enforce` (answer HTTP 429 with `Retry-After`).
+An unknown value is ignored and the default applies, so a typo cannot switch protection off.
+
+**Why ingestion starts in `log`.** The numbers come from reading the driver app (about one GPS request every 2 seconds
+while driving, up to 100 in a row when it replays a backlog, a heartbeat each minute), not from measuring your fleet.
+In `log` mode nothing is refused; the `api` log shows `rate_limit WOULD_REFUSE ... scope=... user=...` (at most one line
+per user and scope per minute) when a user would have been. After about a week with no such lines, set
+`NUQATI_RATE_LIMIT_INGEST=enforce`. With `enforce`, a refused GPS point is **not lost**: the app treats the 429 as a
+temporary failure, keeps the point and sends it at its next sync (every 30 to 60 seconds). The one 429 text the app
+treats as "drop this point" is never used by the server (a test checks both sides).
+
+**Reading the log.** `docker logs <api-container> 2>&1 | grep rate_limit`. The line names the user id and the scope only;
+no name, e-mail or location.
+
+**If people are refused who should not be.** Set the setting to `log` (or `off`) in Coolify and redeploy; the limits
+themselves are in `backend/app/rate_limits.py` (`RULES`) and need a code change to move.
+
+**Not covered:** login and password reset (they have their own database-backed throttling, `auth_limits.py`), the
+tracker receiver (a TCP service for hardware trackers, protected by `TELTONIKA_ALLOWED_CIDRS`), and unauthenticated
+routes (public branding, shared live-location links, the WhatsApp webhook).

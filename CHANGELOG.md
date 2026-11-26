@@ -5,6 +5,15 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 4.1: request limits per user (security finding S9)
+
+#### Added
+- `backend/app/rate_limits.py`: in-memory token buckets per user for GPS samples, safety events, tracking heartbeats,
+  exports and report screens (nine routes). `NUQATI_RATE_LIMIT_INGEST` (default `log`: only logs what it would refuse)
+  and `NUQATI_RATE_LIMIT_REPORTS` (default `enforce`); `off` / `log` / `enforce`. See `docs/OPERATIONS.md` section 7.
+- A refused request answers HTTP 429 with `Retry-After`. The driver app keeps the data and retries; the text never contains the one
+  phrase the app uses to drop a GPS point, and a test reads `driver_app/main.dart` to keep it that way.
+
 ### Phase 3.4: the application no longer creates tables itself
 
 #### Changed

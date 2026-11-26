@@ -105,6 +105,9 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
   tokens last 30 days.
 - **Brute-force protection:** database-backed rate limits on login, reset and email-change
   endpoints (`auth_limits.py`); identifiers are stored only as HMAC digests.
+- **Request limits per user:** `rate_limits.py` limits GPS samples, safety events, tracking heartbeats, exports and
+  report screens with in-memory token buckets keyed by user id (not IP address, so the proxy chain does not matter).
+  Ingestion starts in log-only mode, exports and reports are enforced. Details and sizing: `docs/OPERATIONS.md` section 7.
 - **Secrets:** `NUQATI_AUTH_SECRET` (at least 32 characters) signs every token. Changing it
   signs everyone out, unless the old value is put in `NUQATI_AUTH_SECRET_PREVIOUS` for the
   rotation window: that value is accepted for verifying only, never for signing

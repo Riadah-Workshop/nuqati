@@ -13,6 +13,7 @@ from ..api_app import app
 from ..auth import allow, current_user, scope
 from ..db import engine, get_db
 from ..models import Driver, DriverLocation, DrivingEvent, OdometerReading, Trip, User, Vehicle
+from ..rate_limits import limit
 from .driving_policy import event_condition_view, gps_compare
 from .fleet_settings import event_policy, severity_settings, thresholds
 from .geofence_zones import phase4_candidates, phase4_settings
@@ -152,7 +153,7 @@ def _mobile_replay_days(db, trip, stable_id):
         return 90  # Same maximum age as offline trip creation.
     return 14
 
-@app.post('/api/v1/mobile/trips/{trip_id}/sample')
+@app.post('/api/v1/mobile/trips/{trip_id}/sample',dependencies=[Depends(limit('gps_sample'))])
 def submit_sample(trip_id:int,data:Sample,db:Session=Depends(get_db),user:User=Depends(current_user)):
     d=own_driver(db,user);trip=db.get(Trip,trip_id)
     if not trip or trip.driver_id!=d.id or trip.company_id!=d.company_id: raise HTTPException(404,'Trip not found')
@@ -274,7 +275,7 @@ class LocalSafetyEvent(BaseModel):
     recorded_at: datetime
     value: float | None = None
 
-@app.post('/api/v1/mobile/trips/{trip_id}/safety-event')
+@app.post('/api/v1/mobile/trips/{trip_id}/safety-event',dependencies=[Depends(limit('safety_event'))])
 def sync_mobile_safety_event(trip_id:int,data:LocalSafetyEvent,db:Session=Depends(get_db),user:User=Depends(current_user)):
     d=own_driver(db,user);trip=db.get(Trip,trip_id)
     if not trip or trip.driver_id!=d.id or trip.company_id!=d.company_id:
@@ -523,7 +524,7 @@ def search_fleet_trips(start_at:datetime,end_at:datetime,company_id:int|None=Non
             event_counts[tid]=count
     return {'company_id':cid,'start_at':start_at.isoformat(),'end_at':end_at.isoformat(),'truncated':truncated,'trips':[{'id':t.id,'driver_id':t.driver_id,'driver_name':names.get(t.driver_id,'Unknown'),'vehicle_id':t.vehicle_id,'started_at':t.started_at.isoformat(),'ended_at':t.ended_at.isoformat() if t.ended_at else None,'status':t.status,'distance_km':t.distance_km,'event_count':event_counts.get(t.id,0)} for t in rows]}
 
-@app.get('/api/v1/fleet/report')
+@app.get('/api/v1/fleet/report',dependencies=[Depends(limit('report'))])
 def fleet_report(period:Literal['daily','weekly','monthly','yearly']='daily',company_id:int|None=None,driver_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(current_user)):
     allow(user,'super_admin','company_admin','fleet_manager','representative','workshop_staff','driver')
     cid=company_id if user.role=='super_admin' else user.company_id

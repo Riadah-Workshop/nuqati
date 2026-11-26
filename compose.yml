@@ -38,6 +38,8 @@ services:
       NUQATI_SMTP_USER: ${NUQATI_SMTP_USER:-}
       NUQATI_SMTP_PASSWORD: ${NUQATI_SMTP_PASSWORD:-}
       NUQATI_RUN_MIGRATIONS: ${NUQATI_RUN_MIGRATIONS:-1}
+      NUQATI_RATE_LIMIT_INGEST: ${NUQATI_RATE_LIMIT_INGEST:-log}
+      NUQATI_RATE_LIMIT_REPORTS: ${NUQATI_RATE_LIMIT_REPORTS:-enforce}
     depends_on:
       db:
         condition: service_healthy
