@@ -473,7 +473,7 @@ jobs:
           docker exec nq-ldb pg_isready -U ci -d ci
           docker build -f backend/Dockerfile -t nuqati-api:ci .
 
-      - name: Start the API as compose does (migrations on, GPS limits enforced) and create 600 simulated drivers
+      - name: Start the API as compose does (migrations on, GPS limits enforced) and create 900 simulated drivers
         run: |
           set -euo pipefail
           common="-e DATABASE_URL=postgresql+psycopg2://ci:ci-only@nq-ldb:5432/ci -e NUQATI_AUTH_SECRET=ci-only-secret-at-least-32-characters-long-0000"
@@ -481,7 +481,7 @@ jobs:
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:18000/api/v1/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:18000/api/v1/ready
           docker run --rm --network nq-l $common -e NUQATI_LOADTEST_DISPOSABLE=1 -e PYTHONPATH=/app \
-            -v "$PWD/ops/loadtest/seed.py:/tmp/seed.py:ro" nuqati-api:ci python /tmp/seed.py --drivers 600 > seed.json
+            -v "$PWD/ops/loadtest/seed.py:/tmp/seed.py:ro" nuqati-api:ci python /tmp/seed.py --drivers 900 > seed.json
           test -s seed.json
           jq '{company_id, drivers: (.drivers | length), admins: (.admin_tokens | length)}' seed.json
 
@@ -490,17 +490,19 @@ jobs:
           set -uo pipefail
           . ops/loadtest/lib.sh
           failed=0
+          # Every scenario has its own drivers (a trip that already received samples would see the first sample of the next
+          # step closer than 0.7 s to its last one, and the API answers such a sample without storing it).
           # 1 request every 2 seconds per driver, like the app. 50, 100, 200, 400 drivers = 25, 50, 100, 200 requests per second.
-          measure ramp-50  18 steady --drivers 50  --seconds 30 --gate --p95-ms 1500 || failed=1
-          measure ramp-100 18 steady --drivers 100 --seconds 30 --gate || failed=1
-          measure ramp-200 18 steady --drivers 200 --seconds 30 || true
-          measure ramp-400 18 steady --drivers 400 --seconds 30 || true
+          measure ramp-50  18 steady --drivers 50  --offset 0   --seconds 30 --gate --p95-ms 1500 || failed=1
+          measure ramp-100 18 steady --drivers 100 --offset 50  --seconds 30 --gate || failed=1
+          measure ramp-200 18 steady --drivers 200 --offset 150 --seconds 30 || true
+          measure ramp-400 18 steady --drivers 400 --offset 350 --seconds 30 || true
           # 20 phones that were offline each send 100 queued points back to back (the app's replay batch)
-          measure replay   6  replay --drivers 20 --offset 400 --samples 100 --gate || failed=1
+          measure replay   6  replay --drivers 20 --offset 750 --samples 100 --gate || failed=1
           # one client sends 700 samples as fast as it can while 50 normal phones keep working
-          measure abuse    15 abuse --offset 420 --requests 700 --steady 50 --seconds 40 --gate || failed=1
+          measure abuse    15 abuse --offset 770 --steady-offset 780 --requests 700 --steady 50 --seconds 40 --gate || failed=1
           # 50 normal phones while two administrators keep exporting the monthly report (xlsx, pdf, csv)
-          measure mixed    15 mixed --drivers 50 --exporters 2 --seconds 30 --gate || failed=1
+          measure mixed    15 mixed --drivers 50 --offset 830 --exporters 2 --seconds 30 --gate || failed=1
           exit "$failed"
 
       - name: Results, and checks on the whole run

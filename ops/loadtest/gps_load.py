@@ -2,7 +2,9 @@
 """Load generator for the GPS ingestion route and for exports (standard library only).
 
 Each simulated driver behaves like the driver app: one POST /api/v1/mobile/trips/{id}/sample every --interval seconds
-over a keep-alive connection. Data comes from ops/loadtest/seed.py (--seed file). Scenarios:
+over a keep-alive connection. Data comes from ops/loadtest/seed.py (--seed file). Give every scenario its own drivers
+(--offset): a driver that already sent samples would see its first new sample arrive closer than 0.7 s to its last one
+from the previous scenario, which the API answers without storing it. Scenarios:
 
   steady   N drivers send in real time for --seconds.
   replay   K drivers each send a backlog of --samples samples back to back (what the app does after being offline).
@@ -192,7 +194,7 @@ def scenario_replay(args, seed):
 
 def scenario_abuse(args, seed):
     abuser = seed['drivers'][args.offset]
-    steady_drivers = seed['drivers'][:args.steady]
+    steady_drivers = seed['drivers'][args.steady_offset:args.steady_offset + args.steady]
     stop, steady_out = threading.Event(), {}
 
     def steady_thread():
@@ -231,7 +233,7 @@ def scenario_abuse(args, seed):
 
 
 def scenario_mixed(args, seed):
-    drivers = seed['drivers'][:args.drivers]
+    drivers = seed['drivers'][args.offset:args.offset + args.drivers]
     now = datetime.now(timezone.utc)
     paths = [f'/api/v1/fleet/monthly-reports/export?year={now.year}&month={now.month}&format={fmt}&kind=rag'
              for fmt in ('xlsx', 'pdf', 'csv')]
@@ -284,6 +286,7 @@ def main(argv=None) -> int:
     parser.add_argument('--samples', type=int, default=100, help='replay: samples per driver')
     parser.add_argument('--requests', type=int, default=700, help='abuse: requests from the abusive client')
     parser.add_argument('--steady', type=int, default=50, help='abuse: normal drivers running alongside')
+    parser.add_argument('--steady-offset', type=int, default=0, help='abuse: first seed driver of the normal drivers')
     parser.add_argument('--exporters', type=int, default=2, help='mixed: administrators exporting reports')
     parser.add_argument('--tag', default=str(int(time.time())), help='makes sample ids unique per run')
     parser.add_argument('--gate', action='store_true', help='exit 1 when the scenario fails its expectations')
@@ -291,8 +294,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     with open(args.seed, encoding='utf-8') as handle:
         seed = json.load(handle)
-    needed = {'steady': args.offset + args.drivers, 'replay': args.offset + args.drivers, 'abuse': max(args.offset + 1, args.steady),
-              'mixed': args.drivers}[args.scenario]
+    needed = {'steady': args.offset + args.drivers, 'replay': args.offset + args.drivers,
+              'abuse': max(args.offset + 1, args.steady_offset + args.steady), 'mixed': args.offset + args.drivers}[args.scenario]
     if needed > len(seed['drivers']):
         print(f'the seed file has {len(seed["drivers"])} drivers, this run needs {needed}', file=sys.stderr)
         return 2

@@ -367,3 +367,25 @@ def test_only_stored_samples_count_as_accepted():
     assert gps_load.accepted(200, json.dumps({'accepted': False, 'reason': 'GPS accuracy worse than 50m'}).encode()) is False
     assert gps_load.accepted(429, ok) is False
     assert gps_load.accepted(200, b'not json') is False
+
+
+# ---- every scenario takes its own slice of the seeded drivers ------------------------------------------------------------
+
+def test_abuse_and_mixed_use_the_driver_slices_they_are_given(stub, tmp_path, capsys):
+    code, _ = run(stub, tmp_path, 'abuse', '--offset', '40', '--steady-offset', '10', '--steady', '3', '--requests', '12',
+                  '--seconds', '2', '--interval', '0.4')
+    assert code == 0
+    capsys.readouterr()
+    used = {t for t in stub.counts if t.startswith('t')}
+    assert used == {'t10', 't11', 't12', 't40'}, used
+
+    stub.counts.clear()
+    code, _ = run(stub, tmp_path, 'mixed', '--offset', '20', '--drivers', '2', '--exporters', '1', '--seconds', '1.5', '--interval', '0.4')
+    assert code == 0
+    capsys.readouterr()
+    assert {t for t in stub.counts if t.startswith('t')} == {'t20', 't21'}
+
+
+def test_the_seed_size_check_counts_the_steady_offset_of_the_abuse_scenario(stub, tmp_path):
+    code, _ = run(stub, tmp_path, 'abuse', '--offset', '1', '--steady-offset', '58', '--steady', '5', '--requests', '5', '--seconds', '1')
+    assert code == 2
