@@ -2,7 +2,8 @@ version: 2
 
 # Weekly update PRs for dependencies and pinned CI actions. Each PR runs the CI workflow, so a
 # breaking upgrade is visible before it is merged. Flutter (pub) is left out on purpose: the
-# apps have no committed lockfile yet (see docs/DEVELOPMENT.md, "Phase 1").
+# apps have no committed lockfile yet (see docs/DEVELOPMENT.md, "Phase 1"). The web and backend lock files are
+# committed (backend/requirements.in -> requirements.txt via pip-compile, web/package-lock.json); Dependabot updates both parts.
 updates:
   - package-ecosystem: github-actions
     directory: "/"

@@ -11,6 +11,7 @@ on:
     - cron: "41 3 * * 1" # Mondays, 03:41 UTC
   pull_request:
     paths:
+      - "backend/requirements.in"
       - "backend/requirements.txt"
       - "backend/requirements-test.txt"
       - "web/package.json"
@@ -37,11 +38,10 @@ jobs:
         with:
           python-version: "3.12" # same minor version as backend/Dockerfile
 
-      # The requirements files use version ranges, so what actually gets installed changes over time.
-      # This freezes today's resolution; commit it as a lock file when you want reproducible builds.
-      - name: Resolve and freeze the backend dependencies
+      # backend/requirements.txt is the committed lock file (exact versions, checksums), so this audits what ships.
+      - name: Install and list the backend dependencies
         run: |
-          python -m pip install -r backend/requirements.txt
+          python -m pip install --require-hashes -r backend/requirements.txt
           python -m pip freeze | sort > backend-requirements.lock.txt
           echo "Resolved $(wc -l < backend-requirements.lock.txt) packages"
 
