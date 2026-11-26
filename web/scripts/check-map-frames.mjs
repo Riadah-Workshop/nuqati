@@ -56,12 +56,15 @@ const dir = mkdtempSync(join(tmpdir(), 'map-frames-'));
 function render(name, html) {
   const file = join(dir, `${name}.html`);
   writeFileSync(file, html);
-  return execFileSync(chrome, [
+  return rendered(execFileSync(chrome, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
     '--host-resolver-rules=MAP * ~NOTFOUND', // nothing can be fetched: no CDN, no tiles
     '--virtual-time-budget=10000', '--dump-dom', pathToFileURL(file).href,
-  ], { encoding: 'utf8', timeout: 90000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { encoding: 'utf8', timeout: 90000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }));
 }
+// dump-dom also prints the page's own <script> and <style> text (Leaflet's code and stylesheet contain class names and message
+// strings), so every check looks at the rendered markup only.
+const rendered = dom => dom.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<style\b[\s\S]*?<\/style>/g, '');
 const count = (dom, pattern) => (dom.match(pattern) || []).length;
 const paths = dom => count(dom, /<path\b/g);
 // Match the class attribute only: the inlined Leaflet stylesheet also contains these class names as text.
@@ -88,16 +91,19 @@ expect('fleet: the legend is there', fleetDom.includes('class="legend"'));
 const tripDom = render('trip', tripHtml);
 expect('trip: the map container exists', hasClass(tripDom, 'leaflet-container'));
 expect('trip: route, travelled line and event are drawn', paths(tripDom) >= 3, `${paths(tripDom)} shapes`);
-expect('trip: the library error message is absent', !tripDom.includes('Map library unavailable'));
-expect('trip: the playback bar has timed data', tripDom.includes('id="playback"') && !tripDom.includes('Not enough timed points'));
+expect('trip: the library error message is absent', !/id="map"[^>]*>\s*Map library unavailable/.test(tripDom));
+expect('trip: the playback bar has timed data', tripDom.includes('id="playback"') && !tripDom.includes('Not enough timed points') && !/<output id="progress"[^>]*>—/.test(tripDom));
 
 // Control: without the Leaflet script the same checks must fail, otherwise a pass above would prove nothing.
 const brokenFleet = render('fleet-without-leaflet', fleetHtml.split(leafletTag).join(''));
 const brokenTrip = render('trip-without-leaflet', tripHtml.split(leafletTag).join(''));
 expect('control: fleet frame without Leaflet draws nothing', !hasClass(brokenFleet, 'leaflet-container') && paths(brokenFleet) === 0);
-expect('control: trip frame without Leaflet shows the error', brokenTrip.includes('Map library unavailable') && paths(brokenTrip) === 0);
+expect('control: trip frame without Leaflet shows the error', /id="map"[^>]*>\s*Map library unavailable/.test(brokenTrip) && paths(brokenTrip) === 0);
 
 if (failures) {
+  const svg = dom => (dom.match(/<svg\b[^>]*>[\s\S]*?<\/svg>/) || ['(no svg)'])[0].slice(0, 1500);
+  console.error('--- fleet overlay svg:', svg(fleetDom));
+  console.error('--- trip overlay svg:', svg(tripDom));
   console.error(`${failures} map frame check(s) failed`);
   process.exit(1);
 }
