@@ -22,7 +22,8 @@ from .auth_accounts import _dashboard_account, user_view
 
 
 class MfaLoginIn(BaseModel):
-    mfa_token: str = Field(min_length=20, max_length=2000)
+    # The JSON field is called "mfa_token" (the web app and the manager app send it); inside the code it is the "challenge".
+    challenge: str = Field(alias="mfa_token", min_length=20, max_length=2000)
     code: str = Field(min_length=6, max_length=32)
 
 
@@ -77,7 +78,7 @@ def _session_reply(user: User, **extra) -> dict:
 @app.post("/api/v1/auth/login/mfa")
 def login_mfa(payload: MfaLoginIn, request: Request, db: Session = Depends(get_db)):
     """Second step of the sign-in: the token from the password step plus a 6-digit code or a recovery code."""
-    claims = mfa.decode_step_token(payload.mfa_token, ("mfa",))
+    claims = mfa.decode_step_token(payload.challenge, ("mfa",))
     user = db.get(User, int(claims["sub"])) if claims else None
     if not user or not user.is_active or int(claims.get("ver", 0)) != int(getattr(user, "auth_version", 0)):
         raise HTTPException(401, "The sign-in expired. Enter your password again.")
