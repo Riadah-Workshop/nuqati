@@ -57,7 +57,7 @@ def test_released_revisions_are_never_edited():
 
 
 def test_integration_tests_build_their_schema_with_migrations():
-    for name in ("test_auth_runtime_postgres.py", "test_security_audit_postgres.py"):
+    for name in ("test_auth_runtime_postgres.py", "test_security_audit_postgres.py", "test_mfa_postgres.py"):
         text = (ROOT / "backend" / name).read_text(encoding="utf-8")
         assert "migrate.main(['upgrade']) == 0" in text, f"{name} must run the migrations before importing the application"
         assert text.index("migrate.main") < text.index("from app.main import app"), f"{name}: migrate before importing app.main"

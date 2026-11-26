@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from .. import mfa, mfa_db
 from ..api_app import app
 from ..audit import audit, audit_commit
 from ..auth import (
@@ -54,6 +55,14 @@ def login(payload:LoginIn, request:Request, db:Session=Depends(get_db)):
     if user.role=='driver':
         audit_commit(db,'auth.login',outcome='denied',actor=user,request=request,detail={'reason':'driver_account'})
         raise HTTPException(403,'Drivers must sign in through the driver app')
+    # Two-step sign-in (app/mfa.py): without NUQATI_MFA_KEY and without an enrolled account this is the old behaviour.
+    step=mfa_db.login_step(db,user)
+    if step=='code':
+        audit_commit(db,'auth.login',outcome='pending',actor=user,request=request,detail={'second_step':'required'})
+        return {'mfa_required':True,'mfa_token':mfa.encode_step_token(user,'mfa'),'token_type':'mfa','expires_in':mfa.CHALLENGE_MINUTES*60}
+    if step=='setup':
+        audit_commit(db,'auth.login',outcome='pending',actor=user,request=request,detail={'second_step':'setup'})
+        return {'mfa_setup_required':True,'mfa_token':mfa.encode_step_token(user,'mfa_setup'),'token_type':'mfa','expires_in':mfa.SETUP_MINUTES*60}
     audit_commit(db,'auth.login',actor=user,request=request)
     return {'access_token':encode_token(user),'token_type':'bearer','user':user_view(user)}
 

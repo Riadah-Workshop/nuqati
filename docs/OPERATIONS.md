@@ -75,6 +75,8 @@ Plan for the disk to hold the database **plus room for about 15 dumps** (14 days
 | Vehicles with trackers all offline | Is `teltonika` unhealthy in Coolify? `docker logs <teltonika-container>` | Unhealthy: the receiver is stuck, restart it. Healthy but silent: firewall, `TELTONIKA_ALLOWED_CIDRS`, SIM or APN problem |
 | Scheduled reports missing | Is `report_scheduler` unhealthy? `docker logs <report_scheduler-container>` | Unhealthy: stuck worker, restart it. Healthy: mail server settings (`last_error` of the report subscription) |
 | Drivers' phones show GPS points waiting to upload, `api` log has `rate_limit REFUSED` | `docker logs <api-container> --tail 200 \| grep rate_limit` | Section 7: a limit is too tight for real traffic. Set `NUQATI_RATE_LIMIT_INGEST=log` (or `off`) and redeploy; the phones keep their points and send them afterwards |
+| `api` does not start and the log says `NUQATI_MFA_...` | `docker logs <api-container> --tail 20` | A setting in section 9 is malformed (message names it). Fix it in Coolify and redeploy |
+| An admin says the code step answers "unavailable" | `docker logs <api-container> 2>&1 \| grep "cannot be read"` | The key `NUQATI_MFA_KEY` differs from the one used at setup: restore it, or reset the person (section 9) |
 | Many `500` answers at once, `api` log has `QueuePool limit ... reached` | `docker logs <api-container> 2>&1 \| grep -c QueuePool` | Section 8: the API ran out of database connections. It recovers by itself; send the lines to the developer. Check that `NUQATI_DB_REQUEST_SLOTS` is not `0` or very high |
 | Disk nearly full | `docker system df`, section 4 | Old images and build cache: `docker image prune`. Do **not** run `docker volume prune` |
 
@@ -161,3 +163,54 @@ reached: the next step is a second API process, which also needs the per-user li
 **Reading it in production.** `docker logs <api-container> 2>&1 | grep -c "QueuePool"` should be `0`. If it is not, send the
 lines to the developer. Slow answers under load with no such lines mean the requests are queuing for a slot: the database
 or the server is the limit, not the setting.
+
+## 9. Two-step sign-in (authenticator app) for dashboard accounts
+
+Since Phase 4.3 a dashboard account (not a driver) can be protected with a 6-digit code from an authenticator app (Google or Microsoft
+Authenticator, Authy, 1Password and so on) in addition to the password. **Nothing changes until `NUQATI_MFA_KEY` is set.**
+
+| Setting (Coolify) | Default | Meaning |
+|---|---|---|
+| `NUQATI_MFA_KEY` | empty = off | At least 32 characters (`python -c "import secrets; print(secrets.token_urlsafe(48))"`). Switches the feature on and encrypts the stored authenticator secrets (AES-256-GCM). **Keep it in the password manager**, like the backup passphrases. It is not the token-signing secret: an emergency rotation of `NUQATI_AUTH_SECRET` does not affect it. |
+| `NUQATI_MFA_REQUIRED_ROLES` | empty = nobody is forced | For example `super_admin,company_admin`. A person in such a role who has not set it up is taken to the setup screen right after the password and gets in only when it is finished. Allowed roles: `super_admin`, `workshop_staff`, `company_admin`, `fleet_manager`, `representative`. |
+| `NUQATI_MFA_KEY_PREVIOUS` | empty | Only while changing the key (below). |
+| `NUQATI_MFA_ISSUER` | `Nuqati` | The name the authenticator app shows. |
+
+A wrong combination (a role list without a key, a key shorter than 32 characters, an unknown role) stops the API at start, and the log says which
+setting is wrong.
+
+**Switching it on (recommended order)**
+1. Before the first deploy of this version take a backup (`docker exec <db_backup-container> /usr/local/bin/backup.sh once`): that start applies the first real database migration (0002, two new tables; additive, rolled back completely if it fails, and the API then stays down until it is fixed).
+2. Set `NUQATI_MFA_KEY` only, redeploy. Everyone still signs in as before.
+3. Every super admin opens **My account**, then **Two-step sign-in**: types the shown key into the authenticator app (or opens the link on the same phone),
+   enters the first code, and **saves the 10 recovery codes** (shown once; print or put in the password manager).
+4. Check that each of them can sign out and in again with a code.
+5. Set `NUQATI_MFA_REQUIRED_ROLES` (start with `super_admin`, later add `company_admin`), redeploy. A person who has not set it up is led through the setup after their password.
+   Until a person has finished the setup, only their password protects the account, and whoever signs in first with that password can set up the
+   authenticator (the setup screen asks for nothing more). So enrol the people of a newly required role yourself, the same day, and look at the audit
+   trail (`auth.mfa_enroll`) for setups nobody expected; a super admin can reset an account that was enrolled by the wrong person.
+
+**People**
+- Signing in: e-mail and password, then the 6-digit code. A recovery code works instead of a code, once. A code is accepted for 30 seconds
+  either side of the phone's clock and only once; if it is refused, wait for the next code and check the phone's time is automatic.
+- 5 wrong codes in a row lock the second step for 15 minutes, 30, 60 and so on up to 24 hours (a right code resets the counter). The password
+  alone is never enough for an enrolled account.
+- A new phone: **My account**, **Change authenticator** (needs the password and a code from the old phone). A role that is required cannot switch it off.
+- Lost phone, recovery codes available: sign in with a recovery code, then change the authenticator.
+- Lost phone and no recovery codes: a super admin opens the user (Users and access, edit) and presses **Reset two-step sign-in**. It ends the person's
+  sessions; they sign in with the password and set it up again.
+- The last super admin lost everything: on the server, `docker exec -it <api-container> python -m app.mfa_tools reset person@example.com`
+  (`status` instead of `reset` shows whether it is on). It is recorded in the security audit trail.
+- The password-reset e-mail does **not** switch the second step off: a stolen mailbox alone is not enough.
+- Manager app: asks for the code after the password. A person who must set it up does that once in the web dashboard; the app says so.
+
+**The key**
+- If `NUQATI_MFA_KEY` is lost or changed without keeping the old one, the authenticator secrets cannot be read. Enrolled accounts are then **not** let in with
+  the password alone: the code step answers "unavailable" (HTTP 503, and `auth.mfa` with outcome `error` in the audit trail). Put the old key back, or reset each
+  person (button or command above).
+- Changing the key without anyone being reset: set `NUQATI_MFA_KEY_PREVIOUS` to the old value and `NUQATI_MFA_KEY` to the new one, redeploy; each person's secret
+  is re-encrypted with the new key at their next sign-in; after everyone has signed in once (or after 30 days), remove the previous key.
+- A database backup contains the encrypted secrets and the hashed recovery codes, not the key. Restoring a backup on a new server needs the same key (BACKUP_RESTORE section 1).
+
+**What to look at.** The security audit trail (super admin) has `auth.login` with outcome `pending` (password right, code still to come), `auth.mfa` (ok, failed,
+locked, error), `auth.mfa_enroll`, `auth.mfa_recovery`, `auth.mfa_disable` and `auth.mfa_reset`. Many `failed` rows for one account mean someone knows the password.

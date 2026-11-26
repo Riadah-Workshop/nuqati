@@ -25,6 +25,7 @@ Key: **Ref** = the table names that hold the data (see [DATA_INVENTORY.md](DATA_
 | R13 | Dashboard users who left | `users` | Deactivate immediately; delete or anonymise **12 months** later | Audit rows keep the actor id | Anonymise the e-mail and name |
 | R14 | Customer company ended | all rows of the company | Existing procedure: permanent deletion needs a verified off-server backup reference (`POST /api/v1/companies/{id}/permanent-delete`) | Already implemented | Follow the procedure |
 | R15 | Database backups | on-server dumps (`db_backup`, volume `nuqati_backups`) and off-server copies | **14 days** on the server (automatic, `NUQATI_BACKUP_KEEP_DAYS`); **30 days** off the server (automatic once switched on, `NUQATI_OFFSITE_KEEP_DAYS`; Google Drive keeps deleted copies in its trash for up to 30 more days) (see [BACKUP_RESTORE.md](BACKUP_RESTORE.md)) | Limits how long deleted data can still be restored | Delete oldest dumps (automatic on the server) |
+| R16 | Two-step sign-in data | `user_mfa`, `user_mfa_recovery_codes` | While the account exists; removed with the account (database cascade), when the person switches it off, or on a reset | Already implemented | None |
 
 **Backups and deletion.** Rows deleted by the job can still exist in a backup until that backup expires (R15). State this in answers to deletion requests ([DATA_SUBJECT_REQUESTS.md](DATA_SUBJECT_REQUESTS.md)).
 

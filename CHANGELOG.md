@@ -58,6 +58,36 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
   after, 0 of 900 failed (p95 1.6 s). 400 phones (140 to 170 requests per second) now complete with a median answer of 2 to 3 s instead
   of failing.
 
+### Phase 4.3: two-step sign-in for dashboard accounts (security finding S4c)
+
+#### Added
+- **Two-step sign-in with an authenticator app (TOTP, RFC 6238), optional.** Off until `NUQATI_MFA_KEY` is set; nothing changes for anyone before
+  that. Then any dashboard account can switch it on under **My account**; `NUQATI_MFA_REQUIRED_ROLES` (for example `super_admin,company_admin`)
+  makes it compulsory: a person in such a role who has not set it up is taken to the setup right after the password and gets a session only when it is done.
+- `POST /api/v1/auth/login` answers `mfa_required` (or `mfa_setup_required`) without an access token for such accounts; `POST /api/v1/auth/login/mfa`
+  completes the sign-in with a 6-digit code or a recovery code. New routes under `/api/v1/auth/mfa` (status, enroll, confirm, recovery codes, disable) and
+  `/api/v1/users/{id}/mfa` (status, reset; super admin). Server command `python -m app.mfa_tools [status|reset] EMAIL` for the case that nobody can reset an account.
+- Web: second step on the sign-in screen, forced setup screen for required roles, **Two-step sign-in** panel under My account, reset button on the user page.
+  Manager app: asks for the code (setup is done once in the web dashboard).
+- Migration `0002`: tables `user_mfa` and `user_mfa_recovery_codes` (the first real revision; additive; removed with the account).
+- Dependency: `cryptography` (AES-256-GCM for the stored authenticator secrets).
+- Safety: a code works once; 5 wrong codes lock the second step for 15 minutes, then longer (up to 24 hours); the secret is stored encrypted under its own
+  key (not the token-signing secret, so an emergency rotation of that does not lock anyone out); an enrolled account is never let in with the password
+  alone, not even when the key is lost (it fails closed and the runbook says how to recover); recovery codes are stored as salted hashes; every step is
+  in the security audit trail (`auth.login` outcome `pending`, `auth.mfa`, `auth.mfa_enroll`, `auth.mfa_recovery`, `auth.mfa_disable`, `auth.mfa_reset`).
+- Tests: `test_mfa_units.py` (RFC 6238 vectors and more, 36 cases), `test_mfa_postgres.py` (14 end-to-end cases); the CI job **Migrations** now proves that a
+  pre-Alembic database is adopted and upgraded to `0002` in one start, adding only `0002`'s objects and ending identical to a new database.
+- Runbook: `docs/OPERATIONS.md` section 9 (rollout order, lost phone, last super admin, key loss and rotation); `SECRET_ROTATION.md`, `BACKUP_RESTORE.md`
+  (the key must be saved with the other secrets), `DATA_INVENTORY.md`, `RETENTION_SCHEDULE.md` R16.
+
+#### Changed
+- The Migrations job and `test_migrations.py` expect head revision `0002`; the CI probe revisions are now `0003`.
+- The guard tests list the new public route (`/api/v1/auth/login/mfa`, throttled) and three audit helpers that are not routes.
+
+#### Not included
+- No QR code (the setup screen shows the key to type and an `otpauth://` link that opens the authenticator app on the same phone); no push or SMS codes;
+  drivers are not covered (they sign in with their own flow and a bound device).
+
 ### Phase 3.4: the application no longer creates tables itself
 
 #### Changed

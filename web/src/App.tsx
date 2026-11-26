@@ -3,6 +3,7 @@ import VehicleEditPage, { type VehicleUpdate } from './VehicleEditPage';
 import CompanyEditPage, { type CompanyUpdate } from './CompanyEditPage';
 import DriverEditPage, { type DriverUpdate } from './DriverEditPage';
 import UserEditPage, { type UserUpdate } from './UserEditPage';
+import { TwoStepPanel, TwoStepSignIn } from './TwoStep';
 import LifecyclePrivacyAudit from './LifecyclePrivacyAudit';
 import {FlexibleRagSettings,FlexibleRagReports} from './FlexibleRag';
 import GeofenceReport from './GeofenceReport';
@@ -163,6 +164,8 @@ export default function App() {
   const [me,setMe]=useState<Me|null>(null);
   const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
   const [loginError,setLoginError]=useState('');
+  // Two-step sign-in: set after a right password when the account (or its role) needs a code or must set it up first.
+  const [mfaChallenge,setMfaChallenge]=useState<{kind:'code'|'setup';token:string}|null>(null);
   const [resetToken]=useState(()=>new URLSearchParams(window.location.search).get('reset')||'');
   const [verifyEmailToken]=useState(()=>new URLSearchParams(window.location.search).get('confirm_email')||'');
   // E-mail link tokens are read once into state above, then removed from the address bar so they do not stay in history or screenshots.
@@ -228,8 +231,12 @@ export default function App() {
   async function signIn(e:React.FormEvent){e.preventDefault();try{
     const r=await fetch(`${API}/api/v1/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
     const data=await r.json();if(!r.ok)throw new Error(data.detail||'Login failed');
-    sessionStorage.setItem('nuqati_token',data.access_token);setToken(data.access_token);setMe(data.user);setPassword('');setLoginError('');
+    if(data.mfa_required||data.mfa_setup_required){setMfaChallenge({kind:data.mfa_required?'code':'setup',token:data.mfa_token});setPassword('');setLoginError('');return;}
+    finishSignIn(data);
   }catch(err){setLoginError(String(err));}}
+  function finishSignIn(data:{access_token:string;user:Me}){
+    sessionStorage.setItem('nuqati_token',data.access_token);setToken(data.access_token);setMe(data.user);setPassword('');setLoginError('');setMfaChallenge(null);
+  }
   function signOut(){sessionStorage.removeItem('nuqati_token');setToken('');setMe(null);setCompanies([]);setDrivers([]);setVehicles([]);}
   // Log out button: clear the local session first, then tell the server so the token stops working (best effort).
   function logout(){const t=token;signOut();if(t){fetch(`${API}/api/v1/auth/logout`,{method:'POST',headers:{Authorization:`Bearer ${t}`}}).catch(()=>{/* the local session is already cleared */});}}
@@ -1045,6 +1052,7 @@ export default function App() {
   if(resetToken) return <div className="login-screen"><form className="login-card" onSubmit={completeRecovery}><h2>{lang==='en'?'Reset password':'إعادة تعيين كلمة المرور'}</h2><label>{lang==='en'?'New password (12+ characters)':'كلمة المرور الجديدة (12 حرفًا على الأقل)'}<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={recoveryPassword} onChange={e=>setRecoveryPassword(e.target.value)}/></label><label>{lang==='en'?'Confirm new password':'تأكيد كلمة المرور'}<input type="password" minLength={12} maxLength={128} autoComplete="new-password" required value={recoveryConfirm} onChange={e=>setRecoveryConfirm(e.target.value)}/></label><button className="primary">{lang==='en'?'Change password':'تغيير كلمة المرور'}</button><div className="notice" role="status">{recoveryStatus}</div><a href="/">{lang==='en'?'Back to login':'العودة لتسجيل الدخول'}</a></form></div>;
   if(verifyEmailToken) return <div className="login-screen"><div className="login-card"><h2>{lang==='en'?'Confirm new email':'تأكيد البريد الإلكتروني الجديد'}</h2><p>{lang==='en'?'Confirm that this email belongs to you.':'أكد أن هذا البريد الإلكتروني يخصك.'}</p><button className="primary" onClick={completeEmailVerification}>{lang==='en'?'Confirm email':'تأكيد البريد'}</button><div className="notice" role="status">{recoveryStatus}</div><a href="/">{lang==='en'?'Back to login':'العودة لتسجيل الدخول'}</a></div></div>;
   if(inviteToken) return <div className="login-screen"><form className="login-card" onSubmit={acceptInvite}><img src={logo} alt="Nuqati"/><h2>Nuqati by Al-Riadah Workshop</h2><p>{lang==='en'?'Activate account':'تفعيل الحساب'}</p><label>New password (12+ characters)<input type="password" minLength={12} required value={invitePassword} onChange={e=>setInvitePassword(e.target.value)}/></label><button className="primary">Activate account</button><div className="notice">{inviteStatus}</div>{inviteStatus.startsWith('Account activated')&&<a href="/">Go to login</a>}</form></div>;
+  if((!token || !me) && mfaChallenge) return <TwoStepSignIn lang={lang} api={API} kind={mfaChallenge.kind} mfaToken={mfaChallenge.token} logo={logo} onSignedIn={finishSignIn} onCancel={()=>setMfaChallenge(null)}/>;
   if(!token || !me) return <div className="login-screen"><form className="login-card" onSubmit={signIn}><img src={logo} alt="Solutions Workshop"/><h1>{lang==='en'?'NUQATI':'نقاطي'}</h1><p>Secure Fleet Management</p><label>{lang==='en'?'Email':'البريد الإلكتروني'}<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>{loginError&&<div className="notice">{loginError}</div>}<button className="primary">Sign in</button><small>{lang==='en'?'Nuqati by Al-Riadah Workshop':'نقاطي من ورشة حلول الريادة'}</small><button type="button" className="refresh" onClick={()=>switchLang(lang==='en'?'ar':'en')}>{lang==='en'?'العربية':'English'}</button><button type="button" className="refresh" onClick={()=>setShowRecovery(v=>!v)}>{lang==='en'?'Forgot password?':'نسيت كلمة المرور؟'}</button>{showRecovery&&<div className="nuqati-account-recovery" role="group"><label>{lang==='en'?'Account email':'البريد الإلكتروني للحساب'}<input type="email" value={recoveryEmail} onChange={e=>setRecoveryEmail(e.target.value)}/></label><button type="button" className="primary" onClick={()=>{if(recoveryEmail.includes('@'))void requestRecovery({preventDefault:()=>{}} as React.FormEvent);else setRecoveryStatus('Enter a valid email');}}>{lang==='en'?'Send reset email':'إرسال رابط إعادة التعيين'}</button><div className="notice" role="status">{recoveryStatus}</div></div>}</form></div>;
   const canManage=me.role==='super_admin';
   const canCreateUsers=me.role==='super_admin';
@@ -1092,7 +1100,9 @@ export default function App() {
             <p className="nuqati-account-hint">{lang==='en'?'Your login email changes only after verification.':'لن يتغير بريد الدخول إلا بعد التحقق.'}</p>
             <button className="primary" type="submit">{lang==='en'?'Send verification link':'إرسال رابط التحقق'}</button>
           </form>
-        </div>{accountStatus&&<div className="notice nuqati-account-status" role="status">{accountStatus}</div>}
+        </div>
+        {me.role!=='driver'&&<div className="nuqati-account-grid"><TwoStepPanel lang={lang} api={API} token={token} onSessionsEnded={signOut}/></div>}
+        {accountStatus&&<div className="notice nuqati-account-status" role="status">{accountStatus}</div>}
       </section>}
 
       {tab==='vehicles'&&editingVehicleId===null&&<section className="nq-selection-toolbar" aria-label={lang==='en'?'Vehicle search':'البحث عن المركبات'}>
@@ -1130,7 +1140,7 @@ export default function App() {
       {tab==='companies'&&me.role!=='super_admin'&&me.company_id&&<section className="panel"><h3>{lang==='en'?'Company logo for Android driver app':'شعار الشركة لتطبيق السائق'}</h3><div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',padding:12}}><strong>{companies.find(c=>c.id===me.company_id)?.name||''}</strong><button type="button" className="refresh" onClick={()=>loadCompanyLogo(me.company_id!)}>{lang==='en'?'View logo':'عرض الشعار'}</button>{companyLogos[me.company_id]&&<img src={companyLogos[me.company_id]} alt="Company logo" style={{width:90,height:90,objectFit:'contain'}}/>}{me.role==='company_admin'&&<input aria-label="Upload company logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>uploadCompanyLogo(me.company_id!,e.target.files?.[0])}/>}</div></section>}
       {tab==='users' && canCreateUsers && (editingUserId!==null
         ? (()=>{const u=users.find(item=>item.id===editingUserId);
-            return u?<UserEditPage key={u.id} user={u} companies={companies} currentUserId={me.id} lang={lang}
+            return u?<UserEditPage key={u.id} user={u} companies={companies} currentUserId={me.id} lang={lang} api={API} token={token}
               onClose={()=>setEditingUserId(null)} onSave={saveUserEdit}/>
               :<section className="panel"><p>{lang==='en'?'User not found.':'تعذر العثور على المستخدم.'}</p><button type="button" className="refresh" onClick={()=>setEditingUserId(null)}>{lang==='en'?'Back to users':'العودة للمستخدمين'}</button></section>;
           })()

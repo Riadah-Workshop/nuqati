@@ -31,6 +31,7 @@ Set **only** `NUQATI_AUTH_SECRET` to a new value and make sure `NUQATI_AUTH_SECR
 
 - Not affected: password-reset links, invitation links, e-mail-change links and live-share links (random values stored as hashes, not signed with this secret).
 - Sign-in throttle counters restart after a rotation (their keys are derived from the secret). That is harmless.
+- Two-step sign-in: a person who has typed the password but not yet the code at the moment of a planned rotation has to enter the password again (the short-lived step tokens are checked with the current secret only). Stored authenticator secrets are not affected: they use `NUQATI_MFA_KEY` (section 2).
 - An individual user can end all of their own sessions with **Log out** (dashboard) or by changing their password; no secret rotation is needed for that.
 
 ## 2. Other secrets
@@ -38,6 +39,7 @@ Set **only** `NUQATI_AUTH_SECRET` to a new value and make sure `NUQATI_AUTH_SECR
 | Secret | Where it is set | When to change | Steps | Impact |
 |---|---|---|---|---|
 | `POSTGRES_PASSWORD` | Coolify | Yearly; after a leaver with server access; after any suspected exposure | **The environment variable alone does not change the password** of an existing database (it only applies when the database is first created). 1) In a database console: `\password <user>` (so the new password stays out of shell history). 2) Update `POSTGRES_PASSWORD` in Coolify. 3) Redeploy so `api`, `report_scheduler` and `teltonika` reconnect. The database is not published to the internet, which limits exposure | A short interruption during the redeploy |
+| Two-step sign-in key (`NUQATI_MFA_KEY`) | Coolify, your password manager | Not on a schedule: only if it may have been exposed. Never delete it while accounts are enrolled | Set `NUQATI_MFA_KEY_PREVIOUS` to the old value and `NUQATI_MFA_KEY` to a new one (32+ characters), redeploy. Each person's authenticator secret is re-encrypted at their next sign-in; remove the previous key after everyone signed in once or after 30 days | Without the old key as `PREVIOUS`, every enrolled person is refused at the code step until a super admin resets them (OPERATIONS section 9). The token-signing secret is separate: rotating it, even in an emergency, does not touch this |
 | SMTP password (`NUQATI_SMTP_PASSWORD`) | Mail provider, Coolify | Yearly; on exposure | Create a new password at the provider, update Coolify, redeploy `api` and `report_scheduler`, send a test password-reset e-mail, then revoke the old one | E-mails fail between the redeploy and the update if done in the wrong order |
 | WhatsApp verify token (`NUQATI_WHATSAPP_VERIFY_TOKEN`) | Meta developer console, Coolify | On exposure | Set the same new value in both places, redeploy, re-verify the webhook in Meta | Webhook verification fails until both match |
 | WhatsApp app secret (`NUQATI_WHATSAPP_APP_SECRET`) | Meta developer console, Coolify | On exposure; yearly | Regenerate in Meta, update Coolify at once, redeploy | Webhook calls are refused (signature mismatch) between the two steps |

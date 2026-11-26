@@ -64,6 +64,7 @@ jobs:
           python -m pytest -q
           --ignore=backend/test_auth_runtime_postgres.py
           --ignore=backend/test_security_audit_postgres.py
+          --ignore=backend/test_mfa_postgres.py
           --ignore=backend/test_concept_reports.py
           backend
 
@@ -81,7 +82,7 @@ jobs:
         env:
           PYTHONPATH: backend
           NUQATI_TEST_DATABASE_URL: postgresql+psycopg2://nuqati_ci:ci-only-not-a-secret@localhost:5432/nuqati_test
-        run: python -m pytest -q backend/test_auth_runtime_postgres.py backend/test_security_audit_postgres.py
+        run: python -m pytest -q backend/test_auth_runtime_postgres.py backend/test_security_audit_postgres.py backend/test_mfa_postgres.py
 
   web:
     name: Web build
@@ -342,7 +343,7 @@ jobs:
           . ops/ci/migrations_lib.sh
           newdb fresh
           expect_exit 0 "migrate builds a new database" -- api fresh nuqati-api:ci python -m app.migrate
-          test "$(version_of fresh)" = "0001"
+          test "$(version_of fresh)" = "0002"
           tables=$(sql fresh "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name <> 'alembic_version'")
           echo "the migrated database has $tables tables"
           test "$tables" -ge 40
@@ -373,12 +374,23 @@ jobs:
           docker exec -i "$MDB" psql -U ci -d existing -v ON_ERROR_STOP=1 -q -f - < backend/app/migrations/versions/0001_baseline.sql
           must_not has_version_table existing
           fingerprint existing > before.txt
-          diff -u fresh.txt before.txt
-          expect_exit 0 "the first run adopts" -- api existing nuqati-api:ci python -m app.migrate
+          test "$(wc -l < before.txt)" -gt 200
+          # one start does both: record the baseline (adoption), then apply every later revision (0002: two-step sign-in tables)
+          expect_exit 0 "the first run adopts and upgrades" -- api existing nuqati-api:ci python -m app.migrate
           grep -q "adopted" <<< "$OUT"
-          test "$(version_of existing)" = "0001"
+          test "$(version_of existing)" = "0002"
           fingerprint existing > after.txt
-          diff -u before.txt after.txt
+          # nothing that existed was removed or changed; everything new belongs to revision 0002
+          LC_ALL=C sort before.txt > before.sorted
+          LC_ALL=C sort after.txt > after.sorted
+          LC_ALL=C comm -23 before.sorted after.sorted > removed.txt
+          if [ -s removed.txt ]; then echo "FAIL: schema objects were removed or changed:"; cat removed.txt; exit 1; fi
+          LC_ALL=C comm -13 before.sorted after.sorted > added.txt
+          sed 's/^/    + /' added.txt
+          test -s added.txt
+          must_not grep -qv 'user_mfa' added.txt
+          # and the adopted database ends up with exactly the schema of a new one
+          diff -u fresh.txt after.txt
           test "$(sql existing "SELECT count(*) FROM pg_namespace WHERE nspname='nuqati_baseline_check'")" = "0"
           expect_exit 0 "the second run does nothing" -- api existing nuqati-api:ci python -m app.migrate
           must_not grep -q "adopted" <<< "$OUT"
@@ -411,10 +423,10 @@ jobs:
           set -euo pipefail
           . ops/ci/migrations_lib.sh
           mkdir ci_rev
-          cat > ci_rev/0002_ci_failing.py <<'PY'
+          cat > ci_rev/0003_ci_failing.py <<'PY'
           from alembic import op
-          revision = "0002"
-          down_revision = "0001"
+          revision = "0003"
+          down_revision = "0002"
           branch_labels = None
           depends_on = None
           def upgrade():
@@ -424,10 +436,10 @@ jobs:
           def downgrade():
               pass
           PY
-          cat > ci_rev/0002_ci_good.py <<'PY'
+          cat > ci_rev/0003_ci_good.py <<'PY'
           from alembic import op
-          revision = "0002"
-          down_revision = "0001"
+          revision = "0003"
+          down_revision = "0002"
           branch_labels = None
           depends_on = None
           def upgrade():
@@ -436,20 +448,20 @@ jobs:
               pass
           PY
           mount() { echo "-v $PWD/ci_rev/$1:/app/app/migrations/versions/$1:ro"; }
-          expect_exit 1 "a failing revision stops the run" -- api fresh $(mount 0002_ci_failing.py) nuqati-api:ci python -m app.migrate
-          test "$(version_of fresh)" = "0001"
+          expect_exit 1 "a failing revision stops the run" -- api fresh $(mount 0003_ci_failing.py) nuqati-api:ci python -m app.migrate
+          test "$(version_of fresh)" = "0002"
           test -z "$(sql fresh "SELECT to_regclass('public.ci_probe')")"
           test "$(sql fresh "SELECT count(*) FROM information_schema.columns WHERE table_name='companies' AND column_name='ci_probe'")" = "0"
           echo "ok: nothing of the failed revision remains"
-          expect_exit 1 "status shows the database is behind" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate status
-          expect_exit 0 "a good revision is applied" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate
-          test "$(version_of fresh)" = "0002"
+          expect_exit 1 "status shows the database is behind" -- api fresh $(mount 0003_ci_good.py) nuqati-api:ci python -m app.migrate status
+          expect_exit 0 "a good revision is applied" -- api fresh $(mount 0003_ci_good.py) nuqati-api:ci python -m app.migrate
+          test "$(version_of fresh)" = "0003"
           test "$(sql fresh "SELECT count(*) FROM information_schema.columns WHERE table_name='companies' AND column_name='ci_probe'")" = "1"
-          expect_exit 0 "status is current again" -- api fresh $(mount 0002_ci_good.py) nuqati-api:ci python -m app.migrate status
+          expect_exit 0 "status is current again" -- api fresh $(mount 0003_ci_good.py) nuqati-api:ci python -m app.migrate status
           # a revision created with the helper has the next number and points at the newest revision
-          expect_exit 0 "new creates the next revision file" -- api fresh --user root nuqati-api:ci sh -c 'python -m app.migrate new "add a probe column" && cat app/migrations/versions/0002_add_a_probe_column.py'
-          grep -q 'revision = .0002.' <<< "$OUT"
-          grep -q 'down_revision = .0001.' <<< "$OUT"
+          expect_exit 0 "new creates the next revision file" -- api fresh --user root nuqati-api:ci sh -c 'python -m app.migrate new "add a probe column" && cat app/migrations/versions/0003_add_a_probe_column.py'
+          grep -q 'revision = .0003.' <<< "$OUT"
+          grep -q 'down_revision = .0002.' <<< "$OUT"
 
       - name: The API container - migrations by default, fail-fast, and the off switch
         run: |
@@ -459,7 +471,7 @@ jobs:
           newdb service
           start_api nq-svc service
           ready nq-svc || { docker logs nq-svc; exit 1; }
-          test "$(version_of service)" = "0001"
+          test "$(version_of service)" = "0002"
           docker logs nq-svc 2>&1 | sed 's/^/    | /' | tail -n 20
           # 2. database that lacks something: the container stops, the API never starts
           start_api nq-bad badtable
