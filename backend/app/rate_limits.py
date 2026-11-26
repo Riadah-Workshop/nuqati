@@ -169,7 +169,9 @@ def limit(scope: str):
     from fastapi import Depends, HTTPException  # imported here so the rest of this module needs no framework
     from .auth import current_user
 
-    def rate_limit_dependency(user=Depends(current_user)):
+    async def rate_limit_dependency(user=Depends(current_user)):
+        # async on purpose: the check is a few microseconds of in-memory work, so it runs on the event loop and does not
+        # need a worker thread (a request that holds a database connection must not wait for a free thread here)
         decision = evaluate(scope, user.id)
         if decision.refuse:
             raise HTTPException(429, refusal_text(decision.retry_after), headers={'Retry-After': str(decision.retry_after)})

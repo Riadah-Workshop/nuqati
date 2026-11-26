@@ -389,3 +389,43 @@ def test_abuse_and_mixed_use_the_driver_slices_they_are_given(stub, tmp_path, ca
 def test_the_seed_size_check_counts_the_steady_offset_of_the_abuse_scenario(stub, tmp_path):
     code, _ = run(stub, tmp_path, 'abuse', '--offset', '1', '--steady-offset', '58', '--steady', '5', '--requests', '5', '--seconds', '1')
     assert code == 2
+
+
+# ---- burst scenario and scenarios that do not finish -------------------------------------------------------------------
+
+def test_burst_sends_every_round_from_every_client_and_counts_it(stub, tmp_path, capsys):
+    code, _ = run(stub, tmp_path, 'burst', '--offset', '5', '--clients', '8', '--rounds', '3', '--round-gap', '0.2', '--timeout', '5', '--gate')
+    result = json.loads(capsys.readouterr().out)
+    assert code == 0, result
+    assert result['requests'] == 24 and result['accepted'] == 24 and result['drivers'] == 8 and result['rounds'] == 3
+    assert {t for t in stub.counts if t.startswith('t')} == {f't{i}' for i in range(5, 13)}
+    assert all(count == 3 for token, count in stub.counts.items() if token.startswith('t'))
+
+
+def test_burst_gate_fails_when_a_simultaneous_phone_is_not_served(stub, tmp_path, capsys):
+    code, _ = run(stub, tmp_path, 'burst', '--clients', '4', '--rounds', '2', '--round-gap', '0.1', '--timeout', '5', '--gate',
+                  tokens={2: 'broken'})
+    assert code == 1 and 'simultaneous phones' in gate_failures(capsys)
+
+
+def test_a_burst_of_dead_connections_fails_fast_and_is_counted_without_retrying(tmp_path, capsys):
+    import time
+    started = time.monotonic()
+    code = gps_load.main(['burst', '--clients', '3', '--rounds', '1', '--timeout', '2', '--gate',
+                          '--base-url', 'http://127.0.0.1:9', '--seed', seed_file(tmp_path)])
+    result = json.loads(capsys.readouterr().out)
+    assert code == 1 and result['statuses'] == {'0': 3}
+    assert time.monotonic() - started < 10
+
+
+def test_summary_counts_bursts_and_reports_scenarios_that_did_not_finish():
+    run_ = full_run()
+    run_.append({'scenario': 'burst', 'label': 'burst', 'drivers': 300, 'rounds': 3, **stats(900, 880, {'200': 880, '0': 20})})
+    total = summary_tool.accepted_total(run_)
+    assert total == summary_tool.accepted_total(full_run()) + 880
+    assert summary_tool.uncertain_total(run_) == 20
+    assert summary_tool.problems(run_, total, 1, 0) == []
+    run_.append({'scenario': 'failed', 'label': 'ramp-200'})
+    table = summary_tool.markdown(run_)
+    assert 'ramp-200 (did not finish)' in table
+    assert any('did not finish' in f for f in summary_tool.problems(run_, total, 1, 0))

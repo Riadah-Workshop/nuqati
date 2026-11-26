@@ -20,7 +20,7 @@ SMALL_STEP = 100  # drivers: up to this size an error is a failure; above it the
 def gps_groups(results):
     """The measured groups that send GPS samples (exports are not samples)."""
     for r in results:
-        if r['scenario'] in ('steady', 'replay'):
+        if r['scenario'] in ('steady', 'replay', 'burst'):
             yield r
         elif r['scenario'] == 'abuse':
             yield r['abuser']
@@ -45,7 +45,9 @@ def rows(results):
     """(label, drivers, stats-dict) for every measured group."""
     for r in results:
         label = r.get('label', r['scenario'])
-        if r['scenario'] in ('steady', 'replay'):
+        if r['scenario'] == 'failed':
+            yield label + ' (did not finish)', 0, {'requests': 0, 'per_second': 0, 'p50_ms': 0, 'p95_ms': 0, 'p99_ms': 0, 'max_ms': 0, 'statuses': {}}, r
+        elif r['scenario'] in ('steady', 'replay', 'burst'):
             yield label, r['drivers'], r, r
         elif r['scenario'] == 'abuse':
             yield label + ' (normal drivers)', r['normal_drivers']['drivers'], r['normal_drivers'], r
@@ -67,7 +69,7 @@ def markdown(results):
 
 
 def problems(results, db_rows, refused_logged, tracebacks):
-    found = []
+    found = [f"{r['label']}: the scenario did not finish within its time limit" for r in results if r['scenario'] == 'failed']
     expected = accepted_total(results)
     if db_rows < expected:
         found.append(f'the API accepted {expected} samples but the database holds only {db_rows}: samples were lost')

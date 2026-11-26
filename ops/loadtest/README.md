@@ -12,7 +12,7 @@ It runs as the CI job **Load test (GPS ingestion)** on every pull request. Stand
 
 **One set of drivers per scenario.** Give every scenario its own slice of the seeded drivers (`--offset`). A driver that already
 sent samples would see its first new sample arrive less than 0.7 s after its last one from the previous scenario, and the API
-answers such a sample (`filtered_short_interval`) without storing it. The CI job seeds 900 drivers and hands out disjoint slices.
+answers such a sample (`filtered_short_interval`) without storing it. The CI job seeds 1,200 drivers and hands out disjoint slices.
 
 **What the numbers mean.** A shared GitHub runner (4 vCPU) is not your server. Throughput and latency show where this design
 starts to slow down and whether anything breaks or gets lost; they are not a promise about production. The CI job fails on

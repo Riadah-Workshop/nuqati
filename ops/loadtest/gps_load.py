@@ -11,6 +11,8 @@ from the previous scenario, which the API answers without storing it. Scenarios:
   abuse    one client sends --requests samples as fast as it can while --steady normal drivers keep working:
            the abuser must be refused (HTTP 429 with Retry-After) and the normal drivers must not notice.
   mixed    --drivers normal drivers while --exporters administrators keep generating monthly report exports.
+  burst    --clients phones that all send at the same instant, --rounds times (what happens when the API restarts and every
+           phone uploads at once). Every client waits for the others before each round, so the requests arrive together.
 
 Results are printed as one JSON object on stdout and a short table row on stderr. With --gate the process exits with
 status 1 when the scenario's expectations are not met (see the code: they are deliberately loose, errors and refusals of
@@ -45,10 +47,10 @@ class Client:
             finally:
                 self.conn = None
 
-    def request(self, method: str, path: str, token: str, body=None, timeout: float = 60.0):
+    def request(self, method: str, path: str, token: str, body=None, timeout: float = 60.0, attempts: int = 2):
         started = time.perf_counter()
         payload = json.dumps(body) if body is not None else None
-        for attempt in (1, 2):
+        for attempt in range(1, attempts + 1):
             try:
                 if self.conn is None:
                     self.conn = http.client.HTTPConnection(self.host, self.port, timeout=timeout)
@@ -60,7 +62,7 @@ class Client:
                 return response.status, headers, data, time.perf_counter() - started
             except (http.client.HTTPException, OSError):
                 self.close()
-                if attempt == 2:
+                if attempt == attempts:
                     return 0, {}, b'', time.perf_counter() - started
         return 0, {}, b'', time.perf_counter() - started
 
@@ -274,9 +276,49 @@ def scenario_mixed(args, seed):
     return result, failures
 
 
+def scenario_burst(args, seed):
+    drivers = seed['drivers'][args.offset:args.offset + args.clients]
+    barrier = threading.Barrier(len(drivers))
+    results, lock = [], threading.Lock()
+    rounds_started = []
+
+    def worker(driver, index):
+        client, mine = Client(args.base_url), []
+        for round_no in range(1, args.rounds + 1):
+            try:
+                barrier.wait(timeout=args.timeout * 3)
+            except threading.BrokenBarrierError:
+                break
+            if index == 0:
+                rounds_started.append(time.monotonic())
+            status, _, data, took = client.request('POST', f'/api/v1/mobile/trips/{driver["trip_id"]}/sample', driver['token'],
+                                                   sample_body(f'{args.tag}-b{index}', round_no, datetime.now(timezone.utc)),
+                                                   timeout=args.timeout, attempts=1)
+            mine.append((status, took, accepted(status, data)))
+            time.sleep(args.round_gap)
+        client.close()
+        with lock:
+            results.extend(mine)
+
+    started = time.monotonic()
+    threads = [threading.Thread(target=worker, args=(d, i)) for i, d in enumerate(drivers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    elapsed = time.monotonic() - started
+    result = {'scenario': 'burst', 'drivers': len(drivers), 'rounds': args.rounds, 'seconds': round(elapsed, 1), **summarize(results, elapsed)}
+    failures = []
+    if args.gate:
+        expected = len(drivers) * args.rounds
+        if result['accepted'] != expected:
+            failures.append(f'expected {expected} accepted samples from {len(drivers)} simultaneous phones, got {result["accepted"]}: {result["statuses"]}')
+    return result, failures
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('scenario', choices=['steady', 'replay', 'abuse', 'mixed'])
+    parser.add_argument('scenario', choices=['steady', 'replay', 'abuse', 'mixed', 'burst'])
     parser.add_argument('--base-url', default='http://127.0.0.1:8000')
     parser.add_argument('--seed', required=True, help='JSON file written by ops/loadtest/seed.py')
     parser.add_argument('--drivers', type=int, default=50)
@@ -288,6 +330,10 @@ def main(argv=None) -> int:
     parser.add_argument('--steady', type=int, default=50, help='abuse: normal drivers running alongside')
     parser.add_argument('--steady-offset', type=int, default=0, help='abuse: first seed driver of the normal drivers')
     parser.add_argument('--exporters', type=int, default=2, help='mixed: administrators exporting reports')
+    parser.add_argument('--clients', type=int, default=300, help='burst: phones sending at the same instant')
+    parser.add_argument('--rounds', type=int, default=3, help='burst: how many times they all send together')
+    parser.add_argument('--round-gap', type=float, default=2.0, help='burst: seconds between rounds (the API drops samples closer than 0.7 s)')
+    parser.add_argument('--timeout', type=float, default=60.0, help='burst: seconds a request may take before it counts as failed')
     parser.add_argument('--tag', default=str(int(time.time())), help='makes sample ids unique per run')
     parser.add_argument('--gate', action='store_true', help='exit 1 when the scenario fails its expectations')
     parser.add_argument('--p95-ms', type=float, default=0.0, help='steady: fail above this 95th percentile (needs --gate)')
@@ -295,11 +341,13 @@ def main(argv=None) -> int:
     with open(args.seed, encoding='utf-8') as handle:
         seed = json.load(handle)
     needed = {'steady': args.offset + args.drivers, 'replay': args.offset + args.drivers,
-              'abuse': max(args.offset + 1, args.steady_offset + args.steady), 'mixed': args.offset + args.drivers}[args.scenario]
+              'abuse': max(args.offset + 1, args.steady_offset + args.steady), 'mixed': args.offset + args.drivers,
+              'burst': args.offset + args.clients}[args.scenario]
     if needed > len(seed['drivers']):
         print(f'the seed file has {len(seed["drivers"])} drivers, this run needs {needed}', file=sys.stderr)
         return 2
-    scenario = {'steady': scenario_steady, 'replay': scenario_replay, 'abuse': scenario_abuse, 'mixed': scenario_mixed}[args.scenario]
+    scenario = {'steady': scenario_steady, 'replay': scenario_replay, 'abuse': scenario_abuse, 'mixed': scenario_mixed,
+                'burst': scenario_burst}[args.scenario]
     result, failures = scenario(args, seed)
     result['failures'] = failures
     print(json.dumps(result))
