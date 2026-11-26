@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 # Exactly the versions in the committed lock file; the build fails if the lock file and package.json disagree.
