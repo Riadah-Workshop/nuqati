@@ -240,3 +240,29 @@ Notes:
 - A driver with no app login yet shows "no app login"; create the login first (Add driver, or link an existing one).
 - Same actions by API: `GET /api/v1/drivers/{id}/device-session`, `POST /api/v1/drivers/{id}/release-device-session`,
   `POST /api/v1/drivers/{id}/reset-password` (body `{}` for a generated password, or `{"new_password": "...", "release_device": true}`).
+
+## 11. A trip has gaps or a jump (reading App Diagnostics)
+
+A route with few points and a straight line across the map means the app **recorded nothing** for a while. It is not wrong
+positions. To see why, open **Maintenance, App Diagnostics**, search the driver's name or plate, and read the lines around the time of
+the trip. Times are shown in UTC (Riyadh is +3 hours). Lines starting `GPS_NATIVE_` come from the phone's own GPS recorder and are
+copied in with the time they really happened. They carry no position, only numbers and true/false:
+
+| Line | What it tells you |
+|---|---|
+| `GPS_NATIVE_SUSPENDED delayed_s=N` | The phone **froze the app** for N seconds (battery saving, sleep). Not a GPS problem; fix the phone's battery setting. |
+| `GPS_NATIVE_GAP_STARTED silent_s=N ...` then `GPS_NATIVE_GAP_ENDED gap_s=N provider=...` | GPS gave no position for that long. `gps=false` means the phone's GPS was switched off; `interactive=false` means the screen was off. |
+| `GPS_NATIVE_SCREEN_OFF` / `GPS_NATIVE_SCREEN_ON screen_off_s=N` | When the screen went off and on. A suspension that ends exactly at screen-on is the phone sleeping. |
+| `GPS_NATIVE_SERVICE_DESTROYED`, `GPS_NATIVE_SERVICE_COMMAND restart_by_system=true` | Android stopped the tracking service and restarted it: the app was killed in the background. |
+| `GPS_NATIVE_AVAILABILITY available=false` | Google's location service said it cannot work out a position right now (indoors, tunnel, location setting). |
+| `GPS_NATIVE_FALLBACK`, `GPS_NATIVE_RESTARTED` | The app tried a second GPS source, then restarted the listener, after the first went quiet. |
+| `TRIP_NATIVE_START_BLOCKED owner_not_verified` | A trip could not start because the driver had not selected a vehicle. Nothing uploads until a plate is chosen. |
+| `NETWORK_ROUTE_CHANGED vpn_active=true/false` | Whether a VPN was on. A VPN can delay uploads, not GPS capture. |
+
+On a phone that suspends the app: in Android Settings, Apps, Nuqati, Battery, choose **Unrestricted** (wording differs by brand; some also
+have "Auto-start" or "lock in recents" in the battery or security menu). `GPS_MONITOR_STALE_FIX` is a line of the old GPS monitor and, in
+app versions before this change, repeated every 45 seconds even when tracking was fine; ignore it as evidence.
+
+The phone keeps only its newest few thousand records (roughly a day or two of active tracking). After the app is updated, the last three
+days still on the phone are copied in over the first minutes; the server does not accept events older than 14 days.
+
