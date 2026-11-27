@@ -89,8 +89,8 @@ export const TOUR_STEPS: TourStep[] = [
     target: "nav-maintenance",
     title: { en: "Maintenance", ar: "الصيانة" },
     body: {
-      en: "Odometer readings feed Maintenance Alerts, so service reminders arrive on time. Workshop Requests collects help requests from drivers, and App Diagnostics shows problems reported by the driver app.",
-      ar: "قراءات العداد تغذّي تنبيهات الصيانة لتصل تذكيرات الخدمة في وقتها. طلبات الورشة تجمع طلبات المساعدة من السائقين، وتشخيص التطبيق يعرض المشكلات التي يبلغ عنها تطبيق السائق.",
+      en: "Maintenance Alerts shows what is due or overdue; the odometer pages are tabs inside it, because readings drive the reminders. Workshop Requests collects driver help requests, and App Diagnostics shows problems the driver app reported.",
+      ar: "تنبيهات الصيانة تعرض ما حان موعده أو تأخر، وصفحات العداد تبويبات داخلها لأن القراءات هي التي تحرّك التذكيرات. طلبات الورشة تجمع طلبات المساعدة من السائقين، وتشخيص التطبيق يعرض المشكلات التي أبلغ عنها تطبيق السائق.",
     },
   },
   {

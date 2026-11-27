@@ -1,4 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
+import {Pause,Play,Trash2} from 'lucide-react';
+import RowMenu from './RowMenu';
 
 type Company={id:number;name:string};
 type Driver={id:number;company_id:number;full_name:string};
@@ -40,6 +42,9 @@ export default function ReportSubscriptions({request,lang,role,companyId,selecte
  <button type="button" className="primary" disabled={busy||!cid} onClick={save}>{busy?'Saving…':ar?'إضافة اشتراك':'Create subscription'}</button>
  {error&&<p role="status" className="nuqati-scheduled-note">{error}</p>}
  <h4>{ar?'الاشتراكات الحالية':'Existing subscriptions'}</h4>
- <div className="table-wrap"><table><thead><tr><th>{ar?'التقرير':'Report'}</th><th>{ar?'البريد':'Recipient'}</th><th>{ar?'التكرار':'Frequency'}</th><th>{ar?'الإرسال التالي':'Next delivery'}</th><th>{ar?'الحالة':'Status'}</th><th>{ar?'الإجراءات':'Actions'}</th></tr></thead><tbody>{records.map(r=><tr key={r.id}><td>{kinds.find(x=>x[0]===r.kind)?.[1]||r.kind}</td><td>{r.recipient}</td><td>{r.frequency}</td><td>{new Date(r.next_send_at).toLocaleString()}</td><td>{r.last_error?(ar?'خطأ في الإرسال':'Delivery error'):r.enabled?(ar?'نشط':'Active'):(ar?'متوقف':'Paused')}</td><td><button className="refresh" onClick={()=>modify(r.id,!r.enabled)}>{r.enabled?(ar?'إيقاف':'Pause'):(ar?'تفعيل':'Enable')}</button> <button className="refresh" onClick={()=>{if(window.confirm(ar?'حذف الاشتراك؟':'Delete subscription?'))void modify(r.id,false,true);}}>{ar?'حذف':'Delete'}</button></td></tr>)}{records.length===0&&<tr><td colSpan={6}>{ar?'لا توجد اشتراكات':'No subscriptions created'}</td></tr>}</tbody></table></div>
+ <div className="table-wrap"><table><thead><tr><th>{ar?'التقرير':'Report'}</th><th>{ar?'البريد':'Recipient'}</th><th>{ar?'التكرار':'Frequency'}</th><th>{ar?'الإرسال التالي':'Next delivery'}</th><th>{ar?'الحالة':'Status'}</th><th>{ar?'الإجراءات':'Actions'}</th></tr></thead><tbody>{records.map(r=><tr key={r.id}><td>{kinds.find(x=>x[0]===r.kind)?.[1]||r.kind}</td><td>{r.recipient}</td><td>{r.frequency}</td><td>{new Date(r.next_send_at).toLocaleString()}</td><td>{r.last_error?(ar?'خطأ في الإرسال':'Delivery error'):r.enabled?(ar?'نشط':'Active'):(ar?'متوقف':'Paused')}</td><td><RowMenu lang={lang} label={ar?'إجراءات هذا الاشتراك':'Actions for this subscription'} items={[
+  {id:'toggle',icon:r.enabled?<Pause size={15}/>:<Play size={15}/>,label:r.enabled?(ar?'إيقاف':'Pause'):(ar?'تفعيل':'Enable'),onSelect:()=>{void modify(r.id,!r.enabled);}},
+  {id:'delete',danger:true,icon:<Trash2 size={15}/>,label:ar?'حذف':'Delete',onSelect:()=>{if(window.confirm(ar?'حذف الاشتراك؟':'Delete subscription?'))void modify(r.id,false,true);}},
+ ]}/></td></tr>)}{records.length===0&&<tr><td colSpan={6}>{ar?'لا توجد اشتراكات':'No subscriptions created'}</td></tr>}</tbody></table></div>
  </section>;
 }

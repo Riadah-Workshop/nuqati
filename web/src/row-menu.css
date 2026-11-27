@@ -1,0 +1,15 @@
+/* Three-dot row menu. The list lives in document.body (portal), so it carries its own colours. */
+.nq-rowmenu-trigger{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border-radius:9px;border:1px solid #42596d;background:#1f3347;color:#d6e6f0;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.nq-rowmenu-trigger:hover{background:#2b4358;border-color:#79946b;color:#f2ffd7}
+.nq-rowmenu-trigger[aria-expanded="true"]{background:#2b4358;border-color:#b9eb61;color:#f2ffd7}
+.nq-rowmenu-trigger:focus-visible,.nq-rowmenu-item:focus-visible{outline:2px solid #b9eb61;outline-offset:2px}
+.nq-rowmenu{position:fixed;z-index:9000;box-sizing:border-box;min-width:210px;max-width:min(320px,calc(100vw - 16px));padding:6px;border-radius:12px;border:1px solid #3b566a;background:#122434;box-shadow:0 14px 40px #000b;color:#eaf4fa;font-size:13px}
+.nq-rowmenu-item{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:8px 12px;border:0;border-radius:8px;background:transparent;color:#eaf4fa;font:inherit;font-weight:650;text-align:start;cursor:pointer}
+.nq-rowmenu-item:hover:not(:disabled),.nq-rowmenu-item:focus-visible{background:#243c52}
+.nq-rowmenu-item:disabled{opacity:.45;cursor:not-allowed}
+.nq-rowmenu-item.danger{color:#ffcf8a}
+.nq-rowmenu-item.danger:hover:not(:disabled),.nq-rowmenu-item.danger:focus-visible{background:#43301f;color:#ffe3b0}
+.nq-rowmenu-icon{display:inline-flex;flex:0 0 auto;color:#9fc2d5}
+.nq-rowmenu-item.danger .nq-rowmenu-icon{color:#f4b860}
+.nq-rowmenu-sep{height:1px;margin:5px 4px;border:0;background:#2f4658}
+@media (prefers-reduced-motion:reduce){.nq-rowmenu-trigger{transition:none}}

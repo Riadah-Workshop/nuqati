@@ -1,0 +1,39 @@
+name: Web UI in a real browser
+
+# Mounts the real three-dot row menu and the first-login tour in headless Chrome, clicks and presses keys, and checks where
+# things end up on screen (web/scripts/check-ui-components.mjs). A control run with a deliberately broken menu must fail the
+# same checks. Nothing here deploys or publishes anything. It is a separate workflow so it never edits ci.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: web-ui-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ui:
+    name: Menus and tour in Chrome
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # same major version as web/Dockerfile
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Row menu and tour work in a real browser
+        run: node scripts/check-ui-components.mjs
