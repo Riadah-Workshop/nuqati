@@ -172,7 +172,13 @@ function TourScene() {
 
 const card = () => $('[role="dialog"]');
 const counter = () => (($('.nq-tour-count') || {}).textContent || '').trim();
-const settle = () => sleep(320); // the spotlight slides to the next target in 0.2 s: measure after it has arrived
+// The spotlight slides to the next target with a 0.2 s CSS transition, and a headless page with a virtual clock does not advance
+// transitions reliably: finish every running one, then measure where the spotlight ended up.
+const settle = async () => {
+  await sleep(80);
+  document.getAnimations().forEach((animation) => { try { animation.finish(); } catch { /* an animation that cannot finish is already over */ } });
+  await sleep(80);
+};
 
 async function runTour() {
   const narrow = window.innerWidth < 720;
