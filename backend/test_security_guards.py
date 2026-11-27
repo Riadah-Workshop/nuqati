@@ -166,6 +166,8 @@ AUDITED_HANDLERS = {
     "driver_iqama_login": "auth.driver_login",
     "driver_online_logout": "auth.driver_logout",
     "admin_release_driver_device": "driver.device_release",
+    "admin_reset_driver_password": "driver.password_reset",
+    "driver_change_password": "account.password_changed",
     "add_user": "user.create",
     "deactivate_user": "user.deactivate",
     "edit_user": "user.update",

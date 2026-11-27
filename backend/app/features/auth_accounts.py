@@ -10,7 +10,7 @@ import ssl
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -391,6 +391,82 @@ def admin_release_driver_device(driver_id:int,db:Session=Depends(get_db),user:Us
     audit(db,'driver.device_release',actor=user,target_type='driver',target_id=driver_id,company_id=driver.company_id,detail={'had_session':locked is not None})
     db.commit()
     return {'status':'released','driver_id':driver_id,'had_session':locked is not None}
+
+def _admin_driver_link(db:Session,user:User,driver_id:int):
+    """The driver and the login linked to it, for an administrator of the same company (or a super admin)."""
+    allow(user,'super_admin','company_admin')
+    driver=db.get(Driver,driver_id)
+    if not driver: raise HTTPException(404,'Driver not found')
+    scope(user,driver.company_id)
+    link=db.scalar(select(DriverAccount).where(DriverAccount.driver_id==driver_id))
+    return driver,link
+
+@app.get('/api/v1/drivers/{driver_id}/device-session')
+def admin_driver_device_session(driver_id:int,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """Whether a phone currently holds the driver's sign-in. Shows when it was taken, never the device or session identifiers."""
+    driver,link=_admin_driver_link(db,user,driver_id)
+    if not link: return {'driver_id':driver.id,'linked':False,'active':False,'since':None,'last_login_at':None}
+    row=db.get(DriverDeviceSession,link.user_id)
+    return {'driver_id':driver.id,'linked':True,'active':row is not None,
+            'since':row.created_at.isoformat() if row and row.created_at else None,
+            'last_login_at':row.last_login_at.isoformat() if row and row.last_login_at else None}
+
+# No look-alike characters (0/O, 1/l/I), no symbols: an administrator reads this out or sends it, the driver types it on a phone.
+_TEMPORARY_PASSWORD_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+
+def _temporary_password()->str:
+    return '-'.join(''.join(secrets.choice(_TEMPORARY_PASSWORD_ALPHABET) for _ in range(4)) for _ in range(3))
+
+class DriverPasswordResetIn(BaseModel):
+    new_password:str|None=Field(default=None,min_length=12,max_length=128)
+    release_device:bool=False
+
+@app.post('/api/v1/drivers/{driver_id}/reset-password')
+def admin_reset_driver_password(driver_id:int,payload:DriverPasswordResetIn,request:Request,response:Response,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """Sets a new password for a driver who forgot it. Without `new_password` the server makes a temporary one and returns it once.
+
+    Every token the driver holds stops working (`auth_version`). `release_device` also frees the phone reservation,
+    for the lost-phone case. The password itself is never written to the audit trail or the logs.
+    """
+    driver,link=_admin_driver_link(db,user,driver_id)
+    if not link: raise HTTPException(404,'Driver login not linked')
+    db.execute(select(User.id).where(User.id==link.user_id).with_for_update()).one()
+    account=db.get(User,link.user_id)
+    if not account or account.role!='driver': raise HTTPException(404,'Driver login not linked')
+    generated=payload.new_password is None
+    new_password=payload.new_password or _temporary_password()
+    account.password_hash=hash_password(new_password)
+    db.execute(text('UPDATE users SET auth_version=auth_version+1 WHERE id=:id'),{'id':account.id})
+    released=False
+    if payload.release_device:
+        reserved=db.get(DriverDeviceSession,account.id)
+        if reserved: db.delete(reserved); released=True
+    audit(db,'driver.password_reset',actor=user,target_type='driver',target_id=driver_id,company_id=driver.company_id,
+          request=request,detail={'generated':generated,'released_device':released})
+    db.commit()
+    response.headers['Cache-Control']='no-store'
+    result={'status':'password_reset','driver_id':driver_id,'released_device':released}
+    if generated: result['temporary_password']=new_password
+    return result
+
+class DriverChangePasswordIn(BaseModel):
+    current_password:str=Field(min_length=1,max_length=128)
+    new_password:str=Field(min_length=12,max_length=128)
+
+@app.post('/api/v1/mobile/change-password')
+def driver_change_password(payload:DriverChangePasswordIn,request:Request,db:Session=Depends(get_db),user:User=Depends(current_user)):
+    """A driver changes their own password in the app (the temporary one an administrator handed out, or any time).
+
+    The single device session stays valid: a driver has only one phone, and signing it out here would only lock the driver out.
+    """
+    allow(user,'driver')
+    enforce_auth_limit(db,request,'driver-password',str(user.id))
+    if not verify_password(payload.current_password,user.password_hash): raise HTTPException(400,'Current password is incorrect')
+    if verify_password(payload.new_password,user.password_hash): raise HTTPException(400,'Choose a different password')
+    user.password_hash=hash_password(payload.new_password)
+    audit(db,'account.password_changed',actor=user,request=request,detail={'by':'driver'})
+    db.commit()
+    return {'status':'password_changed'}
 
 @app.post('/api/v1/mobile/login-ack')
 def driver_login_ack(db:Session=Depends(get_db),user:User=Depends(current_user)):

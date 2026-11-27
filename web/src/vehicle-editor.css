@@ -62,3 +62,23 @@
 .nq-ve-add-form>summary::-webkit-details-marker{display:none}
 .nq-ve-add-form[open]>summary{border-bottom:1px solid #385063;background:#b9eb610b}
 .nq-ve-add-form .entry-form{margin:13px 15px 18px}
+
+/* Driver page: phone sign-in and password */
+.nq-da-status{display:flex;align-items:center;gap:10px;margin:0 0 14px;color:#cfdeea;font-size:13px}
+.nq-da-dot{width:10px;height:10px;border-radius:50%;background:#7f93a3;flex:0 0 auto}
+.nq-da-dot.on{background:#b9eb61;box-shadow:0 0 0 4px #b9eb6122}
+.nq-da-actions{display:flex;flex-wrap:wrap;gap:10px}
+.nq-da-danger{background:#4a2b30;color:#ffd9dc;border:1px solid #7a424a}
+.nq-da-danger:hover:not(:disabled){background:#5a343a}
+.nq-da-panel{margin-top:16px;padding:16px;border:1px solid #405a6e;border-radius:12px;background:#17293a;display:grid;gap:14px}
+.nq-da-choice{display:flex;align-items:flex-start;gap:10px;color:#e1edf5;font-size:13px;cursor:pointer}
+.nq-da-choice input{margin-top:3px;accent-color:#b9eb61}
+.nq-da-choice span{display:flex;flex-direction:column;gap:3px}
+.nq-da-choice small{color:#9fb6c6;font-size:11px;line-height:1.5}
+.nq-da-one{grid-template-columns:minmax(0,1fr)}
+.nq-da-secret{margin-top:16px;display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:14px;border-radius:12px;border:1px dashed #b9eb61;background:#1d3143}
+.nq-da-secret>div{flex:1 1 240px;display:flex;flex-direction:column;gap:6px}
+.nq-da-secret small{color:#9fb6c6;font-size:11px}
+.nq-da-secret code{font:700 22px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.06em;color:#eaffc2;direction:ltr;unicode-bidi:isolate;text-align:start;user-select:all}
+.nq-da-secret p{flex-basis:100%;margin:0;color:#abc7ae;font-size:11px}
+.nq-da-ok{margin-top:12px;color:#b9eb61;font-size:12px}
