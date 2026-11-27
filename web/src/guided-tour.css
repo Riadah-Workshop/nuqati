@@ -1,0 +1,30 @@
+/* First-login tour: spotlight and card. Colours follow the dashboard (navy surfaces, lime accent). */
+.nq-tour-overlay{position:fixed;inset:0;z-index:10000}
+.nq-tour-dim{position:absolute;inset:0;background:rgba(4,11,18,.76)}
+.nq-tour-hole{position:absolute;border-radius:12px;box-shadow:0 0 0 9999px rgba(4,11,18,.76),0 0 0 2px #b9eb61,0 0 24px 4px #b9eb6140;pointer-events:none;transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease}
+.nq-tour-card{position:fixed;z-index:10001;box-sizing:border-box;display:grid;gap:12px;padding:18px 20px;background:#122434;color:#eaf4fa;border:1px solid #3b566a;border-radius:16px;box-shadow:0 22px 60px #000a;max-width:calc(100vw - 24px);font-size:14px;line-height:1.6}
+.nq-tour-card--center{left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100vw - 24px))}
+.nq-tour-card--sheet{left:12px;right:12px;bottom:12px;width:auto}
+.nq-tour-overlay .nq-tour-card h2{margin:0;font-size:18px;line-height:1.35;color:#fff}
+.nq-tour-overlay .nq-tour-card p{margin:0;color:#cfdeea}
+.nq-tour-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.nq-tour-count{font-size:11px;font-weight:750;letter-spacing:.04em;color:#b9eb61}
+.nq-tour-top-actions{display:inline-flex;align-items:center;gap:6px}
+.nq-tour-quiet,.nq-tour-icon,.nq-tour-secondary,.nq-tour-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:9px;font-size:12px;font-weight:750;cursor:pointer;min-height:34px;transition:background .15s,border-color .15s}
+.nq-tour-quiet{background:transparent;border:1px solid transparent;color:#a9c0cf;padding:6px 9px}
+.nq-tour-quiet:hover{background:#ffffff0f;color:#fff}
+.nq-tour-icon{width:34px;padding:0;background:transparent;border:1px solid transparent;color:#a9c0cf}
+.nq-tour-icon:hover{background:#ffffff0f;color:#fff}
+.nq-tour-secondary{background:#2a4054;border:1px solid #4a6477;color:#eaf4fa;padding:7px 13px}
+.nq-tour-secondary:hover:not(:disabled){background:#35506a}
+.nq-tour-secondary:disabled{opacity:.45;cursor:not-allowed}
+.nq-tour-primary{background:#b9eb61;border:1px solid #b9eb61;color:#10210b;padding:7px 16px}
+.nq-tour-primary:hover{background:#c8f27d}
+.nq-tour-card button:focus-visible{outline:2px solid #b9eb61;outline-offset:2px}
+.nq-tour-dots{display:flex;flex-wrap:wrap;gap:5px}
+.nq-tour-dot{width:7px;height:7px;border-radius:50%;background:#3b566a}
+.nq-tour-dot.done{background:#6f8f4a}
+.nq-tour-dot.on{background:#b9eb61;box-shadow:0 0 0 3px #b9eb6130}
+.nq-tour-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nq-tour-nav{display:inline-flex;gap:8px}
+@media (prefers-reduced-motion:reduce){.nq-tour-hole,.nq-tour-quiet,.nq-tour-icon,.nq-tour-secondary,.nq-tour-primary{transition:none}}
