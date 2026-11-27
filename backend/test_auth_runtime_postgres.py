@@ -6,6 +6,7 @@
 No production database is ever used. This module does not modify the main instance.
 """
 import os
+import re
 import secrets
 from urllib.parse import urlsplit
 
@@ -21,7 +22,7 @@ os.environ['DATABASE_URL']=URL
 os.environ.setdefault('NUQATI_AUTH_SECRET','security-runtime-test-secret-only-2026-rotate')
 
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from app import migrate  # noqa: E402
 assert migrate.main(['upgrade']) == 0, 'migrations failed on the test database'  # the app no longer creates tables
 from app.main import app
@@ -144,3 +145,100 @@ def test_driver_device_lock_logout_revokes_tokens_and_admin_can_release(sample_a
         assert released.json()['had_session'] is True
         assert client.get('/api/v1/auth/me',headers={'Authorization':'Bearer '+b.json()['access_token']}).status_code==401
         assert client.post(url,json=first).status_code==200
+
+
+IQAMA_URL='/api/v1/auth/driver-iqama-login'
+
+def _admin_headers(client,d):
+    admin=client.post('/api/v1/auth/login',json={'email':d['email'],'password':'CompanyAdminPassword2026'})
+    assert admin.status_code==200,admin.text
+    return {'Authorization':'Bearer '+admin.json()['access_token']}
+
+
+def _own_ip(monkeypatch):
+    """The sign-in throttle also counts per client address, and every test client shares one. Give each of these tests
+    its own address so they cannot use up each other's (or the older tests') allowance."""
+    ip='198.51.100.'+str(20+secrets.randbelow(200))
+    monkeypatch.setattr('app.auth_limits._client_ip',lambda request:ip)
+
+
+def _alice(d,device,password='CorrectPasswordForAlice2026'):
+    return {'iqama':d['iqama'],'password':password,'device_id':'secure-random-installation-'+device*12}
+
+
+def test_admin_sees_whether_a_phone_holds_the_driver_session(sample_accounts,monkeypatch):
+    _own_ip(monkeypatch)
+    d=sample_accounts;alice,bob=d['ids'][2],d['ids'][3]
+    with TestClient(app) as client:
+        headers=_admin_headers(client,d)
+        before=client.get(f'/api/v1/drivers/{alice}/device-session',headers=headers)
+        assert before.status_code==200,before.text
+        assert before.json()['linked'] is True and before.json()['active'] is False and before.json()['since'] is None
+        login=client.post(IQAMA_URL,json=_alice(d,'a'))
+        assert login.status_code==200,login.text
+        during=client.get(f'/api/v1/drivers/{alice}/device-session',headers=headers).json()
+        assert during['active'] is True and during['since'] and during['last_login_at']
+        assert not ({'device_id','session_id'} & set(during)), 'device identifiers must never be shown'
+        assert client.get(f'/api/v1/drivers/{bob}/device-session',headers=headers).status_code==403
+        driver_headers={'Authorization':'Bearer '+login.json()['access_token']}
+        assert client.get(f'/api/v1/drivers/{alice}/device-session',headers=driver_headers).status_code==403
+
+
+def test_admin_reset_makes_a_temporary_password_signs_the_driver_out_and_can_free_the_phone(sample_accounts,monkeypatch):
+    _own_ip(monkeypatch)
+    d=sample_accounts;alice,bob=d['ids'][2],d['ids'][3]
+    with TestClient(app) as client:
+        headers=_admin_headers(client,d)
+        first=client.post(IQAMA_URL,json=_alice(d,'a'))
+        assert first.status_code==200,first.text
+        access=first.json()['access_token'];refresh=first.json()['refresh_token']
+        reset=client.post(f'/api/v1/drivers/{alice}/reset-password',json={},headers=headers)
+        assert reset.status_code==200,reset.text
+        assert reset.headers['cache-control']=='no-store'
+        temporary=reset.json()['temporary_password']
+        assert re.fullmatch(r'[A-HJ-NP-Za-km-z2-9]{4}(-[A-HJ-NP-Za-km-z2-9]{4}){2}',temporary),temporary
+        assert reset.json()['released_device'] is False
+        # everything the old session held stops working at once
+        assert client.get('/api/v1/auth/me',headers={'Authorization':'Bearer '+access}).status_code==401
+        assert client.post('/api/v1/auth/driver-refresh',json={'refresh_token':refresh}).status_code==401
+        assert client.post(IQAMA_URL,json=_alice(d,'a')).status_code==401, 'the old password must not work'
+        # the phone is still reserved: the same phone signs in with the temporary password, another one cannot yet
+        assert client.post(IQAMA_URL,json=_alice(d,'b',temporary)).status_code==409
+        assert client.post(IQAMA_URL,json=_alice(d,'a',temporary)).status_code==200
+        # an administrator-chosen password, and the lost-phone case: the reservation is freed too
+        typed=client.post(f'/api/v1/drivers/{alice}/reset-password',json={'new_password':'ChosenByTheAdmin2026','release_device':True},headers=headers)
+        assert typed.status_code==200,typed.text
+        assert 'temporary_password' not in typed.json() and typed.json()['released_device'] is True
+        assert client.post(IQAMA_URL,json=_alice(d,'b','ChosenByTheAdmin2026')).status_code==200
+        # rules: length, company boundary, role
+        assert client.post(f'/api/v1/drivers/{alice}/reset-password',json={'new_password':'short'},headers=headers).status_code==422
+        assert client.post(f'/api/v1/drivers/{bob}/reset-password',json={},headers=headers).status_code==403
+        driver_token={'Authorization':'Bearer '+client.post(IQAMA_URL,json=_alice(d,'b','ChosenByTheAdmin2026')).json()['access_token']}
+        assert client.post(f'/api/v1/drivers/{alice}/reset-password',json={},headers=driver_token).status_code==403
+        with SessionLocal() as db:
+            rows=db.execute(text("SELECT detail::text FROM security_audit WHERE action='driver.password_reset' AND target_id=:t"),{'t':str(alice)}).scalars().all()
+        assert len(rows)>=2
+        assert not any(temporary in r or 'ChosenByTheAdmin2026' in r for r in rows), 'a password must never reach the audit trail'
+
+
+def test_driver_changes_their_own_password_in_the_app(sample_accounts,monkeypatch):
+    _own_ip(monkeypatch)
+    d=sample_accounts
+    with TestClient(app) as client:
+        login=client.post(IQAMA_URL,json=_alice(d,'a'))
+        assert login.status_code==200,login.text
+        headers={'Authorization':'Bearer '+login.json()['access_token']}
+        url='/api/v1/mobile/change-password'
+        old='CorrectPasswordForAlice2026';new='ANewPasswordForAlice2026'
+        assert client.post(url,json={'current_password':'not-the-password','new_password':new},headers=headers).status_code==400
+        assert client.post(url,json={'current_password':old,'new_password':old},headers=headers).status_code==400
+        assert client.post(url,json={'current_password':old,'new_password':'short'},headers=headers).status_code==422
+        assert client.post(url,json={'current_password':old,'new_password':new}).status_code==401
+        done=client.post(url,json={'current_password':old,'new_password':new},headers=headers)
+        assert done.status_code==200,done.text
+        # the phone keeps its session; the old password is gone, the new one works
+        assert client.get('/api/v1/auth/me',headers=headers).status_code==200
+        assert client.post(IQAMA_URL,json=_alice(d,'a',old)).status_code==401
+        assert client.post(IQAMA_URL,json=_alice(d,'a',new)).status_code==200
+        # administrators use their own dashboard route, not this one
+        assert client.post(url,json={'current_password':'CompanyAdminPassword2026','new_password':new},headers=_admin_headers(client,d)).status_code==403

@@ -5,6 +5,25 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.3: driver sign-in and password controls
+
+#### Added
+- **Sign out a driver's phone from the platform.** The server could already free a driver's phone reservation
+  (`POST /api/v1/drivers/{id}/release-device-session`), but nothing in the web app called it, so a driver who lost the phone
+  or reinstalled the app stayed locked out. The driver's page now has a "Phone sign-in & password" section: it shows whether a
+  phone is signed in (and since when, never the device identifiers) and has a "Sign out driver's phone" button. New
+  `GET /api/v1/drivers/{id}/device-session`. Super admin and company admin only, own company only.
+- **Reset a driver's password.** New `POST /api/v1/drivers/{id}/reset-password`: the server makes a temporary password
+  (`xxxx-xxxx-xxxx`, no look-alike characters) and returns it once with `Cache-Control: no-store`, or the administrator types one
+  (12 to 128 characters). Every token the driver holds stops working; "also sign out the phone" frees the reservation for the
+  lost-phone case. Audited as `driver.password_reset`; the password never reaches the audit trail or the logs.
+
+#### Fixed
+- **The driver app's "Change password" never worked.** The app calls `POST /api/v1/mobile/change-password`, which the server
+  did not have (it only exists in the old Phase 6 notes). It does now: driver accounts only, current password required,
+  throttled, the phone keeps its session. Without it a driver could not replace the temporary password an administrator
+  hands out.
+
 ### Phase 5.1: lock files (reproducible builds)
 
 #### Changed

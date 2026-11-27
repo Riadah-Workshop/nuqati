@@ -218,3 +218,25 @@ setting is wrong.
 
 **What to look at.** The security audit trail (super admin) has `auth.login` with outcome `pending` (password right, code still to come), `auth.mfa` (ok, failed,
 locked, error), `auth.mfa_enroll`, `auth.mfa_recovery`, `auth.mfa_disable` and `auth.mfa_reset`. Many `failed` rows for one account mean someone knows the password.
+
+## 10. A driver cannot sign in (lost phone, reinstalled app, forgotten password)
+
+A driver account is tied to **one phone at a time**. A second phone, or the same phone after the app was deleted and installed
+again, is refused with "already signed in on another device" until the first one is released. Super admins and company admins
+fix this in the platform, with no server access:
+
+**Drivers**, open the driver, section **Phone sign-in & password**.
+
+| Situation | What to do |
+|---|---|
+| Lost or replaced phone, or the app was reinstalled, and the driver sees "already signed in on another device" | **Sign out driver's phone.** The old session ends at once; the driver signs in again on any phone. |
+| The driver forgot the password | **Reset password**, "Create a temporary password". It is shown **once**: give it to the driver privately (a call or in person, not a group chat). The driver signs in and changes it in the app under **Change password**. |
+| Phone lost and the password may be known to someone else | **Reset password** with "Also sign out the driver's phone" ticked (it is by default). |
+
+Notes:
+- A temporary password cannot be shown again. If it is lost, make a new one.
+- Resetting a password ends the driver's current sign-in immediately (every token stops working).
+- Both actions are in the security audit trail (`driver.device_release`, `driver.password_reset`). The password itself is never stored there.
+- A driver with no app login yet shows "no app login"; create the login first (Add driver, or link an existing one).
+- Same actions by API: `GET /api/v1/drivers/{id}/device-session`, `POST /api/v1/drivers/{id}/release-device-session`,
+  `POST /api/v1/drivers/{id}/reset-password` (body `{}` for a generated password, or `{"new_password": "...", "release_device": true}`).

@@ -50,8 +50,8 @@ Use this when you suspect that personal data was seen, changed, lost or taken by
 
 ### 4.3 A driver's phone was lost or stolen
 
-- An admin releases the driver's device session (`POST /api/v1/drivers/{id}/release-device-session`). The old phone's tokens stop working.
-- If the account password may be known, set a new one.
+- An admin releases the driver's device session: driver page, **Sign out driver's phone** (or `POST /api/v1/drivers/{id}/release-device-session`). The old phone's tokens stop working.
+- If the account password may be known, set a new one: **Reset password** on the same page, with "Also sign out the driver's phone" ticked ([OPERATIONS.md](../OPERATIONS.md) section 10).
 
 ### 4.4 A live-share link or report went to the wrong person
 
