@@ -5,6 +5,28 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.5: three-dot row menus, Odometer inside Maintenance Alerts
+
+#### Changed
+- **Edit / Delete buttons in tables are replaced by one three-dot (⋮) button per row.** Press it to see the list of actions, then press
+  the one you want. Companies, Users, Vehicles, Drivers, Maintenance schedules and scheduled-report subscriptions all use the same
+  menu (`web/src/RowMenu.tsx`). Delete and deactivate are set apart at the bottom in warning colours. Nothing about who may do what
+  changed: the same entries show for the same roles as before, and the same confirmations still run.
+- The list is drawn on top of the page, so a table that scrolls sideways cannot cut it off; it opens under the button (flips up near the
+  bottom of the screen) and lines up with the button's edge in both English and Arabic. Keyboard: Enter, Space or the down arrow opens it,
+  arrows / Home / End move, Esc closes and returns to the button. Clicking the button or an action does not open the row behind it.
+- **The Odometer page is gone from the menu; its three parts are tabs of Maintenance Alerts**: Current odometers, Odometer history and
+  Record odometer reading (only for people who can manage maintenance). Nothing was removed from the data or the API.
+- The tour's Maintenance step now says the odometer pages are inside Maintenance Alerts.
+
+#### Added
+- `backend/test_web_row_menu_contract.py`: static checks that every table uses the menu, the menu keeps its keyboard handling and its
+  "drawn on top / never opens the row" rules, and Odometer is no longer a page of its own (each rule was mutation-checked).
+- `web/scripts/check-ui-components.mjs` and the workflow **Web UI in a real browser**: the real menu and the real tour are mounted in
+  headless Chrome, clicked and driven by keyboard at desktop and phone width, in English and Arabic, and their position on screen is
+  measured. A control run with a deliberately broken menu must fail the same checks. It is a separate workflow file, so it does not
+  touch `ci.yml`.
+
 ### Phase 5.4: first-login tour (English and Arabic)
 
 #### Added

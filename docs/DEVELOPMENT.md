@@ -62,6 +62,7 @@ What the backend test files cover:
 | `test_security_units.py` | unit | audit helper (what is stored and what is filtered, never raises); secret-rotation window |
 | `test_vehicle_handover.py` | API (SQLite) | handover receive / return, flags, authorization |
 | `test_web_tour_contract.py` | source contract | the first-login tour (`web/src/tourSteps.ts`): every step in English and Arabic, every target element exists in `App.tsx`, roles are real. To add a step, add it to `TOUR_STEPS` and, if it points at a new element, give that element `data-tour="..."` |
+| `test_web_row_menu_contract.py` | source contract | the three-dot row menu (`web/src/RowMenu.tsx`) and the Odometer tabs inside Maintenance Alerts: every table with row actions uses `RowMenu`, the menu keeps its keyboard handling and its "drawn on top / never opens the row" rules, the Odometer page is not back. How the menu looks and behaves on screen is checked by `web/scripts/check-ui-components.mjs` in the workflow "Web UI in a real browser" |
 | `test_concept_reports.py` | API (in-memory SQLite) | report suite queries and Excel / CSV / PDF export |
 | `test_mfa_units.py` | unit | two-step sign-in: TOTP against the RFC 6238 test vectors, replay refusal, encrypted secrets and key rotation, recovery codes, guessing lock, settings checks, step tokens |
 | `test_auth_runtime_postgres.py` | API (PostgreSQL) | login, scoping, drivers, maintenance; imports `app.main`, so it proves the app boots on PostgreSQL |
