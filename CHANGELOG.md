@@ -5,6 +5,32 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.6: GPS-gap diagnostics from the phone
+
+Found by reading a real driver's App Diagnostics: a trip with 8 points over 15 minutes was a recording gap, and the log showed
+the phone suspending the app for 14 minutes while the legacy monitor shouted `GPS_MONITOR_STALE_FIX` every 45 seconds.
+
+#### Fixed
+- **`GPS_MONITOR_STALE_FIX` no longer repeats every 45 seconds once native Android tracking is primary.** That watch belongs to
+  the old Flutter GPS stream, which is deliberately never restarted when native tracking is primary, so it could only keep
+  reporting a stale fix. It said nothing about the real tracker and hid the useful lines. It is silent now when native tracking
+  is primary (the check was already in place for the capture timer, not for this one).
+
+#### Added
+- **The phone's own GPS timeline is uploaded to App Diagnostics.** The native recorder already kept a local record of GPS silence,
+  suspension of the app by the phone, service restarts, screen on/off and "vehicle not selected" trip blocks, but it never left the
+  phone. The driver app now copies a fixed list of those records into the diagnostics log with their real times
+  (`GPS_NATIVE_*`, `TRIP_NATIVE_*`), up to 60 a minute, newest three days on first run. No Kotlin change, no backend change, no
+  new permission.
+- Privacy: only numbers, true/false and a few fixed words are copied; never a position, zone number, account or error message,
+  and the noisy heartbeat lines stay on the phone. They show when the screen was on or off, which the existing diagnostics already
+  hinted at (`interactive=...`); they are visible only to admins in App Diagnostics.
+- `docs/OPERATIONS.md` section 11 explains how to read a trip with gaps and what to change on the phone.
+- `backend/test_driver_gps_diagnostics_contract.py` (mutation-checked): the false alarm stays gone, the import runs before each
+  upload and keeps its cursor, nothing is copied through from native text, and the codes fit the backend rules.
+
+**Needs a new driver APK** on the phone before any of this appears; until then the old behaviour continues.
+
 ### Phase 5.5: three-dot row menus, Odometer inside Maintenance Alerts
 
 #### Changed

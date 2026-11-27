@@ -221,7 +221,9 @@ Future<String?> nuqatiValidDriverToken(String api) async {
 
 // Phase 1B diagnostics: local-only, bounded log. No credentials or GPS coordinates.
 Future<File> nuqatiDiagnosticFile() async => File(path.join(await getDatabasesPath(), 'nuqati_diagnostics.txt'));
-Future<void> nuqatiLog(String event, [Object? error, StackTrace? stack]) async {
+Future<void> nuqatiLog(String event, [Object? error, StackTrace? stack]) => nuqatiLogAt(DateTime.now().toUtc(), event, error, stack);
+// Same line, written with the time the thing really happened (used for records copied in from the native recorder).
+Future<void> nuqatiLogAt(DateTime at, String event, [Object? error, StackTrace? stack]) async {
  try {
   final f=await nuqatiDiagnosticFile();
   if(await f.exists() && await f.length()>180000) {
@@ -230,7 +232,7 @@ Future<void> nuqatiLog(String event, [Object? error, StackTrace? stack]) async {
   }
   final safeError=(error?.toString()??'').replaceAll(RegExp(r'Bearer\s+[^\s]+',caseSensitive:false),'Bearer [REDACTED]');
   final trace=stack?.toString().split('\n').take(8).join(' | ')??'';
-  await f.writeAsString('${DateTime.now().toUtc().toIso8601String()} $event $safeError $trace\n',mode:FileMode.append,flush:true);
+  await f.writeAsString('${at.toUtc().toIso8601String()} $event $safeError $trace\n',mode:FileMode.append,flush:true);
  }catch(_){ }
 }
 Future<String> nuqatiReadDiagnostics() async {
@@ -239,11 +241,122 @@ Future<String> nuqatiReadDiagnostics() async {
 }
 
 
+// ---- Native GPS-silence records -> App Diagnostics ------------------------------------------------------------------------
+// The native recorder keeps its own timeline (table gps_gaps in nuqati_native_tracking.db): when GPS went silent, when the phone
+// suspended the app, when the service was recreated, when the screen went on or off. That timeline stayed on the phone, so from the
+// platform a hole in a trip could not be told apart from a phone that put the app to sleep. These records are copied into the
+// diagnostics log with the time they really happened. Only numbers, true/false and a few fixed words are taken from the native
+// text: never a position, a zone number, an account or an exception message (see the rule in nuqatiUploadDiagnostics).
+const int nuqatiGapImportBatch=60; // the upload sends the last 100 lines a minute: leave room for the app's own lines
+String? _nuqatiNativeFlag(String event,String name)=>RegExp('(?:^|_)$name=(true|false)').firstMatch(event)?.group(1);
+int? _nuqatiNativeNumber(String event,String name){
+ final m=RegExp('(?:^|_)$name=(-?\\d+)').firstMatch(event);
+ return m==null?null:int.tryParse(m.group(1)!);
+}
+String _nuqatiNativeFlags(String event){
+ final parts=<String>[];
+ for(final key in const ['fine','gps','wake','interactive','power_save']){
+  final value=_nuqatiNativeFlag(event,key);
+  if(value!=null)parts.add('$key=$value');
+ }
+ return parts.join(' ');
+}
+int _nuqatiSeconds(int? ms)=>ms==null||ms<0?-1:(ms/1000).round();
+/// [code, detail] for a native record worth uploading, or null for the rest (the noisy heartbeat lines, zone ids, messages).
+List<String>? nuqatiNativeGapLine(String event,int durationMs){
+ String detail(List<String> parts){
+  final flags=_nuqatiNativeFlags(event);
+  return [...parts,if(flags.isNotEmpty)flags].join(' ');
+ }
+ if(event.startsWith('watchdog_tick_delayed_ms=')){
+  return ['GPS_NATIVE_SUSPENDED',detail(['delayed_s=${_nuqatiSeconds(_nuqatiNativeNumber(event,'delayed_ms')??durationMs)}'])];
+ }
+ if(event.startsWith('gps_gap_started_age_ms=')){
+  return ['GPS_NATIVE_GAP_STARTED',detail(['silent_s=${_nuqatiSeconds(_nuqatiNativeNumber(event,'age_ms'))}'])];
+ }
+ if(event.startsWith('gps_gap_ended_callback_provider=')){
+  final provider=RegExp(r'provider=([a-z]{1,12})').firstMatch(event)?.group(1)??'unknown';
+  return ['GPS_NATIVE_GAP_ENDED',detail(['gap_s=${_nuqatiSeconds(durationMs)}','provider=$provider'])];
+ }
+ if(event.startsWith('fused_silent_starting_gps_fallback_age_ms=')){
+  return ['GPS_NATIVE_FALLBACK',detail(['silent_s=${_nuqatiSeconds(_nuqatiNativeNumber(event,'age_ms'))}'])];
+ }
+ if(event.startsWith('gps_listener_recovery_age_ms=')){
+  return ['GPS_NATIVE_RESTARTED',detail(['silent_s=${_nuqatiSeconds(_nuqatiNativeNumber(event,'age_ms'))}'])];
+ }
+ if(event.startsWith('fused_location_availability=')){
+  return ['GPS_NATIVE_AVAILABILITY',detail(['available=${event.startsWith('fused_location_availability=true')}'])];
+ }
+ if(event.startsWith('location_start_')){
+  return ['GPS_NATIVE_START',detail([])];
+ }
+ if(event.startsWith('screen_off_tracking=')){
+  return ['GPS_NATIVE_SCREEN_OFF',detail(['tracking=${_nuqatiNativeFlag(event,'tracking')??'unknown'}'])];
+ }
+ if(event.startsWith('screen_on_tracking=')){
+  return ['GPS_NATIVE_SCREEN_ON',detail(['tracking=${_nuqatiNativeFlag(event,'tracking')??'unknown'}',
+    'screen_off_s=${_nuqatiSeconds(durationMs)}','last_fix_s=${_nuqatiSeconds(_nuqatiNativeNumber(event,'age_ms'))}'])];
+ }
+ if(event.startsWith('service_created_')){return ['GPS_NATIVE_SERVICE_CREATED',detail([])];}
+ if(event.startsWith('service_destroyed_')){return ['GPS_NATIVE_SERVICE_DESTROYED',detail([])];}
+ if(event.startsWith('service_command=')){
+  // Only whether Android itself restarted the service after killing it; the action name is not copied.
+  return ['GPS_NATIVE_SERVICE_COMMAND',detail(['restart_by_system=${event.contains('null_restart')}'])];
+ }
+ if(event.startsWith('fused_failed:')||event.startsWith('fused_exception:')){return ['GPS_NATIVE_START_FAILED',''];}
+ if(event=='trip_start_blocked_unverified_owner'){return ['TRIP_NATIVE_START_BLOCKED','owner_not_verified'];}
+ if(event=='trip_end_confirmed_stationary_then_gps_gap'){return ['TRIP_NATIVE_ENDED_AFTER_GAP',''];}
+ return null;
+}
+bool _nuqatiGapImportBusy=false;
+Future<void> nuqatiImportNativeGapEvents() async {
+ if(_nuqatiGapImportBusy||!Platform.isAndroid)return;
+ _nuqatiGapImportBusy=true;
+ Database? source;
+ try {
+  final nativePath=path.join(await getDatabasesPath(),'nuqati_native_tracking.db');
+  if(!await File(nativePath).exists())return;
+  final native=await openDatabase(nativePath,readOnly:true,singleInstance:false);
+  source=native;
+  final target=await openTrackingDatabase();
+  await target.execute('CREATE TABLE IF NOT EXISTS native_import_cursor (name TEXT PRIMARY KEY, last_id INTEGER NOT NULL)');
+  final saved=await target.query('native_import_cursor',where:'name=?',whereArgs:['gps_gaps']);
+  var last=saved.isEmpty?-1:(saved.first['last_id'] as num).toInt();
+  if(last<0){
+   // First run on this phone: begin three days back (all the table usually holds), not at its very first row.
+   final since=DateTime.now().toUtc().subtract(const Duration(days:3)).millisecondsSinceEpoch;
+   final older=await native.rawQuery('SELECT COALESCE(MAX(id),0) AS id FROM gps_gaps WHERE at_ms<?',[since]);
+   last=(older.first['id'] as num).toInt();
+  }
+  final rows=await native.query('gps_gaps',where:'id>?',whereArgs:[last],orderBy:'id ASC',limit:2000);
+  if(rows.isEmpty)return;
+  var written=0;
+  for(final row in rows){
+   final line=nuqatiNativeGapLine((row['event'] as String?)??'',(row['duration_ms'] as num?)?.toInt()??0);
+   if(line!=null){
+    final at=DateTime.fromMillisecondsSinceEpoch((row['at_ms'] as num).toInt(),isUtc:true);
+    await nuqatiLogAt(at,line[1].isEmpty?line[0]:'${line[0]} ${line[1]}');
+    written++;
+   }
+   last=(row['id'] as num).toInt();
+   if(written>=nuqatiGapImportBatch)break;
+  }
+  // Lines first, cursor second: a crash in between repeats lines, and the server drops repeats (the id is a hash of the line).
+  await target.insert('native_import_cursor',{'name':'gps_gaps','last_id':last},conflictAlgorithm:ConflictAlgorithm.replace);
+ } catch(_) {
+  // Diagnostics are best effort: a failure here must never disturb tracking or the upload that follows.
+ } finally {
+  await source?.close();
+  _nuqatiGapImportBusy=false;
+ }
+}
+
 // Periodically transmit a bounded, location-free diagnostic tail. IDs deduplicate retries.
 Future<void> nuqatiUploadDiagnostics() async {
  try {
   final token=await nuqatiValidDriverToken(api);
   if(token==null||token.isEmpty)return;
+  await nuqatiImportNativeGapEvents();
   final f=await nuqatiDiagnosticFile();if(!await f.exists())return;
   final lines=(await f.readAsLines()).where((l)=>l.length>25).toList();
   final events=<Map<String,dynamic>>[];
@@ -254,14 +367,17 @@ Future<void> nuqatiUploadDiagnostics() async {
    final code=RegExp(r'^[A-Z][A-Z0-9_]*').firstMatch(raw)?.group(0)??'APP_LOG';
    final severity=code.contains('CRASH')||code.contains('UNHANDLED')?'CRASH':
      code.contains('FAILED')||code.contains('ERROR')?'ERROR':
-     code.contains('BLOCKED')||code.contains('REJECT')||code.contains('DEFERRED')?'WARNING':'INFO';
+     code.contains('BLOCKED')||code.contains('REJECT')||code.contains('DEFERRED')||
+       code.contains('GAP_STARTED')||code.contains('SUSPENDED')||code.contains('DESTROYED')?'WARNING':'INFO';
    final category=code.contains('GPS')||code.contains('MONITOR')?'GPS':
      code.contains('TRIP')||code.contains('AUTO_START')||code.contains('MOTION')?'TRIP':
      code.contains('PERMISSION')?'PERMISSION':code.contains('SYNC')||code.contains('UPLOAD')?'SYNC':'APP';
    // Upload only known structured codes. Never upload arbitrary exception strings,
    // location coordinates, identifiers, authentication data, or stack traces.
    final structured=raw.substring(code.length).trim();
-   final detail=(code=='MOTION_GATE'||code=='SYNC_DEFERRED'||code=='GPS_WATCHDOG_STALE_FIX')
+   // GPS_NATIVE_* and TRIP_NATIVE_* are written only by nuqatiNativeGapLine, which builds the detail from numbers and fixed words.
+   final detail=(code=='MOTION_GATE'||code=='SYNC_DEFERRED'||code=='GPS_WATCHDOG_STALE_FIX'||
+       code.startsWith('GPS_NATIVE_')||code.startsWith('TRIP_NATIVE_'))
       ?structured.substring(0,math.min(200,structured.length)):'';
    events.add({'event_id':sha256.convert(utf8.encode(line)).toString(),
     'occurred_at':at.toUtc().toIso8601String(),'severity':severity,
@@ -1370,6 +1486,10 @@ void nuqatiTrackingEntry(ServiceInstance service) async {
  Timer.periodic(const Duration(minutes:2),(_) => checkMaintenance());
  Timer.periodic(const Duration(seconds:45),(_) async {
    if(privacy||monitorRestarting)return;
+   // This watch belongs to the legacy Flutter GPS stream. Once native Android tracking is primary, beginMonitoring() deliberately
+   // never restarts that stream, so its "last fix" time can only grow: without this line the timer logged GPS_MONITOR_STALE_FIX
+   // every 45 seconds for the rest of the day, a false alarm that said nothing about the real tracker.
+   if(await secure.read(key:'nuqati_native_primary')=='1')return;
    final stale=lastMonitorFixReceivedAt!=null &&
        DateTime.now().toUtc().difference(lastMonitorFixReceivedAt!).inSeconds>60;
    if(monitorSub==null||stale){
