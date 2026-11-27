@@ -44,13 +44,12 @@ Not stored: plain-text passwords, plain-text reset or invitation tokens (only SH
 | SMTP provider | Recipient address, subject, message body (invitations, resets, alerts, scheduled reports, which contain driver names and scores) | **Fill in** | Provider, country, contract |
 | Meta (WhatsApp Cloud API) | Webhook calls from Meta to Nuqati; what Nuqati sends back depends on the integration | Meta | Whether any personal data is sent to Meta |
 | MapTiler | Map tile requests from the browser and the Manager app: the browser's IP address and the map area viewed (not driver names) | MapTiler | Cross-border transfer review |
-| unpkg.com (third-party script CDN) | Browser's IP address when the map pages load Leaflet | Outside the Kingdom (confirm) | Planned to be removed by self-hosting Leaflet (open item S5) |
 | Google Drive (only if the off-server backup copy is switched on, `NUQATI_OFFSITE=drive`) | The daily database dump, **encrypted on the server before upload** (rclone crypt, key held only by the owner): so it holds all personal data of the database, in a form Google cannot read. File names are a timestamp; sizes and upload times are visible to Google | Google data centres (country: confirm) | Whether sending encrypted personal data abroad is a cross-border transfer for PDPL purposes (counsel); who holds the Google account and the passphrases; Drive trash keeps deleted copies up to 30 days (R15) |
 | GitHub | Source code, CI logs, build secrets. No production personal data. | GitHub | Keep personal data out of issues and logs |
 
 ## 4. Cross-border transfers
 
-Transfers outside the Kingdom are governed by PDPL Article 29 and the Transfer Regulations (per public legal summaries). Today the flows to review are: the hosting location, the SMTP provider, MapTiler and unpkg, and, if it is switched on, the encrypted off-server backup copy at Google Drive (the files are unreadable to Google, but counsel should confirm how that is treated). SDAIA published **draft** amendments in October 2026 proposing data-localisation requirements and stricter breach notification; treat them as drafts until counsel confirms they are in force.
+Transfers outside the Kingdom are governed by PDPL Article 29 and the Transfer Regulations (per public legal summaries). Today the flows to review are: the hosting location, the SMTP provider, MapTiler and the Google Fonts stylesheet, and, if it is switched on, the encrypted off-server backup copy at Google Drive (the files are unreadable to Google, but counsel should confirm how that is treated). SDAIA published **draft** amendments in October 2026 proposing data-localisation requirements and stricter breach notification; treat them as drafts until counsel confirms they are in force.
 
 ## 5. Impact assessment
 
@@ -62,5 +61,5 @@ Continuous location tracking of employees is the highest-risk processing in the 
 2. Confirm for each customer company whether it is the controller and Nuqati the processor (or joint controllers) and put the answer in the contract.
 3. Confirm the retention periods ([RETENTION_SCHEDULE.md](RETENTION_SCHEDULE.md)).
 4. Decide who may be a scheduled-report recipient (today any address; finding S6).
-5. Decide whether to self-host Leaflet (finding S5) and remove unpkg from the list above.
+5. (Done: Leaflet is self-hosted, finding S5; unpkg is no longer used.)
 6. Write the impact assessment for location tracking.

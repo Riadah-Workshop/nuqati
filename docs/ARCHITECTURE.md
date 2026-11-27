@@ -202,7 +202,7 @@ What the server does with each sample (`submit_sample` in `features/trips.py`):
 | SMTP | Invitations, password reset, alerts, scheduled reports | `NUQATI_SMTP_*`, `NUQATI_EMAIL_FROM` |
 | Meta WhatsApp | Webhook verification (`/api/v1/whatsapp/webhook`) | `NUQATI_WHATSAPP_VERIFY_TOKEN`, `NUQATI_WHATSAPP_APP_SECRET` |
 | MapTiler | Map tiles in web and Manager app | `VITE_MAPTILER_API_KEY` (build time), `MAPTILER_API_KEY` (Manager) |
-| unpkg | Leaflet loaded inside the map iframes | allowed in the Caddy CSP |
+| (none) | Leaflet is part of the web build and written into each map frame (`web/src/leafletInline.ts`); no script CDN | the Caddy CSP allows no script host and `connect-src 'self'` |
 
 ## 9. Known constraints
 

@@ -1,23 +1,17 @@
 import { useMemo, useEffect } from 'react';
+import { leafletScriptTag, leafletStyleTag } from './leafletInline';
 
 type Point = {latitude:number;longitude:number;recorded_at:string;speed_kmh?:number};
 type Violation = {id:number;type:string;value:number;latitude:number;longitude:number;recorded_at:string};
 type RouteData = {trip_id:number;status:string;started_at?:string;ended_at?:string|null;max_speed_kmh?:number|null;distance_km?:number;points:Point[];violations:Violation[];start:Point|null;end:Point|null;truncated?:boolean};
 
-export default function TripLiveMap({route,lang,autoPlay=false,onPlaybackEnded,overlayRoutes=[],layers={route:true,events:true,labels:true,direction:true}}:{route:RouteData;lang:'en'|'ar';autoPlay?:boolean;onPlaybackEnded?:()=>void;overlayRoutes?:RouteData[];layers?:{route:boolean;events:boolean;labels:boolean;direction:boolean}}) {
-  useEffect(()=>{if(!autoPlay||!onPlaybackEnded)return;
-    const handler=(e:MessageEvent)=>{if(e.data?.nuqatiPlaybackEnded===route.trip_id)onPlaybackEnded();};
-    window.addEventListener('message',handler);return()=>window.removeEventListener('message',handler);
-  },[autoPlay,onPlaybackEnded,route.trip_id]);
-  useEffect(()=>{if(autoPlay && route.points.length<2 && onPlaybackEnded){
-    const timer=window.setTimeout(onPlaybackEnded,300);return()=>window.clearTimeout(timer);
-  }},[autoPlay,route.trip_id,route.points.length,onPlaybackEnded]);
-  const isAr=lang==='ar';
-  const maptilerKey = import.meta.env.VITE_MAPTILER_API_KEY || '';
-  const html=useMemo(()=>{
+type TripLayers = {route:boolean;events:boolean;labels:boolean;direction:boolean};
+
+// The whole frame as one HTML string (Leaflet included, see leafletInline.ts). Exported so that CI can open it in a real browser.
+export function buildTripMapHtml({route,isAr,maptilerKey,autoPlay,overlayRoutes,layers}:{route:RouteData;isAr:boolean;maptilerKey:string;autoPlay:boolean;overlayRoutes:RouteData[];layers:TripLayers}):string{
     // Escape '<' so API-provided strings cannot inject HTML/script into srcDoc.
     const data=JSON.stringify({points:route.points,violations:route.violations,status:route.status,maptilerKey,tripId:route.trip_id,autoPlay,overlayRoutes:overlayRoutes.map(r=>({trip_id:r.trip_id,points:r.points,violations:r.violations})),layers}).replace(/</g,'\\u003c');
-    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>html,body,#map{margin:0;height:100%;width:100%}body{font-family:Arial,sans-serif}.legend{position:absolute;z-index:900;bottom:92px;left:12px;background:#101d2bf0;color:#edf7fb;padding:9px 12px;border-radius:10px;box-shadow:0 4px 16px #0005;font-size:12px}.playback{position:absolute;z-index:950;bottom:10px;left:10px;right:10px;background:#101d2bf2;color:#eef7fa;padding:12px;border:1px solid #426070;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 5px 20px #0005}.playback button,.playback select{border:1px solid #496476;background:#203a4b;color:#eef7fa;padding:7px 12px;border-radius:8px;cursor:pointer}.playback button:disabled{opacity:.4;cursor:default}.playback input{flex:1;min-width:100px;accent-color:#a5d84c}.playback output{font-size:12px;min-width:90px;text-align:center}.playback .speed{font-size:12px;color:#b6ef8a}</style></head><body><div id="map"></div><div class="playback" id="playback"><button id="play" type="button">▶ ${isAr?'تشغيل':'Play'}</button><button id="reset" type="button">↺ ${isAr?'إعادة':'Restart'}</button><input id="timeline" type="range" min="0" max="0" value="0" aria-label="Trip timeline"><output id="progress">—</output><select id="rate" aria-label="Playback speed"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option></select><span class="speed" id="speed">—</span></div><div class="legend">🟢 ${isAr?'البداية':'Start'} &nbsp; 🔵 ${isAr?'آخر موقع / النهاية':'Latest / End'} &nbsp; 🔴 ${isAr?'مخالفة':'Violation'}</div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${leafletStyleTag}<style>html,body,#map{margin:0;height:100%;width:100%}body{font-family:Arial,sans-serif}.legend{position:absolute;z-index:900;bottom:92px;left:12px;background:#101d2bf0;color:#edf7fb;padding:9px 12px;border-radius:10px;box-shadow:0 4px 16px #0005;font-size:12px}.playback{position:absolute;z-index:950;bottom:10px;left:10px;right:10px;background:#101d2bf2;color:#eef7fa;padding:12px;border:1px solid #426070;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 5px 20px #0005}.playback button,.playback select{border:1px solid #496476;background:#203a4b;color:#eef7fa;padding:7px 12px;border-radius:8px;cursor:pointer}.playback button:disabled{opacity:.4;cursor:default}.playback input{flex:1;min-width:100px;accent-color:#a5d84c}.playback output{font-size:12px;min-width:90px;text-align:center}.playback .speed{font-size:12px;color:#b6ef8a}</style></head><body><div id="map"></div><div class="playback" id="playback"><button id="play" type="button">▶ ${isAr?'تشغيل':'Play'}</button><button id="reset" type="button">↺ ${isAr?'إعادة':'Restart'}</button><input id="timeline" type="range" min="0" max="0" value="0" aria-label="Trip timeline"><output id="progress">—</output><select id="rate" aria-label="Playback speed"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option></select><span class="speed" id="speed">—</span></div><div class="legend">🟢 ${isAr?'البداية':'Start'} &nbsp; 🔵 ${isAr?'آخر موقع / النهاية':'Latest / End'} &nbsp; 🔴 ${isAr?'مخالفة':'Violation'}</div>${leafletScriptTag}<script>
 const data=${data};if(typeof L==='undefined'){document.getElementById('map').textContent='Map library unavailable. Check internet / content security policy.';throw new Error('Leaflet unavailable')}const map=L.map('map');
 if(data.maptilerKey){
   L.tileLayer('https://api.maptiler.com/maps/streets-v4/256/{z}/{x}/{y}.png?key='+encodeURIComponent(data.maptilerKey),{maxZoom:19,attribution:'&copy; MapTiler &copy; OpenStreetMap contributors'}).addTo(map);
@@ -91,7 +85,19 @@ slider.addEventListener('input',()=>{cursor=Number(slider.value);positionAt(curs
 if(pts.length<2||!validTimes||durationMs<=0){playButton.disabled=true;slider.disabled=true;progress.textContent='${isAr?'بيانات غير كافية للتشغيل':'Not enough timed points'}';}else{positionAt(0);if(data.autoPlay)playButton.click();}
 if(data.layers.events)for(const e of data.violations){if(!Number.isFinite(e.latitude)||!Number.isFinite(e.longitude))continue;const isMotion=e.type==='harsh_braking'||e.type==='harsh_acceleration'||e.type==='harsh_cornering';const unit=e.type==='speeding'?' km/h':isMotion?' km/h/s':'';const displayValue=Number(e.value)*(isMotion?3.6:1);const label=String(e.type).replaceAll('_',' ')+'<br>'+displayValue.toFixed(1)+unit+'<br>'+new Date(e.recorded_at).toLocaleString();pin(e,'#dc2626',label)}
 </script></body></html>`;
-  },[route,isAr,maptilerKey,autoPlay,overlayRoutes,layers]);
+}
+
+export default function TripLiveMap({route,lang,autoPlay=false,onPlaybackEnded,overlayRoutes=[],layers={route:true,events:true,labels:true,direction:true}}:{route:RouteData;lang:'en'|'ar';autoPlay?:boolean;onPlaybackEnded?:()=>void;overlayRoutes?:RouteData[];layers?:TripLayers}) {
+  useEffect(()=>{if(!autoPlay||!onPlaybackEnded)return;
+    const handler=(e:MessageEvent)=>{if(e.data?.nuqatiPlaybackEnded===route.trip_id)onPlaybackEnded();};
+    window.addEventListener('message',handler);return()=>window.removeEventListener('message',handler);
+  },[autoPlay,onPlaybackEnded,route.trip_id]);
+  useEffect(()=>{if(autoPlay && route.points.length<2 && onPlaybackEnded){
+    const timer=window.setTimeout(onPlaybackEnded,300);return()=>window.clearTimeout(timer);
+  }},[autoPlay,route.trip_id,route.points.length,onPlaybackEnded]);
+  const isAr=lang==='ar';
+  const maptilerKey = import.meta.env.VITE_MAPTILER_API_KEY || '';
+  const html=useMemo(()=>buildTripMapHtml({route,isAr,maptilerKey,autoPlay,overlayRoutes,layers}),[route,isAr,maptilerKey,autoPlay,overlayRoutes,layers]);
   const last=route.end;
   const start=route.started_at?new Date(route.started_at):null;
   const end=route.ended_at?new Date(route.ended_at):null;

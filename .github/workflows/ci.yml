@@ -110,6 +110,13 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+      # The two map frames are built by the real code, opened in headless Chrome with every host name unresolvable (no CDN, no
+      # tiles) and inspected; a control run without the Leaflet script must fail the same checks (web/scripts/check-map-frames.mjs).
+      - name: Map frames render in a real browser with no network
+        env:
+          VITE_MAPTILER_API_KEY: ci-placeholder
+        run: node scripts/check-map-frames.mjs
+
   docker:
     name: Docker, compose and Caddy
     runs-on: ubuntu-latest

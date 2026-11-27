@@ -1,14 +1,15 @@
 :80 {
     encode gzip zstd
 
-    # Keep current iframe/srcDoc maps and externally hosted Leaflet operational.
+    # The map frames (sandboxed iframe/srcDoc) carry Leaflet inline from the locked npm package (web/src/leafletInline.ts), so no
+    # script host is allowed. Every request the dashboard makes goes to this origin (connect-src 'self'); map tiles are images.
     header {
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "camera=(), microphone=(), payment=()"
         Strict-Transport-Security "max-age=31536000"
-        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https://www.openstreetmap.org"
+        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self' https://www.openstreetmap.org"
     }
 
     handle /api/* {
