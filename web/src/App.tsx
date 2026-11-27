@@ -3,6 +3,7 @@ import VehicleEditPage, { type VehicleUpdate } from './VehicleEditPage';
 import CompanyEditPage, { type CompanyUpdate } from './CompanyEditPage';
 import DriverEditPage, { type DriverDeviceSession, type DriverUpdate } from './DriverEditPage';
 import UserEditPage, { type UserUpdate } from './UserEditPage';
+import GuidedTour, { markTourSeen, tourSeen } from './GuidedTour';
 import { TwoStepPanel, TwoStepSignIn } from './TwoStep';
 import LifecyclePrivacyAudit from './LifecyclePrivacyAudit';
 import {FlexibleRagSettings,FlexibleRagReports} from './FlexibleRag';
@@ -16,12 +17,14 @@ import FleetPositionMap from './FleetPositionMap';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import TripLiveMap from './TripLiveMap';
 import GeofenceLocationsMap from './GeofenceLocationsMap';
-import { Activity, CarFront, Users, Route, Gauge, Wrench, Plus, Search, RefreshCw, ShieldCheck, LogOut, Building2, UserCog, Trash2, Shield, MapPin, Clock3, ArrowUpDown, X, ChevronDown, Globe2 } from 'lucide-react';
+import { Activity, CarFront, Users, Route, Gauge, Wrench, Plus, Search, RefreshCw, ShieldCheck, LogOut, Building2, UserCog, Trash2, Shield, MapPin, Clock3, ArrowUpDown, X, ChevronDown, Globe2, Compass } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_BASE_URL ?? '';
 type Vehicle = {id:number; company_id:number; plate_number:string; make_model:string; year:number|null; door_number:string|null; odometer_km:number|null; assigned_driver_id?:number|null};
 type Driver = {id:number; company_id:number; full_name:string; phone:string; status:string};
 type Company = {id:number; name:string};
+// data-tour names of the six menu groups, in menu order; tourSteps.ts points at them.
+const TOUR_NAV_GROUPS=['nav-home','nav-fleet','nav-safety','nav-maintenance','nav-reports','nav-admin'] as const;
 type Me = {id:number;email:string;full_name:string;role:string;company_id:number|null};
 type LiveMotionFilter = 'all' | 'moving' | 'stationary';
 type LivePosition = {vehicle_id:number;plate:string;driver_name:string|null;driver_id:number|null;recorded_at:string|null;speed_kmh:number|null;age_seconds:number|null;state:string;trip_active:boolean;geofences:{id:string;name:string;status:string;speed_limit_kmh?:number|null}[];latitude:number|null;longitude:number|null;accuracy_m:number|null};
@@ -162,6 +165,14 @@ export default function App() {
   async function chooseLogo(file:File|undefined){if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>220000){setMessage('Choose PNG, JPEG or WebP under 220 KB');return;}const reader=new FileReader();reader.onload=()=>setBranding(b=>({...b,logo_data:String(reader.result)}));reader.readAsDataURL(file);}
   const [token,setToken]=useState(()=>sessionStorage.getItem('nuqati_token')||'');
   const [me,setMe]=useState<Me|null>(null);
+  // First-login tour: opens once per user and browser, right after the first sign-in; the Tour button replays it.
+  const [tourOpen,setTourOpen]=useState(false);
+  useEffect(()=>{
+    if(!me||tourSeen(me.id))return;
+    const timer=window.setTimeout(()=>setTourOpen(true),800);
+    return()=>window.clearTimeout(timer);
+  },[me?.id]);
+  function closeTour(){if(me)markTourSeen(me.id);setTourOpen(false);}
   const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
   const [loginError,setLoginError]=useState('');
   // Two-step sign-in: set after a right password when the account (or its role) needs a code or must set it up first.
@@ -1073,7 +1084,8 @@ export default function App() {
   const canManage=me.role==='super_admin';
   const canCreateUsers=me.role==='super_admin';
   return <div className="app-shell nuqati-design-2026 nq-reference-layout" data-page={tab} dir={lang==='ar'?'rtl':'ltr'}>
-    <aside className="sidebar"><div className="brand"><img className="brand-logo" src={logo} alt="Solutions Workshop"/><div><strong>{lang==='en'?'Nuqati':'نقاطي | Nuqati'}</strong><small>Al-Riadah Workshop</small></div></div>
+    <GuidedTour open={tourOpen} role={me.role} lang={lang} onClose={closeTour} onSwitchLang={switchLang}/>
+    <aside className="sidebar" data-tour="sidebar"><div className="brand"><img className="brand-logo" src={logo} alt="Solutions Workshop"/><div><strong>{lang==='en'?'Nuqati':'نقاطي | Nuqati'}</strong><small>Al-Riadah Workshop</small></div></div>
       <nav className="nuqati-nav" aria-label={lang==='en'?'Main navigation':'القائمة الرئيسية'}>
       {([['overview'],['companies','vehicles','drivers','handover','live-tracking','historical-tracking'],['safety','configuration','privacy-audit'],['odometer','maintenance','mobile-diagnostics','assistance'],['reports'],['users','settings','my-account']] as const).map((ids,index)=>{
         const groupNames=[lang==='en'?'Home':'الرئيسية',lang==='en'?'Fleet':'الأسطول',lang==='en'?'Safety':'السلامة',lang==='en'?'Maintenance':'الصيانة',lang==='en'?'Reports':'التقارير',lang==='en'?'Administration':'الإدارة'];
@@ -1081,12 +1093,12 @@ export default function App() {
         const GroupIcon=groupIcons[index];
         const allowed=nav.filter(n=>ids.some(id=>id===n.id)&&(n.id!=='companies'||me.role==='super_admin')&&(n.id!=='users'||canCreateUsers)&&(n.id!=='settings'||canCreateUsers));
         if(!allowed.length)return null;
-        return <details key={index} open={ids.some(id=>id===tab)} className="nuqati-nav-group"><summary><span className="nuqati-nav-group-label"><GroupIcon size={16} aria-hidden="true"/>{groupNames[index]}</span><ChevronDown size={15} className="nuqati-nav-chevron" aria-hidden="true"/></summary>{allowed.map(n=><button type="button" key={n.id} aria-current={tab===n.id?'page':undefined} className={`nav-item ${tab===n.id?'active':''}`} onClick={()=>setTab(n.id)}><span className="nq-nav-emoji" aria-hidden="true">{n.emoji}</span><span className="nq-nav-label">{n.label}</span></button>)}</details>;
+        return <details key={index} open={ids.some(id=>id===tab)} className="nuqati-nav-group" data-tour={TOUR_NAV_GROUPS[index]}><summary><span className="nuqati-nav-group-label"><GroupIcon size={16} aria-hidden="true"/>{groupNames[index]}</span><ChevronDown size={15} className="nuqati-nav-chevron" aria-hidden="true"/></summary>{allowed.map(n=><button type="button" key={n.id} aria-current={tab===n.id?'page':undefined} className={`nav-item ${tab===n.id?'active':''}`} onClick={()=>setTab(n.id)}><span className="nq-nav-emoji" aria-hidden="true">{n.emoji}</span><span className="nq-nav-label">{n.label}</span></button>)}</details>;
       })}
       </nav>
       <div className="sidebar-bottom"><ShieldCheck size={18}/><span>{lang==='en'?'Production':'الإصدار الرسمي'}</span></div>
     </aside>
-    <main className="main"><header className="topbar"><div className="nuqati-page-heading"><span className="nuqati-page-icon"><span className="nq-page-emoji" aria-hidden="true">{nav.find(n=>n.id===tab)?.emoji}</span></span><div><span className="eyebrow">{lang==='en'?'Driver Performance Platform':'منصة أداء السائقين'}</span><h1>{nav.find(n=>n.id===tab)?.label}</h1></div></div><div className="header-actions">{me.role==='super_admin'&&<label className="nuqati-top-company nq-global-company"><Building2 size={16}/><span>{lang==='en'?'Active company':'الشركة الحالية'}</span><select aria-label={lang==='en'?'Active company for all pages':'الشركة الحالية لجميع الصفحات'} value={activeCompany} onChange={e=>chooseActiveCompany(e.target.value)}><option value="">{lang==='en'?'Select a company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{me.role!=='super_admin'&&me.company_id&&<span className="nq-company-identity"><Building2 size={15}/>{companies.find(c=>c.id===me.company_id)?.name||''}</span>}<button type="button" className="user-chip nuqati-account-button" onClick={()=>setTab('my-account')}><UserCog size={15} aria-hidden="true"/><span>{me.full_name} · {me.role}</span></button><button type="button" className="refresh nuqati-button-language" onClick={()=>switchLang(lang==='en'?'ar':'en')}><Globe2 size={16} aria-hidden="true"/>{lang==='en'?'العربية':'English'}</button><button className="refresh" onClick={()=>void load()}><RefreshCw size={16}/> {label('refresh','Refresh','تحديث')}</button><button className="refresh" onClick={logout}><LogOut size={16}/> {label('logout','Log out','خروج')}</button></div></header>
+    <main className="main"><header className="topbar"><div className="nuqati-page-heading"><span className="nuqati-page-icon"><span className="nq-page-emoji" aria-hidden="true">{nav.find(n=>n.id===tab)?.emoji}</span></span><div><span className="eyebrow">{lang==='en'?'Driver Performance Platform':'منصة أداء السائقين'}</span><h1>{nav.find(n=>n.id===tab)?.label}</h1></div></div><div className="header-actions">{me.role==='super_admin'&&<label className="nuqati-top-company nq-global-company" data-tour="company"><Building2 size={16}/><span>{lang==='en'?'Active company':'الشركة الحالية'}</span><select aria-label={lang==='en'?'Active company for all pages':'الشركة الحالية لجميع الصفحات'} value={activeCompany} onChange={e=>chooseActiveCompany(e.target.value)}><option value="">{lang==='en'?'Select a company':'اختر الشركة'}</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{me.role!=='super_admin'&&me.company_id&&<span className="nq-company-identity"><Building2 size={15}/>{companies.find(c=>c.id===me.company_id)?.name||''}</span>}<button type="button" className="user-chip nuqati-account-button" onClick={()=>setTab('my-account')}><UserCog size={15} aria-hidden="true"/><span>{me.full_name} · {me.role}</span></button><button type="button" className="refresh" data-tour="tour-replay" onClick={()=>setTourOpen(true)}><Compass size={16} aria-hidden="true"/>{lang==='en'?'Tour':'جولة'}</button><button type="button" className="refresh nuqati-button-language" data-tour="language" onClick={()=>switchLang(lang==='en'?'ar':'en')}><Globe2 size={16} aria-hidden="true"/>{lang==='en'?'العربية':'English'}</button><button className="refresh" onClick={()=>void load()}><RefreshCw size={16}/> {label('refresh','Refresh','تحديث')}</button><button className="refresh" onClick={logout}><LogOut size={16}/> {label('logout','Log out','خروج')}</button></div></header>
       {me.role==='super_admin'&&!activeCompanyId&&tab!=='my-account'&&tab!=='settings'&&<div className="nq-context-hint" role="status"><Building2 size={17}/>{lang==='en'?'Select a company in the top bar once to use company-specific pages.':'اختر الشركة مرة واحدة من الشريط العلوي لاستخدام صفحات الشركة.'}</div>}
       {connectionAlerts.length>0&&<section className="panel" role="alert" style={{border:'1px solid #b7791f',background:'rgba(180,108,15,0.12)',padding:'14px 18px',marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>

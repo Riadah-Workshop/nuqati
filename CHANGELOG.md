@@ -5,6 +5,20 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.4: first-login tour (English and Arabic)
+
+#### Added
+- **A guided tour for new users of the web app.** It opens once, right after a user's first sign-in, and highlights the side menu,
+  the language switch, each menu group (Fleet, Safety, Maintenance, Reports, Administration), the account page and the replay
+  button. English and Arabic (right-to-left), with a language switch inside the tour. It adapts to the role: only a super admin is
+  told to pick a company first and sees the administration step; super admins and company admins also get the "driver cannot sign
+  in" step. A **Tour** button in the top bar replays it at any time. Keyboard: Esc closes, arrow keys move (mirrored in Arabic).
+  On a narrow screen, or when a step's target is not on screen, the step is a centred card instead of a spotlight.
+- It is remembered per user and per browser (local storage), not in the database: a user on a new browser sees it once more.
+  No new dependency and no database change.
+- `backend/test_web_tour_contract.py`: every step has a title and text in both languages, every step target exists in the page,
+  and every role named by a step is a real role.
+
 ### Phase 5.3: driver sign-in and password controls
 
 #### Added
