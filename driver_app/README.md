@@ -16,6 +16,7 @@ shows the driver's score, and runs the online vehicle **handover / inspection** 
 | `main.dart` | The app: UI, sign-in (phone / Iqama), local SQLite queue, sync, privacy mode |
 | `nuqati_network.dart` | HTTPS client wrapper with an optional, domain-pinned backup host (`NUQATI_FALLBACK_API`) |
 | `vehicle_handover.dart` | Vehicle receive / return inspection screens (camera, 8 photos, online only) |
+| `nuqati_adaptive.dart` | Score ring, tiles and font-size limit that follow the phone's screen and font settings (tested by `test/adaptive_layout_test.dart`) |
 | `nuqati_home_test.dart` | Home-screen simulator library (compiled into the app despite its name) |
 | `android_camera_activity/MainActivity.kt` | Android entry point, `nuqati/native_tracking` platform channel, camera-activity observer |
 | `android_native_tracking/` | Kotlin foreground tracking service and boot receiver (local SQLite) |
