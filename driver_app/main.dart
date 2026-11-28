@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:in_app_update/in_app_update.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Native Android is the single GPS/event producer. Flutter imports its durable
@@ -241,6 +242,22 @@ Future<String> nuqatiReadDiagnostics() async {
 }
 
 
+// ---- In-app updates (Google Play In-App Updates API) ------------------------------------------------------------------------
+// A new build normally downloads in the background and waits behind a banner on the Home tab ("Restart to update"). Play's blocking
+// full-screen flow is used only for an urgent build (priority 4 or 5, which can only be set through the Play Developer API) or one
+// this phone has known about for a week, so nobody stays on an old build for long. Nothing is ever offered during a trip.
+const int nuqatiImmediateUpdatePriority=4;
+const int nuqatiImmediateAfterStaleDays=7;
+const Duration nuqatiUpdateCheckEvery=Duration(hours:6);
+const Duration nuqatiUpdateAskAgainAfterDenial=Duration(hours:24);
+/// 'none', 'flexible' (background download, one tap to restart) or 'immediate' (blocking, full screen).
+String nuqatiUpdateChoice({required bool available,required bool immediateAllowed,required bool flexibleAllowed,required int priority,required int? staleDays}){
+ if(!available)return 'none';
+ final urgent=priority>=nuqatiImmediateUpdatePriority||(staleDays!=null&&staleDays>=nuqatiImmediateAfterStaleDays);
+ if(urgent&&immediateAllowed)return 'immediate';
+ return flexibleAllowed?'flexible':'none';
+}
+
 // ---- Native GPS-silence records -> App Diagnostics ------------------------------------------------------------------------
 // The native recorder keeps its own timeline (table gps_gaps in nuqati_native_tracking.db): when GPS went silent, when the phone
 // suspended the app, when the service was recreated, when the screen went on or off. That timeline stayed on the phone, so from the
@@ -375,9 +392,10 @@ Future<void> nuqatiUploadDiagnostics() async {
    // Upload only known structured codes. Never upload arbitrary exception strings,
    // location coordinates, identifiers, authentication data, or stack traces.
    final structured=raw.substring(code.length).trim();
-   // GPS_NATIVE_* and TRIP_NATIVE_* are written only by nuqatiNativeGapLine, which builds the detail from numbers and fixed words.
+   // GPS_NATIVE_* and TRIP_NATIVE_* are written only by nuqatiNativeGapLine, and APP_UPDATE_* only by checkForAppUpdate; both build the
+   // detail from numbers, a sanitised error code and fixed words.
    final detail=(code=='MOTION_GATE'||code=='SYNC_DEFERRED'||code=='GPS_WATCHDOG_STALE_FIX'||
-       code.startsWith('GPS_NATIVE_')||code.startsWith('TRIP_NATIVE_'))
+       code.startsWith('GPS_NATIVE_')||code.startsWith('TRIP_NATIVE_')||code.startsWith('APP_UPDATE_'))
       ?structured.substring(0,math.min(200,structured.length)):'';
    events.add({'event_id':sha256.convert(utf8.encode(line)).toString(),
     'occurred_at':at.toUtc().toIso8601String(),'severity':severity,
@@ -1659,6 +1677,9 @@ Future<void> syncPendingTripsOnce() async {
 
 class DriverApp extends StatefulWidget{const DriverApp({super.key});@override State<DriverApp> createState()=>_DriverAppState();}
 class _DriverAppState extends State<DriverApp> with WidgetsBindingObserver{
+ // In-app updates (Google Play): see checkForAppUpdate.
+ Timer? updateTimer; StreamSubscription<InstallStatus>? updateStatusSub; DateTime? lastUpdateCheckAt;
+ bool updateChecking=false, updateReady=false, updateUnavailableLogged=false;
  final iqama=TextEditingController(),password=TextEditingController(),oldPassword=TextEditingController(),newPassword=TextEditingController();
  String token='',name='',plate='',company='',vehicleModel='',vehicleDoor='',vehicleYear='',logoData='',status='Sign in with your Iqama / Saudi ID';
  static const _secureStore=FlutterSecureStorage();
@@ -1850,7 +1871,7 @@ Future<void> checkTrackingRequirements() async {
 
  bool gpsReady=false, gpsChecking=false; DateTime? lastGpsFix; Timer? gpsWatchdog; bool gpsWarningShown=false; bool permissionPromptInProgress=false;
  static const Map<String,String> urduLabels={
- 'NUQATI · Driver':'نقاطی · ڈرائیور','My points':'میرے پوائنٹس','Driving':'ڈرائیونگ','Settings':'ترتیبات',
+ 'NUQATI · Driver':'نقاطی · ڈرائیور','A new version of Nuqati is ready':'نقاطی کا نیا ورژن تیار ہے','Restart to update':'اپ ڈیٹ کے لیے دوبارہ شروع کریں','My points':'میرے پوائنٹس','Driving':'ڈرائیونگ','Settings':'ترتیبات',
  'GPS status':'جی پی ایس کی حالت','Ready':'تیار','Check required':'جانچ ضروری','Check GPS':'جی پی ایس چیک کریں',
  'MY SAFE TRIP':'میرا محفوظ سفر','Start green. Stay safe. Earn a better score.':'محفوظ ڈرائیونگ کریں اور بہتر اسکور حاصل کریں۔',
  'Your driving summary':'ڈرائیونگ کا خلاصہ','Speeding':'تیز رفتاری','Braking':'سخت بریک','Acceleration':'تیز ایکسلریشن','Cornering':'تیز موڑ',
@@ -2092,7 +2113,7 @@ Future<void> checkTrackingRequirements() async {
  // This app never requests, converts, or validates a backend driver score.
  Future<void> _checkOfficialTripScore() async {}
  void _scheduleOfficialScoreCheck() {}
- @override void initState(){super.initState();privacyApprovalTimer=Timer.periodic(const Duration(seconds:30),(_){if(mounted&&token.isNotEmpty)unawaited(refreshPrivacyApproval());});permissionAuditTimer=Timer.periodic(const Duration(minutes:5),(_){if(mounted&&token.isNotEmpty)unawaited(verifyAlwaysLocationPermission());});nativeSyncTimer=Timer.periodic(const Duration(seconds:30), (_) { if(mounted && token.isNotEmpty && !privacyMode) unawaited(syncPendingTripsOnce()); });nativeStatusTimer=Timer.periodic(const Duration(seconds:2),(_) async {if(nativeStatusPolling||!mounted||token.isEmpty||privacyMode)return;nativeStatusPolling=true;try{final state=await nuqatiNativeStatus();final id=(state['active_trip_id'] as num?)?.toInt();final previousTrip=tripId;final previousKm=liveTripKm;final fixMs=(state['last_accepted_fix_ms'] as num?)?.toInt()??0;final fresh=fixMs>0&&DateTime.now().millisecondsSinceEpoch-fixMs<15000;final nativeSpeed=(state['last_speed_kmh'] as num?)?.toDouble()??0.0;final accelerationAt=(state['last_acceleration_at_ms'] as num?)?.toInt()??0;final accelerationFresh=fresh&&accelerationAt>0&&DateTime.now().millisecondsSinceEpoch-accelerationAt<6000;final nativeAcceleration=(state['last_acceleration_valid']==true&&accelerationFresh)?(((state['last_acceleration_ms2'] as num?)?.toDouble()??0.0)*3.6):0.0;final stationaryMs=(state['stationary_since_ms'] as num?)?.toInt()??0;final endDelay=(state['trip_end_delay_s'] as num?)?.toInt()??240;final nativeCountdown=id!=null&&stationaryMs>0?(endDelay-((DateTime.now().millisecondsSinceEpoch-stationaryMs)~/1000)).clamp(0,endDelay):null;final gpsState=(state['gps_state']??'unknown').toString();final callbackMs=(state['last_gps_callback_ms'] as num?)?.toInt()??0;if(!fresh && gpsState!=lastNativeGpsState){lastNativeGpsState=gpsState;unawaited(nuqatiLog('NATIVE_GPS_STATUS state=$gpsState callback_age_s=${callbackMs>0?(DateTime.now().millisecondsSinceEpoch-callbackMs)~/1000:-1}'));}if(!mounted)return;
+ @override void initState(){super.initState();updateTimer=Timer.periodic(const Duration(minutes:2),(_){if(mounted&&token.isNotEmpty)unawaited(checkForAppUpdate());});unawaited(Future<void>.delayed(const Duration(seconds:20),checkForAppUpdate));privacyApprovalTimer=Timer.periodic(const Duration(seconds:30),(_){if(mounted&&token.isNotEmpty)unawaited(refreshPrivacyApproval());});permissionAuditTimer=Timer.periodic(const Duration(minutes:5),(_){if(mounted&&token.isNotEmpty)unawaited(verifyAlwaysLocationPermission());});nativeSyncTimer=Timer.periodic(const Duration(seconds:30), (_) { if(mounted && token.isNotEmpty && !privacyMode) unawaited(syncPendingTripsOnce()); });nativeStatusTimer=Timer.periodic(const Duration(seconds:2),(_) async {if(nativeStatusPolling||!mounted||token.isEmpty||privacyMode)return;nativeStatusPolling=true;try{final state=await nuqatiNativeStatus();final id=(state['active_trip_id'] as num?)?.toInt();final previousTrip=tripId;final previousKm=liveTripKm;final fixMs=(state['last_accepted_fix_ms'] as num?)?.toInt()??0;final fresh=fixMs>0&&DateTime.now().millisecondsSinceEpoch-fixMs<15000;final nativeSpeed=(state['last_speed_kmh'] as num?)?.toDouble()??0.0;final accelerationAt=(state['last_acceleration_at_ms'] as num?)?.toInt()??0;final accelerationFresh=fresh&&accelerationAt>0&&DateTime.now().millisecondsSinceEpoch-accelerationAt<6000;final nativeAcceleration=(state['last_acceleration_valid']==true&&accelerationFresh)?(((state['last_acceleration_ms2'] as num?)?.toDouble()??0.0)*3.6):0.0;final stationaryMs=(state['stationary_since_ms'] as num?)?.toInt()??0;final endDelay=(state['trip_end_delay_s'] as num?)?.toInt()??240;final nativeCountdown=id!=null&&stationaryMs>0?(endDelay-((DateTime.now().millisecondsSinceEpoch-stationaryMs)~/1000)).clamp(0,endDelay):null;final gpsState=(state['gps_state']??'unknown').toString();final callbackMs=(state['last_gps_callback_ms'] as num?)?.toInt()??0;if(!fresh && gpsState!=lastNativeGpsState){lastNativeGpsState=gpsState;unawaited(nuqatiLog('NATIVE_GPS_STATUS state=$gpsState callback_age_s=${callbackMs>0?(DateTime.now().millisecondsSinceEpoch-callbackMs)~/1000:-1}'));}if(!mounted)return;
       if(previousTrip!=null && id==null){
         if(displayedOdometer!=null){
          final floor=displayedOdometer!+previousKm;
@@ -2122,10 +2143,79 @@ Future<void> checkTrackingRequirements() async {
        unawaited(remindNotificationsAtTripStart());
       }
       setState((){tripId=id==null?null:nuqatiNativeIdOffset+id;speedKmh=fresh?nativeSpeed:0.0;accelerationKmhS=id!=null?nativeAcceleration:0.0;tripEndRemaining=nativeCountdown;liveTripKmId=id==null?null:nuqatiNativeIdOffset+id;liveTripKm=id==null?0.0:((state['distance_m'] as num?)?.toDouble()??0.0)/1000;});}catch(e){unawaited(nuqatiLog('NATIVE_STATUS_POLL_FAILED',e));}finally{nativeStatusPolling=false;}});scoreRefreshTimer=Timer.periodic(const Duration(seconds:5),(_){final id=tripId;if(mounted&&id!=null&&!privacyMode){unawaited(_loadSafetyCounts(id));unawaited(updateDisplayedTripNumber(id));}});careRefreshTimer=Timer.periodic(const Duration(minutes:5),(_){if(mounted&&token.isNotEmpty)unawaited(refreshVehicleCare(askMonthly:false));});unawaited(_secureStore.read(key:'nuqati_pending_odometer_floor').then((v){final f=double.tryParse(v??'');if(mounted&&f!=null)setState(()=>pendingOdometerFloor=f);}));unawaited(restoreVehicleCareCache());FlutterBackgroundService().on('driverSafetyEvent').listen((data){unawaited(_onSafetyEvent(data));});FlutterBackgroundService().on('localTripEnded').listen((data){final id=(data?['trip_id'] as num?)?.toInt();if(id!=null)unawaited(showLocalTripResult(id));});FlutterBackgroundService().on('trackingError').listen((event){if(mounted)setState(()=>status='GPS tracking stopped: check location permission and settings');});FlutterBackgroundService().on('tripState').listen((event){if(false && mounted&&!privacyMode)setState((){final next=(event?['trip_id'] as num?)?.toInt();if(tripId!=null&&next==null){final endedId=tripId!;completedTrip=true;lastEndedAt=DateTime.now().toUtc();officialScoreReady=false;officialScoreBreakdown=null;WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)unawaited(showLocalTripResult(endedId));});}if(next!=null&&tripId!=next){unawaited(remindNotificationsAtTripStart());completedTrip=false;score=100;localTripFeedback='';officialScoreReady=false;officialLowerBetter=false;officialScoreBreakdown=null;officialFeedback='';officialRag=null;officialPollTimer?.cancel();speedingCount=0;brakingCount=0;accelerationCount=0;corneringCount=0;severeCount=0;lastLocalViolationAt=null;lastLocalHeading=null;lastLocalHeadingAt=null;unawaited(_restoreLocalTripScore(next).then((_)=>(_loadSafetyCounts(next))));}if(next!=tripId){liveTripKm=0;liveTripKmId=next;}tripId=next;tripEndRemaining=null;if(next!=null)FlutterBackgroundService().invoke('liveDistanceRequest');});});FlutterBackgroundService().on('liveDistance').listen((event){if(!mounted)return;final id=(event?['trip_id'] as num?)?.toInt();final km=(event?['km'] as num?)?.toDouble();if(id!=null&&km!=null&&id==tripId&&km>=0)setState((){liveTripKmId=id;liveTripKm=km;});});FlutterBackgroundService().on('tripCountdown').listen((event){if(mounted)setState(()=>tripEndRemaining=(event?['remaining'] as num?)?.toInt());});WidgetsBinding.instance.addObserver(this);WidgetsBinding.instance.addPostFrameCallback((_){if(mounted){restoreLanguage();restorePrivacyState();restoreNotificationPreference();restoreCameraActivityMonitoring();unawaited(() async {await requestTrackingConsentIfNeeded();if(mounted)await restoreSavedSession();if(mounted&&token.isNotEmpty){unawaited(refreshPrivacyApproval());unawaited(verifyAlwaysLocationPermission());}}());}});}
- @override void didChangeAppLifecycleState(AppLifecycleState state){
-   if(state==AppLifecycleState.resumed && token.isNotEmpty){unawaited(nuqatiImportNativeRecords());unawaited(refreshVehicleCare());unawaited(refreshSmartOil());restorePrivacyState();unawaited(refreshPrivacyApproval());unawaited(verifyAlwaysLocationPermission());unawaited(syncPendingTripsOnce());unawaited(syncPrivacyEvidence());unawaited(syncNotificationEvidence());if(tripId!=null){FlutterBackgroundService().invoke('liveDistanceRequest');unawaited(_loadSafetyCounts(tripId!));unawaited(remindNotificationsAtTripStart());}}
+
+ // Asks Google Play whether a newer build exists. Called 20 seconds after the app starts, 8 seconds after it returns to the foreground
+ // (the delay lets the trip state load first) and every 2 minutes while it is open; the 6-hour throttle makes most calls do nothing.
+ // Copies that did not come from Play (test APKs) get an error from Play: logged once, then ignored.
+ Future<void> checkForAppUpdate() async {
+  if(!Platform.isAndroid||updateChecking||!mounted||token.isEmpty||tripId!=null)return;
+  final now=DateTime.now();
+  final last=lastUpdateCheckAt;
+  if(last!=null&&now.isBefore(last.add(nuqatiUpdateCheckEvery)))return;
+  updateChecking=true;
+  lastUpdateCheckAt=now;
+  try{
+   final info=await InAppUpdate.checkForUpdate();
+   if(info.installStatus==InstallStatus.downloaded){
+    if(mounted)setState(()=>updateReady=true);
+    return;
+   }
+   final choice=info.updateAvailability==UpdateAvailability.developerTriggeredUpdateInProgress
+     ?'immediate' // Play requires an immediate update that was interrupted to be resumed
+     :nuqatiUpdateChoice(
+       available:info.updateAvailability==UpdateAvailability.updateAvailable,
+       immediateAllowed:info.immediateUpdateAllowed,flexibleAllowed:info.flexibleUpdateAllowed,
+       priority:info.updatePriority,staleDays:info.clientVersionStalenessDays);
+   if(choice=='none')return;
+   await nuqatiLog('APP_UPDATE_AVAILABLE choice=$choice code=${info.availableVersionCode} priority=${info.updatePriority} stale_days=${info.clientVersionStalenessDays}');
+   if(!mounted||tripId!=null)return; // a trip may have started while Play was answering
+   if(choice=='flexible')watchAppUpdateDownload();
+   final result=choice=='immediate'?await InAppUpdate.performImmediateUpdate():await InAppUpdate.startFlexibleUpdate();
+   if(result==AppUpdateResult.userDeniedUpdate){
+    // Ask again tomorrow, not at every check.
+    lastUpdateCheckAt=now.add(nuqatiUpdateAskAgainAfterDenial-nuqatiUpdateCheckEvery);
+    await nuqatiLog('APP_UPDATE_DECLINED choice=$choice');
+   }else if(result==AppUpdateResult.inAppUpdateFailed){
+    await nuqatiLog('APP_UPDATE_FAILED choice=$choice');
+   }
+  }catch(e){
+   if(!updateUnavailableLogged){
+    updateUnavailableLogged=true;
+    final code=(e is PlatformException?e.code:e.runtimeType.toString()).replaceAll(RegExp(r'[^A-Za-z0-9_\-]'),'_');
+    await nuqatiLog('APP_UPDATE_UNAVAILABLE reason=${code.length>40?code.substring(0,40):code}');
+   }
+  }finally{
+   updateChecking=false;
+  }
  }
- @override void dispose(){WidgetsBinding.instance.removeObserver(this);timer?.cancel();policyTimer?.cancel();livePositionRequestTimer?.cancel();scoreRefreshTimer?.cancel();officialPollTimer?.cancel();careRefreshTimer?.cancel();nativeStatusTimer?.cancel();nativeSyncTimer?.cancel();privacyApprovalTimer?.cancel();permissionAuditTimer?.cancel();gpsWatchdog?.cancel();positionSubscription?.cancel();cameraActivitySubscription?.cancel();iqama.dispose();password.dispose();oldPassword.dispose();newPassword.dispose();super.dispose();}
+ // Listens (only once a flexible update has been started) for the moment the download is finished.
+ void watchAppUpdateDownload(){
+  if(updateStatusSub!=null)return;
+  updateStatusSub=InAppUpdate.installUpdateListener.listen((status){
+   if(status==InstallStatus.downloaded){
+    if(mounted)setState(()=>updateReady=true);
+    unawaited(nuqatiLog('APP_UPDATE_DOWNLOADED'));
+   }else if(status==InstallStatus.failed){
+    unawaited(nuqatiLog('APP_UPDATE_FAILED choice=flexible'));
+   }
+  },onError:(Object _){});
+ }
+ // The banner's button. Play installs the downloaded build and restarts the app; tracking restarts by itself after the update.
+ Future<void> restartForUpdate() async {
+  if(tripId!=null)return;
+  await nuqatiLog('APP_UPDATE_RESTARTING');
+  try{
+   await InAppUpdate.completeFlexibleUpdate();
+  }catch(_){
+   if(mounted)setState(()=>updateReady=false);
+   lastUpdateCheckAt=null;
+   await nuqatiLog('APP_UPDATE_FAILED choice=restart');
+  }
+ }
+ @override void didChangeAppLifecycleState(AppLifecycleState state){
+   if(state==AppLifecycleState.resumed && token.isNotEmpty){unawaited(Future<void>.delayed(const Duration(seconds:8),checkForAppUpdate));unawaited(nuqatiImportNativeRecords());unawaited(refreshVehicleCare());unawaited(refreshSmartOil());restorePrivacyState();unawaited(refreshPrivacyApproval());unawaited(verifyAlwaysLocationPermission());unawaited(syncPendingTripsOnce());unawaited(syncPrivacyEvidence());unawaited(syncNotificationEvidence());if(tripId!=null){FlutterBackgroundService().invoke('liveDistanceRequest');unawaited(_loadSafetyCounts(tripId!));unawaited(remindNotificationsAtTripStart());}}
+ }
+ @override void dispose(){WidgetsBinding.instance.removeObserver(this);timer?.cancel();policyTimer?.cancel();livePositionRequestTimer?.cancel();scoreRefreshTimer?.cancel();officialPollTimer?.cancel();careRefreshTimer?.cancel();nativeStatusTimer?.cancel();nativeSyncTimer?.cancel();privacyApprovalTimer?.cancel();permissionAuditTimer?.cancel();updateTimer?.cancel();updateStatusSub?.cancel();gpsWatchdog?.cancel();positionSubscription?.cancel();cameraActivitySubscription?.cancel();iqama.dispose();password.dispose();oldPassword.dispose();newPassword.dispose();super.dispose();}
  Future<void> checkGps({bool displayDialog=false}) async {
    if(gpsChecking)return;
    if(mounted)setState(()=>gpsChecking=true);
@@ -2820,6 +2910,11 @@ Future<void> checkTrackingRequirements() async {
   child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[Icon(icon,color:lime,size:24),const SizedBox(height:7),Text(value,style:const TextStyle(fontSize:25,fontWeight:FontWeight.w800,color:Colors.white)),const SizedBox(height:3),Text(title,textAlign:TextAlign.center,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:11,color:Colors.white70))]));
  Widget compactMetric(String label,String value,IconData icon)=>Container(padding:const EdgeInsets.symmetric(vertical:8,horizontal:3),decoration:BoxDecoration(color:navy.withOpacity(.55),borderRadius:BorderRadius.circular(12)),child:Column(children:[Icon(icon,color:lime,size:18),Text(value,style:const TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.bold)),Text(label,textAlign:TextAlign.center,maxLines:2,style:const TextStyle(color:Colors.white70,fontSize:10))]));
  Widget homeTab()=>Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+  if(updateReady&&tripId==null)panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+   Row(children:[const Icon(Icons.system_update,color:lime,size:22),const SizedBox(width:10),Expanded(child:Text(tr('A new version of Nuqati is ready','نسخة جديدة من نقاطي جاهزة'),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold)))]),
+   const SizedBox(height:12),
+   action(tr('Restart to update','إعادة التشغيل للتحديث'),restartForUpdate),
+  ])),
   action(tr('My Vehicle · Receive / Return','مركبتي · استلام / تسليم'),openVehicleHandover,secondary:true),
   panel(child:Column(children:[
    Row(children:[const CircleAvatar(radius:18,backgroundColor:lime,child:Icon(Icons.person,color:navy,size:20)),const SizedBox(width:10),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold,fontSize:16)),if(company.isNotEmpty)Text('${tr('Company','الشركة')}: $company',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:12)),Text('${tr('Vehicle','المركبة')}: $plate',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:lime,fontSize:12)),if(vehicleModel.isNotEmpty||vehicleYear.isNotEmpty)Text('${tr('Model','الطراز')}: $vehicleModel${vehicleYear.isNotEmpty?' ($vehicleYear)':''}',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:11)),if(vehicleDoor.isNotEmpty)Text('${tr('Door number','رقم الباب')}: $vehicleDoor',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:11)),Text("${tr('Odometer','عداد المركبة')}: ${displayedOdometer==null?'—':((pendingOdometerFloor!=null && pendingOdometerFloor!>displayedOdometer! ? pendingOdometerFloor! : displayedOdometer!)+(tripId!=null&&liveTripKmId==tripId?liveTripKm:0)).toStringAsFixed(1)} km${tripId!=null?' (${tr('live estimate','تقدير مباشر')})':''}",style:const TextStyle(color:Colors.white70,fontSize:11))])),Icon(gpsReady?Icons.gps_fixed:Icons.gps_off,color:gpsReady?lime:Colors.orangeAccent)]),
