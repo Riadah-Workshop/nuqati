@@ -5,6 +5,30 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.7: driver app asks Google Play for updates
+
+#### Added
+- **In-app updates in the driver app** (Google Play In-App Updates API, the `in_app_update` package). At app start, when the app returns
+  to the foreground and every few minutes while open (at most one real check every 6 hours), the app asks Play whether a newer build
+  exists. A normal update downloads in the background after one Play question and a banner on the Home tab offers **Restart to update**
+  (English, Arabic, Urdu). Play's blocking full-screen update is used only for an urgent release (priority 4 or 5, set through the Play
+  Developer API) or when the phone has known about the build for 7 days. A driver who says No is asked again after 24 hours.
+- **Never during a trip:** the check, the Play question, the banner and its restart button all wait until no trip is in progress.
+- Android only; copies not installed from Play (test APKs) are ignored after one `APP_UPDATE_UNAVAILABLE` diagnostics line.
+- App Diagnostics lines `APP_UPDATE_AVAILABLE / DOWNLOADED / RESTARTING / DECLINED / FAILED / UNAVAILABLE`, with versions, priority and
+  days, so you can see which phones were offered which build.
+- `docs/OPERATIONS.md` section 12: how to release, what drivers see, how to test, how to read the diagnostics.
+- `backend/test_driver_in_app_update_contract.py` (mutation-checked): the decision table runs against the real Dart function, and the
+  trip, Android-only, throttle, error-logging and three-language rules are pinned.
+
+#### Not included
+- Silent updates: Android does not allow them outside a managed (MDM) phone.
+- A server-side minimum-version block, and phones on versions older than this one (they update through Play's normal auto-update until
+  they have this build).
+- The manager app (same change can follow).
+
+**Needs a new driver release** to reach phones, and can only be tried on a copy installed from Play (internal testing track).
+
 ### Phase 5.6: GPS-gap diagnostics from the phone
 
 Found by reading a real driver's App Diagnostics: a trip with 8 points over 15 minutes was a recording gap, and the log showed

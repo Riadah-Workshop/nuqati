@@ -266,3 +266,37 @@ app versions before this change, repeated every 45 seconds even when tracking wa
 The phone keeps only its newest few thousand records (roughly a day or two of active tracking). After the app is updated, the last three
 days still on the phone are copied in over the first minutes; the server does not accept events older than 14 days.
 
+## 12. Releasing a driver app update (Google Play)
+
+The driver app asks Google Play for a newer build, so drivers do not depend on Play's own auto-update schedule. Nothing installs
+without the driver seeing Play's own screen: Android does not allow an app to update itself silently. (Only phones managed by a company
+MDM can be updated with no notice at all.)
+
+**To release:** run the workflow **Build Nuqati Driver signed AAB (Google Play)**. Its version code is the run number, so every run is higher
+than the last. Upload the AAB in Play Console (production, or a testing track) and roll it out.
+
+**What the driver sees**, from the first time Play has told the phone about the new build:
+
+| Situation | Driver sees |
+|---|---|
+| A normal update (priority 0) | At the next app start, or within a few minutes while the app is open: one small Play question ("Update?"). After Yes it downloads in the background, and a banner on the Home tab says **A new version of Nuqati is ready, Restart to update**. |
+| The phone has known about the build for **7 days** and it is still not installed | Play's full-screen update that blocks the app until it finishes. |
+| An urgent release (priority 4 or 5) | The same full-screen update straight away. Play Console cannot set the priority; it is set with the Google Play Developer API (`inAppUpdatePriority` on the release). |
+| The driver says No | Asked again after 24 hours. |
+| A trip is in progress | Nothing, ever. The check, the question, the banner and the restart button all wait until the trip has ended. |
+
+After an update the tracking service restarts by itself (the app already restarts it after a phone reboot or an app update).
+
+**Testing it.** In-app updates only work on a copy installed **from Play**, not on a sideloaded APK. Install version N from the Play
+internal-testing link, publish version N+1 (a higher version code) to the same track, then open the app: the question appears once Play
+has propagated the new build, which can take from minutes to a few hours. Google's guide: developer.android.com/guide/playcore/in-app-updates/test
+
+**In App Diagnostics:** `APP_UPDATE_AVAILABLE choice=flexible|immediate code=N priority=N stale_days=N`, `APP_UPDATE_DOWNLOADED`,
+`APP_UPDATE_RESTARTING`, `APP_UPDATE_DECLINED`, `APP_UPDATE_FAILED`, and `APP_UPDATE_UNAVAILABLE reason=...` (the phone's copy did not
+come from Play, or Play is not available: expected for test APKs). A phone that never shows `APP_UPDATE_AVAILABLE` for a published build is
+either still on a version older than this feature, or Play has not offered it yet.
+
+**Not included:** phones on versions older than this feature keep updating only through Play's normal auto-update until they have the
+first build that contains it. There is no server-side "minimum version" block yet (an app below the minimum would be stopped and sent to
+the Play page); say so if you want it.
+
