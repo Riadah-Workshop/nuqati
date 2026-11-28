@@ -33,6 +33,8 @@ jobs:
           cp main.dart lib/main.dart
           test -s nuqati_network.dart || (echo "ERROR: missing Nuqati VPN failover library" && exit 1)
           cp nuqati_network.dart lib/nuqati_network.dart
+          test -s nuqati_adaptive.dart || (echo 'ERROR: driver_app/nuqati_adaptive.dart missing; the screens cannot compile' && exit 1)
+          cp nuqati_adaptive.dart lib/nuqati_adaptive.dart
           test -s vehicle_handover.dart || (echo 'ERROR: driver_app/vehicle_handover.dart missing; handover cannot compile' && exit 1)
           cp vehicle_handover.dart lib/vehicle_handover.dart
           test -s lib/vehicle_handover.dart || (echo 'ERROR: vehicle handover screen missing from lib/' && exit 1)

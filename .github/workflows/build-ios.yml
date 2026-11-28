@@ -19,11 +19,12 @@ jobs:
         run: flutter create --platforms=ios --project-name nuqati_driver .
       - name: Install Nuqati driver source and online handover screen
         run: |
-          test -s main.dart
-          test -s vehicle_handover.dart
           mkdir -p lib
-          cp main.dart lib/main.dart
-          cp vehicle_handover.dart lib/vehicle_handover.dart
+          # Every local library main.dart imports must be copied (nuqati_network.dart was missing here before).
+          for f in main.dart nuqati_network.dart nuqati_adaptive.dart vehicle_handover.dart; do
+            test -s "$f" || { echo "ERROR: driver_app/$f is missing"; exit 1; }
+            cp "$f" "lib/$f"
+          done
 
       - name: Install iOS CoreLocation recorder and application permissions
         run: |

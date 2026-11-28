@@ -5,6 +5,36 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.8: driver app layouts follow the phone
+
+#### Fixed
+- **The score ring (points with GREEN/AMBER/RED below) and the event cards no longer break on phones with a different screen.** They had
+  fixed pixel sizes: a 154 px ring with a 59 px number, event cards exactly 124 px high, buttons exactly 50 px high. On a small phone, a
+  phone set to a larger "display size", or any phone with a larger font, the number left the ring, the word below was cut off and the cards
+  showed "overflowed" stripes. Now:
+  - the ring takes about half the width it is given (132 to 220 px) and the number and word shrink to stay inside the circle, so even
+    "100.0" fits; they follow the ring, not the system font;
+  - tiles have no fixed height and every tile in a row is as tall as the tallest one, so a long Arabic/Urdu word makes the row taller
+    instead of cutting the text; the number of tiles per row follows the width and the font size (live metrics, completed-trip metrics,
+    event cards);
+  - buttons grow with their text; the top bar title scales down instead of overflowing;
+  - the system font size is followed between 85% and 135% (`nuqatiMinTextScale` / `nuqatiMaxTextScale` in `nuqati_adaptive.dart`).
+    Above that, phones set to the "largest" font broke every screen; say so if you want a different limit.
+- `build-ios.yml` did not copy `nuqati_network.dart`, which `main.dart` imports, so the iOS build could not compile.
+
+#### Added
+- `driver_app/nuqati_adaptive.dart` (the ring, the tile, the equal-height grid, the font-size limit).
+- **Flutter layout tests in CI** (`driver_app/test/adaptive_layout_test.dart`, job "Driver app analyze"): about 550 cases render the ring and
+  the tiles on 7 screen sizes (280 to 820 dp wide) x 6 system font sizes (0.85x to 2.0x) in English, Arabic, Urdu and a long-label set, and
+  fail on any overflow, on text leaving the circle, on a tile leaving the screen, or on tiles of one row with different heights. A
+  control case keeps the old fixed-height tile in the test and requires it to overflow, so the checks cannot silently stop measuring.
+- `backend/test_driver_adaptive_layout_contract.py` (mutation-checked): main.dart uses the adaptive pieces, no fixed size comes back, and
+  every workflow that builds the driver app copies every Dart file `main.dart` imports.
+
+#### Not verified
+- I could not see the phone this was reported on. The change covers every fixed-size place on the Home and Driving screens; the Settings
+  tab and dialogs were not changed. Please check it on that phone after the next driver build and send a screenshot if anything is still off.
+
 ### Phase 5.7: driver app asks Google Play for updates
 
 #### Added
