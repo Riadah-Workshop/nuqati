@@ -1,0 +1,53 @@
+name: iOS probe (temporary, never merged)
+on:
+  push:
+    branches: [tmp/ios-probe]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Versions
+        run: |
+          flutter --version
+          xcodebuild -version
+          sw_vers
+          ruby -v
+          pod --version || true
+          xcrun simctl list runtimes | head -20
+          xcrun simctl list devices available | head -30
+      - name: Driver - generated iOS project
+        working-directory: driver_app
+        run: |
+          flutter create --platforms=ios --project-name nuqati_driver .
+          echo "===== files"; ls ios ios/Runner
+          echo "===== AppDelegate.swift"; cat ios/Runner/AppDelegate.swift
+          echo "===== SceneDelegate.swift"; cat ios/Runner/SceneDelegate.swift 2>/dev/null || echo "(none)"
+          echo "===== Info.plist"; cat ios/Runner/Info.plist
+          echo "===== Podfile"; cat ios/Podfile
+          echo "===== deployment target / bundle id"
+          grep -n "IPHONEOS_DEPLOYMENT_TARGET\|PRODUCT_BUNDLE_IDENTIFIER\|SWIFT_VERSION" ios/Runner.xcodeproj/project.pbxproj | sort -k2 | uniq -c | head -20
+      - name: Manager - generated iOS project
+        working-directory: manager_app
+        run: |
+          flutter create --platforms=ios --project-name nuqati_manager --org sa.alriadah .
+          echo "===== AppDelegate.swift"; cat ios/Runner/AppDelegate.swift
+          echo "===== Info.plist keys"; grep -n "<key>" ios/Runner/Info.plist | head -40
+          cat manager_app/pubspec.yaml 2>/dev/null || cat pubspec.yaml
+      - name: Driver - what build-ios.yml does today (patch, pub get, build for simulator)
+        working-directory: driver_app
+        continue-on-error: true
+        run: |
+          mkdir -p lib
+          for f in main.dart nuqati_network.dart nuqati_adaptive.dart vehicle_handover.dart; do cp "$f" "lib/$f"; done
+          cat ios_native_tracking/NuqatiIOSNativeTracking.swift ios_native_tracking/AppDelegate.swift > ios/Runner/AppDelegate.swift
+          flutter pub get
+          rm -f test/widget_test.dart
+          flutter build ios --simulator --debug --dart-define=NUQATI_API=https://nuqati.al-riadah.sa 2>&1 | tail -80
