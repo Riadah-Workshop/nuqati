@@ -1,0 +1,69 @@
+name: Generate and prepare the Nuqati iOS project
+description: >
+  flutter create for iOS, copy the Dart sources into lib/, run ops/ios/prepare_ios_project.py (Info.plist, bundle id, Podfile,
+  app delegate, privacy manifest), generate the 1024 px app icon and run flutter pub get. Flutter must already be set up and the
+  repository checked out. Used by ci-ios.yml, build-ios.yml and release-ios.yml so they cannot drift apart.
+inputs:
+  app:
+    description: driver or manager
+    required: true
+  bundle-id:
+    description: Overrides the default bundle identifier (sa.alriadah.nuqati.driver / sa.alriadah.nuqati.manager)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Generate the iOS project and install the Dart sources
+      shell: bash
+      working-directory: ${{ inputs.app }}_app
+      env:
+        APP: ${{ inputs.app }}
+      run: |
+        set -euo pipefail
+        case "$APP" in
+          driver)
+            flutter create --platforms=ios --project-name nuqati_driver .
+            # Every local library main.dart imports must be copied (backend/test_driver_adaptive_layout_contract.py checks this list).
+            sources="main.dart nuqati_network.dart nuqati_adaptive.dart vehicle_handover.dart"
+            ;;
+          manager)
+            flutter create --platforms=ios --project-name nuqati_manager --org sa.alriadah .
+            sources="main.dart"
+            ;;
+          *) echo "app must be driver or manager, got '$APP'"; exit 1 ;;
+        esac
+        mkdir -p lib
+        for f in $sources; do
+          test -s "$f" || { echo "ERROR: ${APP}_app/$f is missing"; exit 1; }
+          cp "$f" "lib/$f"
+        done
+        # flutter create writes a sample test that refers to its own sample app.
+        rm -f test/widget_test.dart
+
+    - name: Prepare the iOS project (permissions, plist, app delegate, privacy manifest)
+      shell: bash
+      working-directory: ${{ inputs.app }}_app
+      env:
+        APP: ${{ inputs.app }}
+        BUNDLE_ID: ${{ inputs.bundle-id }}
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_WORKSPACE/ops/ios/prepare_ios_project.py" --app "$APP" --project-dir . ${BUNDLE_ID:+--bundle-id "$BUNDLE_ID"}
+
+    - name: Dependencies and the iOS app icon
+      shell: bash
+      working-directory: ${{ inputs.app }}_app
+      run: |
+        set -euo pipefail
+        flutter pub get
+        # Apple needs a square, opaque 1024 px icon; assets/nuqati_icon_ios.png is made by ops/ios/make_ios_icon.py.
+        test -s assets/nuqati_icon_ios.png
+        cat > flutter_launcher_icons_ios.yaml <<'ICONS'
+        flutter_launcher_icons:
+          android: false
+          ios: true
+          image_path: assets/nuqati_icon_ios.png
+          remove_alpha_ios: true
+        ICONS
+        dart run flutter_launcher_icons -f flutter_launcher_icons_ios.yaml

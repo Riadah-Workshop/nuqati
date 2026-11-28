@@ -16,7 +16,14 @@ MAIN = (APP / "main.dart").read_text(encoding="utf-8")
 ADAPTIVE = (APP / "nuqati_adaptive.dart").read_text(encoding="utf-8")
 LAYOUT_TEST = (APP / "test" / "adaptive_layout_test.dart").read_text(encoding="utf-8")
 WORKFLOWS = ROOT / ".github" / "workflows"
-DRIVER_BUILDS = ["build-android.yml", "build-driver-release.yml", "build-ios.yml", "ci-flutter.yml"]
+# Everything that generates the driver project and copies main.dart's libraries into lib/. (The iOS workflows do it in the shared
+# composite action, which is therefore the file to check for them.)
+DRIVER_BUILDS = [
+    WORKFLOWS / "build-android.yml",
+    WORKFLOWS / "build-driver-release.yml",
+    WORKFLOWS / "ci-flutter.yml",
+    ROOT / ".github" / "actions" / "ios-project" / "action.yml",
+]
 
 
 def _local_imports():
@@ -26,10 +33,11 @@ def _local_imports():
 def test_every_workflow_copies_every_local_library_main_imports():
     imports = _local_imports()
     assert {"nuqati_network.dart", "nuqati_adaptive.dart", "vehicle_handover.dart"} <= set(imports), imports
-    for name in DRIVER_BUILDS:
-        text = (WORKFLOWS / name).read_text(encoding="utf-8")
+    for path in DRIVER_BUILDS:
+        name = path.relative_to(ROOT)
+        text = path.read_text(encoding="utf-8")
         # Only real copy commands count (a file name in a comment must not satisfy this).
-        copies = "\n".join(line for line in text.splitlines() if re.match(r"\s*(cp |for f in )", line))
+        copies = "\n".join(line for line in text.splitlines() if re.match(r"\s*(cp |for f in |sources=)", line))
         for library in imports:
             assert library in copies, f"{name} does not copy driver_app/{library} into lib/"
 

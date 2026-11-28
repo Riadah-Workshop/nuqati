@@ -1,100 +1,60 @@
-name: Build Nuqati Driver iOS (simulator and unsigned device)
+name: Build Nuqati iOS (simulator and unsigned device)
+
+# Builds the driver or manager app for iOS without signing: a simulator app and an unsigned device app (NOT an installable IPA).
+# For a signed build that goes to TestFlight use "Release Nuqati iOS to TestFlight" (release-ios.yml), which needs your Apple account.
+# The project is generated and prepared by .github/actions/ios-project, the same code the pull-request check (ci-ios.yml) runs.
+
 on:
   workflow_dispatch:
+    inputs:
+      app:
+        description: Which app to build
+        type: choice
+        options:
+          - driver
+          - manager
+        default: driver
+
 jobs:
   build-ios:
     runs-on: macos-latest
+    timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      APP: ${{ inputs.app }}
     defaults:
       run:
-        working-directory: driver_app
+        working-directory: ${{ inputs.app }}_app
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Generate iOS project
-        run: flutter create --platforms=ios --project-name nuqati_driver .
-      - name: Install Nuqati driver source and online handover screen
-        run: |
-          mkdir -p lib
-          # Every local library main.dart imports must be copied (nuqati_network.dart was missing here before).
-          for f in main.dart nuqati_network.dart nuqati_adaptive.dart vehicle_handover.dart; do
-            test -s "$f" || { echo "ERROR: driver_app/$f is missing"; exit 1; }
-            cp "$f" "lib/$f"
-          done
 
-      - name: Install iOS CoreLocation recorder and application permissions
-        run: |
-          test -s ios_native_tracking/NuqatiIOSNativeTracking.swift
-          # AppDelegate.swift is already in the generated Xcode build phase.
-          # Embed the native class there so no manual .pbxproj file registration is required.
-          cat ios_native_tracking/NuqatiIOSNativeTracking.swift ios_native_tracking/AppDelegate.swift > ios/Runner/AppDelegate.swift
-          python3 - <<'PY'
-          from pathlib import Path
-          import plistlib
-          p=Path('ios/Runner/Info.plist')
-          with p.open('rb') as f: data=plistlib.load(f)
-          data.update({
-            'NSLocationWhenInUseUsageDescription':'Nuqati uses GPS to detect driving trips and calculate safety events.',
-            'NSLocationAlwaysAndWhenInUseUsageDescription':'Nuqati records fleet driving trips while the screen is locked or the app is in the background. Tracking can be paused only with approved Privacy Mode.',
-            'NSLocationAlwaysUsageDescription':'Nuqati requires Always location access for automatic fleet trip monitoring.',
-            'NSCameraUsageDescription':'Capture vehicle inspection evidence for online handover and return.',
-            'NSPhotoLibraryUsageDescription':'Attach vehicle inspection photos during an online handover.',
-            'UIBackgroundModes':['location','fetch'],
-          })
-          with p.open('wb') as f: plistlib.dump(data,f)
-          project=Path('ios/Runner.xcodeproj/project.pbxproj')
-          source=project.read_text()
-          source=source.replace('com.example.nuqatiDriver','sa.alriadah.nuqati.driver')
-          source=source.replace('com.example.nuqati_driver','sa.alriadah.nuqati.driver')
-          project.write_text(source)
-          PY
-      - name: Verify iOS background location capability
-        run: |
-          python3 - <<'PY'
-          import plistlib
-          from pathlib import Path
-          with Path('ios/Runner/Info.plist').open('rb') as f: data=plistlib.load(f)
-          assert 'location' in data['UIBackgroundModes']
-          assert data['NSLocationAlwaysAndWhenInUseUsageDescription']
-          assert 'final class NuqatiIOSNativeTracking' in Path('ios/Runner/AppDelegate.swift').read_text()
-          print('iOS native recorder and Always location permission configured')
-          PY
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Generate and prepare the iOS project
+        uses: ./.github/actions/ios-project
+        with:
+          app: ${{ inputs.app }}
 
-      # Catch Flutter/Dart syntax and type errors before the costly Android/iOS build.
-      - name: Analyze vehicle handover Dart source
-        run: |
-          test -s lib/vehicle_handover.dart || (echo 'Missing handover screen in lib/' && exit 1)
-          dart format --output=none lib/vehicle_handover.dart
-          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/vehicle_handover.dart
-      - name: Remove generated sample test
-        run: rm -f test/widget_test.dart
       - name: Analyze Flutter code
-        # Retain analyzer output, but don't block iOS builds on legacy lint
-        # warnings/informational messages. Actual Dart errors still fail the job.
+        # Dart errors fail the job; warnings and infos are reported only (as in the Android workflows).
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
-      - name: Generate iOS launcher icon
-        run: |
-          cat > flutter_launcher_icons_ios.yaml <<'ICONCONFIG'
-          flutter_launcher_icons:
-            android: false
-            ios: true
-            image_path: assets/nuqati_icon.png
-          ICONCONFIG
-          dart run flutter_launcher_icons -f flutter_launcher_icons_ios.yaml
+
       - name: Build iOS simulator app
         run: flutter build ios --simulator --debug --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+
       - name: Package simulator app
-        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app nuqati-ios-simulator.zip
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app "nuqati-${APP}-ios-simulator.zip"
+
       - name: Build unsigned physical-device app (not an installable IPA)
         run: flutter build ios --release --no-codesign --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+
       - name: Package unsigned device app for Xcode signing
-        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app nuqati-ios-unsigned-device.zip
+        run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "nuqati-${APP}-ios-unsigned-device.zip"
+
       # Store the unsigned iOS builds as a private draft GitHub Release.
       # Release assets do not use the GitHub Actions artifact quota.
       - name: Save iOS builds to draft GitHub Release
@@ -104,13 +64,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          test -s nuqati-ios-simulator.zip
-          test -s nuqati-ios-unsigned-device.zip
-          tag="nuqati-ios-internal-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test -s "nuqati-${APP}-ios-simulator.zip"
+          test -s "nuqati-${APP}-ios-unsigned-device.zip"
+          tag="nuqati-${APP}-ios-internal-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" \
-            nuqati-ios-simulator.zip \
-            nuqati-ios-unsigned-device.zip \
-            --title "Nuqati iOS unsigned builds - Run ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            "nuqati-${APP}-ios-simulator.zip" \
+            "nuqati-${APP}-ios-unsigned-device.zip" \
+            --title "Nuqati ${APP} iOS unsigned builds - Run ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
             --notes "Internal unsigned iOS builds from commit ${GITHUB_SHA}. Simulator build and unsigned device app; NOT a signed installable IPA." \
             --target "$GITHUB_SHA" \
             --draft \

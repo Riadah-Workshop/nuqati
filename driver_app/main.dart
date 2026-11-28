@@ -1862,12 +1862,15 @@ class _DriverAppState extends State<DriverApp> with WidgetsBindingObserver{
 Future<void> checkTrackingRequirements() async {
   final location=await Geolocator.checkPermission();
   final notifications=await ph.Permission.notification.status;
-  final battery=await ph.Permission.ignoreBatteryOptimizations.status;
+  // The battery-optimisation exemption exists on Android only; iOS has Background App Refresh instead (a setting, not a request).
+  final battery=Platform.isAndroid?await ph.Permission.ignoreBatteryOptimizations.status:null;
   if(!mounted)return;
   await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(
    title:Text(tr('Tracking setup','إعداد التتبع')),
-   content:Text('Location: $location\nNotifications: $notifications\nBattery optimization exemption: $battery\n\nRequired: Location = Allow all the time, Notifications = Allowed, Battery = Unrestricted. If any of these are missing, finish them in Android settings.'),
-   actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close')),TextButton(onPressed:(){Navigator.pop(ctx);Geolocator.openAppSettings();},child:const Text('App settings')),TextButton(onPressed:()async{Navigator.pop(ctx);await ph.Permission.notification.request();await ph.Permission.ignoreBatteryOptimizations.request();},child:const Text('Request permissions'))]));
+   content:Text(Platform.isIOS
+     ?'Location: $location\nNotifications: $notifications\n\nRequired: Location = Always, Notifications = Allowed, and Background App Refresh = On for Nuqati. If any of these are missing, finish them in iOS Settings > Nuqati.'
+     :'Location: $location\nNotifications: $notifications\nBattery optimization exemption: $battery\n\nRequired: Location = Allow all the time, Notifications = Allowed, Battery = Unrestricted. If any of these are missing, finish them in Android settings.'),
+   actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close')),TextButton(onPressed:(){Navigator.pop(ctx);Geolocator.openAppSettings();},child:const Text('App settings')),TextButton(onPressed:()async{Navigator.pop(ctx);await ph.Permission.notification.request();if(Platform.isAndroid)await ph.Permission.ignoreBatteryOptimizations.request();},child:const Text('Request permissions'))]));
  }
 
  bool gpsReady=false, gpsChecking=false; DateTime? lastGpsFix; Timer? gpsWatchdog; bool gpsWarningShown=false; bool permissionPromptInProgress=false;

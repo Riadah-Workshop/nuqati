@@ -1,0 +1,139 @@
+name: Release Nuqati iOS to TestFlight
+
+# Builds a SIGNED iOS app and uploads it to App Store Connect (TestFlight). Nothing is stored in this public repository: no IPA is
+# kept as an artifact or release asset; the build goes straight to Apple.
+#
+# Needs your Apple Developer account. One-time setup, with every click: docs/IOS.md section 2. In short, add these to GitHub
+# (Settings > Secrets and variables > Actions):
+#   secrets    APPLE_TEAM_ID, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_API_KEY_P8 (the full text of the downloaded AuthKey_*.p8 file)
+#   variables  (optional) IOS_DRIVER_BUNDLE_ID, IOS_MANAGER_BUNDLE_ID, NUQATI_PRODUCTION_API
+# Signing is automatic: Xcode creates the App ID, the distribution certificate and the profile through the App Store Connect API key.
+# The build number is the run number of this workflow, so every upload is higher than the previous one (Apple requires that).
+#
+# NOT VERIFIED YET: this workflow needs the Apple account to run at all, so its first run is its first test. Read docs/IOS.md section 7.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Which app to release
+        type: choice
+        options:
+          - driver
+          - manager
+        default: driver
+      version:
+        description: Marketing version shown in the App Store (the build number is added automatically)
+        default: "1.0.0"
+
+jobs:
+  testflight:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      APP: ${{ inputs.app }}
+      VERSION: ${{ inputs.version }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+      ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+      PRODUCTION_API: ${{ vars.NUQATI_PRODUCTION_API }}
+      DRIVER_BUNDLE_ID: ${{ vars.IOS_DRIVER_BUNDLE_ID }}
+      MANAGER_BUNDLE_ID: ${{ vars.IOS_MANAGER_BUNDLE_ID }}
+    steps:
+      - name: Check that the Apple account settings are present
+        shell: bash
+        run: |
+          missing=""
+          [ -n "$TEAM_ID" ]   || missing="$missing APPLE_TEAM_ID"
+          [ -n "$KEY_ID" ]    || missing="$missing APPSTORE_KEY_ID"
+          [ -n "$ISSUER_ID" ] || missing="$missing APPSTORE_ISSUER_ID"
+          [ -n "$API_KEY_P8" ] || missing="$missing APPSTORE_API_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub secrets:$missing. Follow docs/IOS.md section 2, then run this workflow again."
+            exit 1
+          fi
+          case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::Version must look like 1.0.0"; exit 1 ;; esac
+
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pick the bundle identifier
+        id: bundle
+        shell: bash
+        run: |
+          if [ "$APP" = driver ]; then echo "id=$DRIVER_BUNDLE_ID" >> "$GITHUB_OUTPUT"; else echo "id=$MANAGER_BUNDLE_ID" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Generate and prepare the iOS project
+        uses: ./.github/actions/ios-project
+        with:
+          app: ${{ inputs.app }}
+          bundle-id: ${{ steps.bundle.outputs.id }}
+
+      - name: Store the App Store Connect API key for Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$API_KEY_P8" > "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+
+      - name: Build the release app
+        shell: bash
+        working-directory: ${{ inputs.app }}_app
+        run: |
+          set -euo pipefail
+          api="${PRODUCTION_API:-https://nuqati.al-riadah.sa}"
+          # --no-codesign: only prepares the Xcode workspace and compiles Dart; Xcode signs and archives below.
+          flutter build ios --release --no-codesign \
+            --build-name="$VERSION" --build-number="${{ github.run_number }}" \
+            --dart-define=NUQATI_API="$api"
+
+      - name: Archive and sign (automatic signing through the API key)
+        shell: bash
+        working-directory: ${{ inputs.app }}_app/ios
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            archive
+
+      - name: Upload to App Store Connect (TestFlight)
+        shell: bash
+        working-directory: ${{ inputs.app }}_app/ios
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8" \
+            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID"
+          echo "Uploaded. The build appears in App Store Connect > TestFlight after Apple has processed it (usually 5 to 30 minutes)."
+
+      - name: Remove the API key from the runner
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
