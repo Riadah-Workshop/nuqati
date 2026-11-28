@@ -43,7 +43,7 @@ jobs:
       - name: Install app sources into lib/
         run: |
           mkdir -p lib
-          for f in main.dart nuqati_network.dart vehicle_handover.dart nuqati_home_test.dart; do
+          for f in main.dart nuqati_network.dart nuqati_adaptive.dart vehicle_handover.dart nuqati_home_test.dart; do
             test -s "$f" || { echo "ERROR: driver_app/$f is missing"; exit 1; }
             cp "$f" "lib/$f"
           done
@@ -56,6 +56,12 @@ jobs:
         run: |
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/main.dart lib/nuqati_network.dart
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/vehicle_handover.dart
+          flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib/nuqati_adaptive.dart test/adaptive_layout_test.dart
+
+      # Renders the score ring and the tiles on 7 screen sizes x 6 system font sizes in English, Arabic and Urdu (about 550 cases) and
+      # fails on any overflow, on text leaving the circle, or on tiles of one row with different heights.
+      - name: Layout tests (screen sizes and font sizes)
+        run: flutter test --no-pub test/adaptive_layout_test.dart
 
   manager:
     name: Manager app analyze

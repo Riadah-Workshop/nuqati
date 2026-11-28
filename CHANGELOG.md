@@ -5,6 +5,69 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.9: iOS groundwork (driver and manager)
+
+#### Found and fixed (by running the iOS build on a macOS runner, which nobody had done since Flutter changed its iOS template)
+- **The iOS driver would have started but tracked nothing.** Flutter 3.41+ creates iOS apps with the UIScene lifecycle. The old app delegate
+  replacement looked for a window that does not exist there, so neither the plugins nor the `nuqati/native_tracking` channel were ever registered.
+  The app delegate now registers both from `didInitializeImplicitFlutterEngine`.
+- **Every iOS permission check would have answered "denied"**: `permission_handler` needs its permissions listed in the Podfile; they now are.
+- **iOS 13+ would have crashed the driver at start**: the background-service plugin's task id was not in `Info.plist`.
+- **The app icon was 110 x 95 with transparency**; Apple needs a 1024 x 1024 opaque PNG. A clean redraw of the existing mark is included.
+- `build-ios.yml` did not copy `nuqati_network.dart`; the iOS builds did not pass the manager's `MAPTILER_API_KEY` or the driver's
+  `NUQATI_FALLBACK_API` that the Android builds pass.
+- Driver, *Check tracking permissions* on iOS no longer talks about Android battery settings or requests the Android-only battery permission.
+
+#### Added
+- `ops/ios/prepare_ios_project.py`: one script that prepares the generated Xcode project (Info.plist texts and background modes, bundle ids,
+  Podfile macros, the UIScene app delegate with the CoreLocation recorder, Apple's privacy manifest). It stops with a message when Flutter's
+  template is not what it expects. `backend/test_ios_prepare_project.py` runs it against the real generated files.
+- `.github/actions/ios-project`: the single place all iOS workflows generate and prepare the project.
+- **`ci-ios.yml`**: for pull requests that touch the apps, builds the driver and the manager for an iOS simulator, **starts them there** and runs
+  `integration_test/ios_smoke_test.dart` (plugins registered, native channel answers, permission macros compiled in, sign-in screen reached).
+- `build-ios.yml` builds either app (simulator and unsigned device build). **`release-ios.yml`** builds a signed app and uploads it to
+  TestFlight, with automatic signing through an App Store Connect API key; nothing is stored in the public repository.
+- `docs/IOS.md`: what exists and what is proven, the one-time Apple account setup step by step, how to release, a real-iPhone test checklist,
+  App Store review notes, and the known limits.
+- `backend/test_ios_workflows_contract.py`: the workflows, the smoke tests, the release secrets handling and the icon format.
+
+#### Not verified / not done
+- **Never run on a real iPhone.** Background tracking with the screen locked, the permission dialogs on a device, the camera and notifications
+  need a TestFlight build and the checklist in `docs/IOS.md` section 5.
+- **`release-ios.yml` has not run:** it needs your Apple Developer account (`docs/IOS.md` section 2). Its first run is its first test.
+- No relaunch of the app after iOS ends it (significant-location-change monitoring); iOS never relaunches a force-quit app.
+- App Store listing material (description, screenshots, privacy policy page, age rating) and a demo account for Apple's review.
+
+### Phase 5.8: driver app layouts follow the phone
+
+#### Fixed
+- **The score ring (points with GREEN/AMBER/RED below) and the event cards no longer break on phones with a different screen.** They had
+  fixed pixel sizes: a 154 px ring with a 59 px number, event cards exactly 124 px high, buttons exactly 50 px high. On a small phone, a
+  phone set to a larger "display size", or any phone with a larger font, the number left the ring, the word below was cut off and the cards
+  showed "overflowed" stripes. Now:
+  - the ring takes about half the width it is given (132 to 220 px) and the number and word shrink to stay inside the circle, so even
+    "100.0" fits; they follow the ring, not the system font;
+  - tiles have no fixed height and every tile in a row is as tall as the tallest one, so a long Arabic/Urdu word makes the row taller
+    instead of cutting the text; the number of tiles per row follows the width and the font size (live metrics, completed-trip metrics,
+    event cards);
+  - buttons grow with their text; the top bar title scales down instead of overflowing;
+  - the system font size is followed between 85% and 135% (`nuqatiMinTextScale` / `nuqatiMaxTextScale` in `nuqati_adaptive.dart`).
+    Above that, phones set to the "largest" font broke every screen; say so if you want a different limit.
+- `build-ios.yml` did not copy `nuqati_network.dart`, which `main.dart` imports, so the iOS build could not compile.
+
+#### Added
+- `driver_app/nuqati_adaptive.dart` (the ring, the tile, the equal-height grid, the font-size limit).
+- **Flutter layout tests in CI** (`driver_app/test/adaptive_layout_test.dart`, job "Driver app analyze"): about 550 cases render the ring and
+  the tiles on 7 screen sizes (280 to 820 dp wide) x 6 system font sizes (0.85x to 2.0x) in English, Arabic, Urdu and a long-label set, and
+  fail on any overflow, on text leaving the circle, on a tile leaving the screen, or on tiles of one row with different heights. A
+  control case keeps the old fixed-height tile in the test and requires it to overflow, so the checks cannot silently stop measuring.
+- `backend/test_driver_adaptive_layout_contract.py` (mutation-checked): main.dart uses the adaptive pieces, no fixed size comes back, and
+  every workflow that builds the driver app copies every Dart file `main.dart` imports.
+
+#### Not verified
+- I could not see the phone this was reported on. The change covers every fixed-size place on the Home and Driving screens; the Settings
+  tab and dialogs were not changed. Please check it on that phone after the next driver build and send a screenshot if anything is still off.
+
 ### Phase 5.7: driver app asks Google Play for updates
 
 #### Added

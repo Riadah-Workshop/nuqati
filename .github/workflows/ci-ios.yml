@@ -1,0 +1,85 @@
+name: CI iOS
+
+# Builds the driver and manager apps for the iOS simulator and STARTS them there. A compile alone proves little for iOS: the first
+# version of this project compiled fine while its app delegate never installed the tracking channel, so the app would have started and
+# silently tracked nothing. The integration tests (integration_test/ios_smoke_test.dart in each app) check that plugins are registered,
+# that the native CoreLocation recorder answers on its channel, that permission_handler has the permissions compiled in, and that the
+# app reaches its sign-in screen. Background location itself (screen locked, app minimised) can only be tested on a real iPhone.
+#
+# It runs only for changes that can affect iOS. The repository is public, so the macOS minutes are free; do not make this job a
+# "required" check (path filters).
+
+on:
+  pull_request:
+    paths:
+      - "driver_app/**"
+      - "manager_app/**"
+      - "ops/ios/**"
+      - ".github/actions/ios-project/**"
+      - ".github/workflows/ci-ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: iOS ${{ matrix.app }} (simulator)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [driver, manager]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate and prepare the iOS project
+        uses: ./.github/actions/ios-project
+        with:
+          app: ${{ matrix.app }}
+
+      - name: Boot an iPhone simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          best = None
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              if "iOS" not in runtime:
+                  continue
+              version = tuple(int(n) for n in re.findall(r"\d+", runtime.split("iOS-")[-1]))
+              for device in devices:
+                  if device.get("isAvailable") and device["name"].startswith("iPhone"):
+                      rank = (version, device["name"] == "iPhone 17", device["name"])
+                      if best is None or rank > best[0]:
+                          best = (rank, device["udid"])
+          print(best[1])
+          ')
+          echo "Simulator $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app and start it on the simulator
+        working-directory: ${{ matrix.app }}_app
+        run: >
+          flutter test integration_test/ios_smoke_test.dart
+          -d "${{ steps.simulator.outputs.udid }}"
+          --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+
+      - name: Simulator log of the app (only when something failed)
+        if: failure()
+        run: |
+          xcrun simctl spawn "${{ steps.simulator.outputs.udid }}" log show --last 15m --style compact \
+            --predicate 'process == "Runner"' | tail -300 || true

@@ -1,5 +1,6 @@
 import 'vehicle_handover.dart';
 import 'nuqati_network.dart';
+import 'nuqati_adaptive.dart';
 import 'package:geolocator_android/geolocator_android.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -423,7 +424,7 @@ Future<void> main() async {
   await nuqatiLog('UI service configured');
  }
  catch(e,s){await nuqatiLog('SERVICE_CONFIG_FAILED',e,s);}
- runApp(const MaterialApp(debugShowCheckedModeBanner:false,home:DriverApp()));
+ runApp(const MaterialApp(debugShowCheckedModeBanner:false,builder:nuqatiClampTextScale,home:DriverApp()));
 }
 
 // Shape-aware geofence lookup (polygon points are [latitude,longitude]).
@@ -1861,12 +1862,15 @@ class _DriverAppState extends State<DriverApp> with WidgetsBindingObserver{
 Future<void> checkTrackingRequirements() async {
   final location=await Geolocator.checkPermission();
   final notifications=await ph.Permission.notification.status;
-  final battery=await ph.Permission.ignoreBatteryOptimizations.status;
+  // The battery-optimisation exemption exists on Android only; iOS has Background App Refresh instead (a setting, not a request).
+  final battery=Platform.isAndroid?await ph.Permission.ignoreBatteryOptimizations.status:null;
   if(!mounted)return;
   await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(
    title:Text(tr('Tracking setup','إعداد التتبع')),
-   content:Text('Location: $location\nNotifications: $notifications\nBattery optimization exemption: $battery\n\nRequired: Location = Allow all the time, Notifications = Allowed, Battery = Unrestricted. If any of these are missing, finish them in Android settings.'),
-   actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close')),TextButton(onPressed:(){Navigator.pop(ctx);Geolocator.openAppSettings();},child:const Text('App settings')),TextButton(onPressed:()async{Navigator.pop(ctx);await ph.Permission.notification.request();await ph.Permission.ignoreBatteryOptimizations.request();},child:const Text('Request permissions'))]));
+   content:Text(Platform.isIOS
+     ?'Location: $location\nNotifications: $notifications\n\nRequired: Location = Always, Notifications = Allowed, and Background App Refresh = On for Nuqati. If any of these are missing, finish them in iOS Settings > Nuqati.'
+     :'Location: $location\nNotifications: $notifications\nBattery optimization exemption: $battery\n\nRequired: Location = Allow all the time, Notifications = Allowed, Battery = Unrestricted. If any of these are missing, finish them in Android settings.'),
+   actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close')),TextButton(onPressed:(){Navigator.pop(ctx);Geolocator.openAppSettings();},child:const Text('App settings')),TextButton(onPressed:()async{Navigator.pop(ctx);await ph.Permission.notification.request();if(Platform.isAndroid)await ph.Permission.ignoreBatteryOptimizations.request();},child:const Text('Request permissions'))]));
  }
 
  bool gpsReady=false, gpsChecking=false; DateTime? lastGpsFix; Timer? gpsWatchdog; bool gpsWarningShown=false; bool permissionPromptInProgress=false;
@@ -2901,14 +2905,12 @@ Future<void> checkTrackingRequirements() async {
  }
  Widget brand(){final bytes=logoBytes;return Column(children:[if(bytes!=null)Image.memory(bytes,height:90,fit:BoxFit.contain)else Container(width:88,height:88,padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:lime.withOpacity(.13),borderRadius:BorderRadius.circular(24)),child:Image.asset('assets/nuqati_icon.png',fit:BoxFit.contain)),const SizedBox(height:12),Text(company.isNotEmpty?company:'NUQATI',textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.bold)),Text(tr('Fleet Driver Companion','رفيق سائق الأسطول'),style:const TextStyle(color:lime,fontSize:13)),const SizedBox(height:4),Text(tr('By Al-Riadah Workshop','من ورشة حلول الريادة'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white70,fontSize:11,fontWeight:FontWeight.w600))]);}
  Widget field(TextEditingController c,String label,{bool secret=false,bool numeric=false})=>TextField(controller:c,obscureText:secret,keyboardType:numeric?TextInputType.number:TextInputType.text,maxLength:numeric?10:null,style:const TextStyle(color:Colors.white),decoration:InputDecoration(labelText:label,labelStyle:const TextStyle(color:Colors.white70),filled:true,fillColor:blue,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12))));
- Widget action(String title,VoidCallback? onPressed,{bool secondary=false})=>SizedBox(width:double.infinity,height:50,child:ElevatedButton(onPressed:onPressed,style:ElevatedButton.styleFrom(backgroundColor:secondary?blue:lime,foregroundColor:secondary?Colors.white:navy,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),child:Text(title,style:const TextStyle(fontWeight:FontWeight.bold))));
+ Widget action(String title,VoidCallback? onPressed,{bool secondary=false})=>ConstrainedBox(constraints:const BoxConstraints(minWidth:double.infinity,minHeight:50),child:ElevatedButton(onPressed:onPressed,style:ElevatedButton.styleFrom(backgroundColor:secondary?blue:lime,foregroundColor:secondary?Colors.white:navy,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(12))),child:Text(title,style:const TextStyle(fontWeight:FontWeight.bold))));
 
  Widget panel({required Widget child})=>Container(width:double.infinity,margin:const EdgeInsets.only(bottom:14),padding:const EdgeInsets.all(18),decoration:BoxDecoration(color:blue.withOpacity(.9),borderRadius:BorderRadius.circular(22),border:Border.all(color:Colors.white12)),child:child);
- Widget stat(String title,String value,IconData icon)=>Container(
-  height:124,padding:const EdgeInsets.symmetric(vertical:12,horizontal:5),
-  decoration:BoxDecoration(color:blue.withOpacity(.9),borderRadius:BorderRadius.circular(18),border:Border.all(color:Colors.white12)),
-  child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[Icon(icon,color:lime,size:24),const SizedBox(height:7),Text(value,style:const TextStyle(fontSize:25,fontWeight:FontWeight.w800,color:Colors.white)),const SizedBox(height:3),Text(title,textAlign:TextAlign.center,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:11,color:Colors.white70))]));
- Widget compactMetric(String label,String value,IconData icon)=>Container(padding:const EdgeInsets.symmetric(vertical:8,horizontal:3),decoration:BoxDecoration(color:navy.withOpacity(.55),borderRadius:BorderRadius.circular(12)),child:Column(children:[Icon(icon,color:lime,size:18),Text(value,style:const TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.bold)),Text(label,textAlign:TextAlign.center,maxLines:2,style:const TextStyle(color:Colors.white70,fontSize:10))]));
+ // Tiles and rows come from nuqati_adaptive.dart: no fixed heights, equal heights per row, columns follow the width and font size.
+ Widget stat(String title,String value,IconData icon)=>NuqatiMetricTile(label:title,value:value,icon:icon,accent:lime,fill:blue.withOpacity(.9),large:true,border:Colors.white12);
+ Widget compactMetric(String label,String value,IconData icon)=>NuqatiMetricTile(label:label,value:value,icon:icon,accent:lime,fill:navy.withOpacity(.55));
  Widget homeTab()=>Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
   if(updateReady&&tripId==null)panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
    Row(children:[const Icon(Icons.system_update,color:lime,size:22),const SizedBox(width:10),Expanded(child:Text(tr('A new version of Nuqati is ready','نسخة جديدة من نقاطي جاهزة'),style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold)))]),
@@ -2920,17 +2922,14 @@ Future<void> checkTrackingRequirements() async {
    Row(children:[const CircleAvatar(radius:18,backgroundColor:lime,child:Icon(Icons.person,color:navy,size:20)),const SizedBox(width:10),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(name,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold,fontSize:16)),if(company.isNotEmpty)Text('${tr('Company','الشركة')}: $company',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:12)),Text('${tr('Vehicle','المركبة')}: $plate',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:lime,fontSize:12)),if(vehicleModel.isNotEmpty||vehicleYear.isNotEmpty)Text('${tr('Model','الطراز')}: $vehicleModel${vehicleYear.isNotEmpty?' ($vehicleYear)':''}',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:11)),if(vehicleDoor.isNotEmpty)Text('${tr('Door number','رقم الباب')}: $vehicleDoor',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:11)),Text("${tr('Odometer','عداد المركبة')}: ${displayedOdometer==null?'—':((pendingOdometerFloor!=null && pendingOdometerFloor!>displayedOdometer! ? pendingOdometerFloor! : displayedOdometer!)+(tripId!=null&&liveTripKmId==tripId?liveTripKm:0)).toStringAsFixed(1)} km${tripId!=null?' (${tr('live estimate','تقدير مباشر')})':''}",style:const TextStyle(color:Colors.white70,fontSize:11))])),Icon(gpsReady?Icons.gps_fixed:Icons.gps_off,color:gpsReady?lime:Colors.orangeAccent)]),
    const SizedBox(height:10),Row(children:[Icon(tripId!=null?Icons.directions_car:Icons.flag_outlined,color:lime,size:19),const SizedBox(width:7),Expanded(child:Text(tripId!=null&&displayedNumberForTrip==tripId&&displayedTripNumber!=null?'${tr('Trip','الرحلة')} #$displayedTripNumber · $tripStateLabel':tripStateLabel,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.bold))),if(tripId!=null&&tripEndRemaining!=null)Text('${tr('Trip ending in','تنتهي الرحلة خلال')} $tripEndRemaining s',style:const TextStyle(color:Colors.orangeAccent,fontSize:12,fontWeight:FontWeight.bold))]),
    const SizedBox(height:8),Text(tr('MY SAFE TRIP','رحلتي الآمنة'),style:const TextStyle(color:lime,fontSize:13,fontWeight:FontWeight.bold)),
-   const SizedBox(height:9),Center(child:SizedBox(width:154,height:154,child:Stack(alignment:Alignment.center,children:[
-    SizedBox.expand(child:CircularProgressIndicator(value:(score/100).clamp(0.0,1.0),strokeWidth:12,backgroundColor:Colors.white12,valueColor:AlwaysStoppedAnimation<Color>(scoreColor),strokeCap:StrokeCap.round)),
-    Column(mainAxisAlignment:MainAxisAlignment.center,children:[Text(officialScoreReady&&officialScoreBreakdown?['score']==null?'—':score.toStringAsFixed(officialScoreReady?1:0),style:TextStyle(color:scoreColor,fontSize:59,fontWeight:FontWeight.w900,height:1)),const SizedBox(height:4),Text(rating,style:TextStyle(color:scoreColor,fontSize:12,fontWeight:FontWeight.bold))])
-   ]))),
+   const SizedBox(height:9),NuqatiScoreRing(value:officialScoreReady&&officialScoreBreakdown?['score']==null?'—':score.toStringAsFixed(officialScoreReady?1:0),label:rating,progress:score/100,color:scoreColor),
    if(tripId!=null)Text(tr('LIVE POINTS · 2 per event / 3 per excessive event','النقاط المباشرة · نقطتان للحدث و٣ للشديد'),textAlign:TextAlign.center,style:const TextStyle(color:Colors.white70,fontSize:10)),
-   if(tripId!=null)Padding(padding:const EdgeInsets.only(top:10),child:Wrap(alignment:WrapAlignment.center,spacing:7,runSpacing:7,children:[
-    SizedBox(width:94,child:compactMetric(tr('Speeding','السرعة'),'$speedingCount',Icons.speed)),
-    SizedBox(width:94,child:compactMetric(tr('Braking','الفرملة'),'$brakingCount',Icons.warning_amber)),
-    SizedBox(width:94,child:compactMetric(tr('Acceleration','التسارع'),'$accelerationCount',Icons.trending_up)),
-    SizedBox(width:94,child:compactMetric(tr('Cornering','الانعطاف'),'$corneringCount',Icons.turn_right)),
-    SizedBox(width:94,child:compactMetric(tr('Excessive','شديد'),'$severeCount',Icons.priority_high)),
+   if(tripId!=null)Padding(padding:const EdgeInsets.only(top:10),child:NuqatiEqualGrid(spacing:7,children:[
+    compactMetric(tr('Speeding','السرعة'),'$speedingCount',Icons.speed),
+    compactMetric(tr('Braking','الفرملة'),'$brakingCount',Icons.warning_amber),
+    compactMetric(tr('Acceleration','التسارع'),'$accelerationCount',Icons.trending_up),
+    compactMetric(tr('Cornering','الانعطاف'),'$corneringCount',Icons.turn_right),
+    compactMetric(tr('Excessive','شديد'),'$severeCount',Icons.priority_high),
    ])),
    if(tripId==null&&completedTrip)const SizedBox(height:16),
    if(tripId==null&&completedTrip)Text(localizedAlert(language,'FINAL LOCAL TRIP POINTS','نقاط الرحلة المحلية النهائية','سفر کے حتمی مقامی پوائنٹس'),style:const TextStyle(color:lime,fontSize:11,fontWeight:FontWeight.bold)),
@@ -2942,7 +2941,7 @@ Future<void> checkTrackingRequirements() async {
   if(monthlyOdometerDue)action(tr('Enter first odometer reading','أدخل قراءة العداد لأول مرة'),()=>showOdometerDialog()),
   if(shouldShowSmartOil)smartOilWarning(),
   panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[Row(children:[const Icon(Icons.shield_outlined,color:lime,size:18),const SizedBox(width:8),Expanded(child:Text(tr(privacyMode?'Privacy Mode ON':'Privacy Mode OFF',privacyMode?'وضع الخصوصية مفعّل':'وضع الخصوصية غير مفعّل'),style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.bold))),Switch(value:privacyMode,onChanged:busy||tripId!=null||privacyRequestStatus=='pending'||privacyRequestStatus=='approved'?null:(_)=>togglePrivacy(),activeColor:lime)]),Text(tr(privacyRequestStatus=='pending'?'Approval pending — GPS remains active':privacyRequestStatus=='approved'?'Approved — will activate after current trip':privacyMode?'Disable Privacy Mode':'Request Privacy Mode',privacyRequestStatus=='pending'?'بانتظار الموافقة — التتبع مستمر':privacyRequestStatus=='approved'?'تمت الموافقة — ينتظر انتهاء الرحلة':privacyMode?'إيقاف وضع الخصوصية':'طلب وضع الخصوصية'),style:const TextStyle(color:Colors.white54,fontSize:10))])),
-  if(tripId==null&&completedTrip)panel(child:Column(children:[Text(tr('Local driving events · independent of backend RAG','أحداث القيادة المحلية · منفصلة عن تقييم الخادم'),style:const TextStyle(color:lime,fontWeight:FontWeight.bold)),const SizedBox(height:8),Wrap(spacing:6,runSpacing:6,children:[SizedBox(width:125,child:compactMetric(tr('Speeding','تجاوز السرعة'),'$speedingCount',Icons.speed)),SizedBox(width:125,child:compactMetric(tr('Braking','فرملة حادة'),'$brakingCount',Icons.warning_amber)),SizedBox(width:125,child:compactMetric(tr('Acceleration','تسارع حاد'),'$accelerationCount',Icons.trending_up)),SizedBox(width:125,child:compactMetric(tr('Cornering','انعطاف حاد'),'$corneringCount',Icons.turn_right))])])),
+  if(tripId==null&&completedTrip)panel(child:Column(children:[Text(tr('Local driving events · independent of backend RAG','أحداث القيادة المحلية · منفصلة عن تقييم الخادم'),style:const TextStyle(color:lime,fontWeight:FontWeight.bold)),const SizedBox(height:8),NuqatiEqualGrid(spacing:6,minTileWidth:110,maxColumns:4,children:[compactMetric(tr('Speeding','تجاوز السرعة'),'$speedingCount',Icons.speed),compactMetric(tr('Braking','فرملة حادة'),'$brakingCount',Icons.warning_amber),compactMetric(tr('Acceleration','تسارع حاد'),'$accelerationCount',Icons.trending_up),compactMetric(tr('Cornering','انعطاف حاد'),'$corneringCount',Icons.turn_right)])])),
   action(tr('Request workshop help','طلب مساعدة الورشة'),showAssistance),
   coachingCard(),
  ]);
@@ -3012,17 +3011,14 @@ Future<void> checkTrackingRequirements() async {
  Widget coachingTip(IconData icon,String heading,String detail)=>Padding(padding:const EdgeInsets.only(bottom:14),child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,color:lime,size:22),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(heading,style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w700)),const SizedBox(height:4),Text(detail,style:const TextStyle(color:Colors.white70,fontSize:12))]))]));
  Widget metricsTab()=>Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
   panel(child:Column(children:[Text(tr('CURRENT SPEED','السرعة الحالية'),style:const TextStyle(color:Colors.white70)),Text(speedKmh.toStringAsFixed(0),style:const TextStyle(color:lime,fontSize:76,fontWeight:FontWeight.w900)),const Text('km/h',style:TextStyle(color:Colors.white70)),const SizedBox(height:12),Text('${tr('Company speed threshold','حد السرعة للشركة')}${company.isNotEmpty?' · $company':''}: ${speedLimit.toStringAsFixed(0)} km/h',textAlign:TextAlign.center,style:const TextStyle(color:Colors.white))])),
-  // Fill the full content width with two equally sized event cards per row.
-  LayoutBuilder(builder:(context,constraints){
-   const gap=10.0;
-   final cardWidth=(constraints.maxWidth-gap)/2;
-   return Wrap(spacing:gap,runSpacing:gap,children:[
-    SizedBox(width:cardWidth,child:stat(tr('Speeding','تجاوز السرعة'),'$speedingCount',Icons.speed)),
-    SizedBox(width:cardWidth,child:stat(tr('Harsh braking','فرملة حادة'),'$brakingCount',Icons.south)),
-    SizedBox(width:cardWidth,child:stat(tr('Harsh acceleration','تسارع حاد'),'$accelerationCount',Icons.north)),
-    SizedBox(width:cardWidth,child:stat(tr('Harsh cornering','انعطاف حاد'),'$corneringCount',Icons.turn_right)),
-   ]);
-  }),
+  // Event cards: equal columns that follow the width and font size, every row as tall as its tallest card.
+  NuqatiEqualGrid(spacing:10,minTileWidth:140,maxColumns:2,children:[
+   stat(tr('Speeding','تجاوز السرعة'),'$speedingCount',Icons.speed),
+   stat(tr('Harsh braking','فرملة حادة'),'$brakingCount',Icons.south),
+   stat(tr('Harsh acceleration','تسارع حاد'),'$accelerationCount',Icons.north),
+   stat(tr('Harsh cornering','انعطاف حاد'),'$corneringCount',Icons.turn_right),
+  ]),
+  const SizedBox(height:14),
   panel(child:Column(children:[Text(tr('Acceleration / Deceleration','التسارع / التباطؤ'),style:const TextStyle(color:Colors.white70)),Text('${accelerationKmhS.toStringAsFixed(1)} km/h/s',style:const TextStyle(color:Colors.white,fontSize:28,fontWeight:FontWeight.bold)),const SizedBox(height:10),Text('${tr('Severe events','المخالفات الشديدة')}: $severeCount',style:const TextStyle(color:Colors.orangeAccent))]))
  ]);
  Future<bool> handoverPreflight() async {
@@ -3139,7 +3135,7 @@ Future<void> checkTrackingRequirements() async {
  }
  @override Widget build(BuildContext context)=>Scaffold(
  backgroundColor:navy,
- appBar:AppBar(backgroundColor:navy,foregroundColor:Colors.white,title:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[Text(tr('NUQATI · Driver','نقاطي · السائق')),Text(tr('By Al-Riadah Workshop','من ورشة حلول الريادة'),style:const TextStyle(fontSize:11,color:Colors.white70,fontWeight:FontWeight.w500))]),actions:[IconButton(tooltip:'Diagnostics',onPressed:showDiagnostics,icon:const Icon(Icons.bug_report_outlined)),if(token.isNotEmpty)IconButton(tooltip:tr('Log out','خروج'),onPressed:logout,icon:const Icon(Icons.logout))]),
+ appBar:AppBar(backgroundColor:navy,foregroundColor:Colors.white,title:FittedBox(fit:BoxFit.scaleDown,alignment:AlignmentDirectional.centerStart,child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[Text(tr('NUQATI · Driver','نقاطي · السائق')),Text(tr('By Al-Riadah Workshop','من ورشة حلول الريادة'),style:const TextStyle(fontSize:11,color:Colors.white70,fontWeight:FontWeight.w500))])),actions:[IconButton(tooltip:'Diagnostics',onPressed:showDiagnostics,icon:const Icon(Icons.bug_report_outlined)),if(token.isNotEmpty)IconButton(tooltip:tr('Log out','خروج'),onPressed:logout,icon:const Icon(Icons.logout))]),
  bottomNavigationBar:token.isEmpty?null:SafeArea(child:Container(padding:const EdgeInsets.fromLTRB(12,8,12,8),decoration:const BoxDecoration(color:blue,borderRadius:BorderRadius.vertical(top:Radius.circular(24))),child:Row(children:[navItem(Icons.shield_outlined,tr('My points','نقاطي'),0),navItem(Icons.speed,tr('Driving','القيادة'),1),navItem(Icons.settings_outlined,tr('Settings','الإعدادات'),2)]))),
  body:Container(decoration:const BoxDecoration(gradient:LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[navy,blue,navy])),child:ListView(padding:const EdgeInsets.all(18),children:[const SizedBox(height:10),if(token.isEmpty)brand(),if(token.isEmpty)const SizedBox(height:22),if(token.isEmpty)...[panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(tr('Select language','اختر اللغة'),style:const TextStyle(color:lime,fontWeight:FontWeight.bold)),const SizedBox(height:8),Row(children:[Expanded(child:action('English',()=>changeLanguage('en'),secondary:language!='en')),const SizedBox(width:6),Expanded(child:action('العربية',()=>changeLanguage('ar'),secondary:language!='ar')),const SizedBox(width:6),Expanded(child:action('اردو',()=>changeLanguage('ur'),secondary:language!='ur'))])])),const SizedBox(height:12),field(iqama,tr('Iqama / Saudi ID number','رقم الإقامة / الهوية'),numeric:true),const SizedBox(height:10),TextField(controller:password,obscureText:!loginPasswordVisible,style:const TextStyle(color:Colors.white),decoration:InputDecoration(labelText:tr('Password','كلمة المرور'),labelStyle:const TextStyle(color:Colors.white70),filled:true,fillColor:blue,border:OutlineInputBorder(borderRadius:BorderRadius.circular(12)),suffixIcon:IconButton(tooltip:loginPasswordVisible?tr('Hide password','إخفاء كلمة المرور'):tr('Show password','إظهار كلمة المرور'),onPressed:()=>setState(()=>loginPasswordVisible=!loginPasswordVisible),icon:Icon(loginPasswordVisible?Icons.visibility_off:Icons.visibility,color:lime)))),CheckboxListTile(value:rememberMe,onChanged:(v)=>setState(()=>rememberMe=v??false),title:Text(tr('Remember me / automatic sign in','تذكرني / تسجيل الدخول تلقائياً'),style:const TextStyle(color:Colors.white)),activeColor:lime,checkColor:navy,controlAffinity:ListTileControlAffinity.leading),const SizedBox(height:16),action(busy?tr('Signing in...','جار تسجيل الدخول'):tr('Sign in','دخول'),busy?null:login)]else ...[if(tab==0)homeTab(),if(tab==1)metricsTab(),if(tab==2)settingsTab()],const SizedBox(height:12),Text(status,style:const TextStyle(color:Colors.white70)),const SizedBox(height:12),if(token.isNotEmpty)Text(tr('GPS is recorded by a foreground location service while the trip is active. Uploads retry when online. Scores are pilot indicators, not certified safety ratings.','يتم تسجيل الموقع عبر خدمة نشطة أثناء الرحلة، وتتم إعادة محاولة الرفع عند توفر الإنترنت. النقاط تجريبية وليست تقييماً معتمداً.'),style:const TextStyle(color:Colors.orangeAccent,fontSize:11))])));
 
