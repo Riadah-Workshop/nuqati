@@ -23,6 +23,9 @@ jobs:
       contents: write
     env:
       APP: ${{ inputs.app }}
+      # The same build-time settings the Android workflows pass (a blank value is fine; the app has defaults).
+      NUQATI_FALLBACK_API: ${{ vars.NUQATI_FALLBACK_API }}
+      MAPTILER_API_KEY: ${{ secrets.MAPTILER_API_KEY }}
     defaults:
       run:
         working-directory: ${{ inputs.app }}_app
@@ -43,14 +46,22 @@ jobs:
         # Dart errors fail the job; warnings and infos are reported only (as in the Android workflows).
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
+      - name: Build settings
+        run: |
+          set -euo pipefail
+          defines="--dart-define=NUQATI_API=https://nuqati.al-riadah.sa"
+          if [ "$APP" = driver ]; then defines="$defines --dart-define=NUQATI_FALLBACK_API=${NUQATI_FALLBACK_API:-}"; fi
+          if [ "$APP" = manager ]; then defines="$defines --dart-define=MAPTILER_API_KEY=${MAPTILER_API_KEY:-}"; fi
+          echo "DEFINES=$defines" >> "$GITHUB_ENV"
+
       - name: Build iOS simulator app
-        run: flutter build ios --simulator --debug --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+        run: flutter build ios --simulator --debug $DEFINES
 
       - name: Package simulator app
         run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphonesimulator/Runner.app "nuqati-${APP}-ios-simulator.zip"
 
       - name: Build unsigned physical-device app (not an installable IPA)
-        run: flutter build ios --release --no-codesign --dart-define=NUQATI_API=https://nuqati.al-riadah.sa
+        run: flutter build ios --release --no-codesign $DEFINES
 
       - name: Package unsigned device app for Xcode signing
         run: ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "nuqati-${APP}-ios-unsigned-device.zip"

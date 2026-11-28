@@ -5,6 +5,39 @@ Notes written before this file existed are in [`docs/history/`](docs/history/REA
 
 ## [Unreleased]
 
+### Phase 5.9: iOS groundwork (driver and manager)
+
+#### Found and fixed (by running the iOS build on a macOS runner, which nobody had done since Flutter changed its iOS template)
+- **The iOS driver would have started but tracked nothing.** Flutter 3.41+ creates iOS apps with the UIScene lifecycle. The old app delegate
+  replacement looked for a window that does not exist there, so neither the plugins nor the `nuqati/native_tracking` channel were ever registered.
+  The app delegate now registers both from `didInitializeImplicitFlutterEngine`.
+- **Every iOS permission check would have answered "denied"**: `permission_handler` needs its permissions listed in the Podfile; they now are.
+- **iOS 13+ would have crashed the driver at start**: the background-service plugin's task id was not in `Info.plist`.
+- **The app icon was 110 x 95 with transparency**; Apple needs a 1024 x 1024 opaque PNG. A clean redraw of the existing mark is included.
+- `build-ios.yml` did not copy `nuqati_network.dart`; the iOS builds did not pass the manager's `MAPTILER_API_KEY` or the driver's
+  `NUQATI_FALLBACK_API` that the Android builds pass.
+- Driver, *Check tracking permissions* on iOS no longer talks about Android battery settings or requests the Android-only battery permission.
+
+#### Added
+- `ops/ios/prepare_ios_project.py`: one script that prepares the generated Xcode project (Info.plist texts and background modes, bundle ids,
+  Podfile macros, the UIScene app delegate with the CoreLocation recorder, Apple's privacy manifest). It stops with a message when Flutter's
+  template is not what it expects. `backend/test_ios_prepare_project.py` runs it against the real generated files.
+- `.github/actions/ios-project`: the single place all iOS workflows generate and prepare the project.
+- **`ci-ios.yml`**: for pull requests that touch the apps, builds the driver and the manager for an iOS simulator, **starts them there** and runs
+  `integration_test/ios_smoke_test.dart` (plugins registered, native channel answers, permission macros compiled in, sign-in screen reached).
+- `build-ios.yml` builds either app (simulator and unsigned device build). **`release-ios.yml`** builds a signed app and uploads it to
+  TestFlight, with automatic signing through an App Store Connect API key; nothing is stored in the public repository.
+- `docs/IOS.md`: what exists and what is proven, the one-time Apple account setup step by step, how to release, a real-iPhone test checklist,
+  App Store review notes, and the known limits.
+- `backend/test_ios_workflows_contract.py`: the workflows, the smoke tests, the release secrets handling and the icon format.
+
+#### Not verified / not done
+- **Never run on a real iPhone.** Background tracking with the screen locked, the permission dialogs on a device, the camera and notifications
+  need a TestFlight build and the checklist in `docs/IOS.md` section 5.
+- **`release-ios.yml` has not run:** it needs your Apple Developer account (`docs/IOS.md` section 2). Its first run is its first test.
+- No relaunch of the app after iOS ends it (significant-location-change monitoring); iOS never relaunches a force-quit app.
+- App Store listing material (description, screenshots, privacy policy page, age rating) and a demo account for Apple's review.
+
 ### Phase 5.8: driver app layouts follow the phone
 
 #### Fixed

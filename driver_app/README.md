@@ -1,7 +1,7 @@
 # Nuqati Driver app
 
-Flutter app for drivers (Android is the primary target; iOS has a simulator / no-codesign
-build workflow). It records trips with GPS, detects safety events (speeding, harsh
+Flutter app for drivers (Android is the primary target; iOS builds, starts on a simulator in CI and
+has a TestFlight workflow, see `docs/IOS.md`). It records trips with GPS, detects safety events (speeding, harsh
 acceleration, braking and cornering), keeps an **offline queue** and syncs to the Nuqati API,
 shows the driver's score, and runs the online vehicle **handover / inspection** flow.
 
@@ -20,7 +20,8 @@ shows the driver's score, and runs the online vehicle **handover / inspection** 
 | `nuqati_home_test.dart` | Home-screen simulator library (compiled into the app despite its name) |
 | `android_camera_activity/MainActivity.kt` | Android entry point, `nuqati/native_tracking` platform channel, camera-activity observer |
 | `android_native_tracking/` | Kotlin foreground tracking service and boot receiver (local SQLite) |
-| `ios_native_tracking/` | Swift location tracking for iOS |
+| `ios_native_tracking/` | Swift CoreLocation recorder and the UIScene app delegate that installs it (prepared into the generated Xcode project by `ops/ios/prepare_ios_project.py`; see `docs/IOS.md`) |
+| `integration_test/` | iOS simulator start-up test run by `.github/workflows/ci-ios.yml` |
 | `assets/`, `pubspec.yaml` | Launcher icon and Flutter dependencies |
 
 The folder holds **source files only**. There is no `lib/`, `android/` or `ios/` directory:

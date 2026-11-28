@@ -6,7 +6,8 @@ name: Release Nuqati iOS to TestFlight
 # Needs your Apple Developer account. One-time setup, with every click: docs/IOS.md section 2. In short, add these to GitHub
 # (Settings > Secrets and variables > Actions):
 #   secrets    APPLE_TEAM_ID, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_API_KEY_P8 (the full text of the downloaded AuthKey_*.p8 file)
-#   variables  (optional) IOS_DRIVER_BUNDLE_ID, IOS_MANAGER_BUNDLE_ID, NUQATI_PRODUCTION_API
+#   variables  (optional) IOS_DRIVER_BUNDLE_ID, IOS_MANAGER_BUNDLE_ID, NUQATI_PRODUCTION_API, NUQATI_FALLBACK_API
+#   secret     MAPTILER_API_KEY for the manager (already used by the Android manager release)
 # Signing is automatic: Xcode creates the App ID, the distribution certificate and the profile through the App Store Connect API key.
 # The build number is the run number of this workflow, so every upload is higher than the previous one (Apple requires that).
 #
@@ -42,6 +43,8 @@ jobs:
       PRODUCTION_API: ${{ vars.NUQATI_PRODUCTION_API }}
       DRIVER_BUNDLE_ID: ${{ vars.IOS_DRIVER_BUNDLE_ID }}
       MANAGER_BUNDLE_ID: ${{ vars.IOS_MANAGER_BUNDLE_ID }}
+      FALLBACK_API: ${{ vars.NUQATI_FALLBACK_API }}
+      MAPTILER_API_KEY: ${{ secrets.MAPTILER_API_KEY }}
     steps:
       - name: Check that the Apple account settings are present
         shell: bash
@@ -51,6 +54,8 @@ jobs:
           [ -n "$KEY_ID" ]    || missing="$missing APPSTORE_KEY_ID"
           [ -n "$ISSUER_ID" ] || missing="$missing APPSTORE_ISSUER_ID"
           [ -n "$API_KEY_P8" ] || missing="$missing APPSTORE_API_KEY_P8"
+          # The manager's map needs this key, as in the Android release.
+          if [ "$APP" = manager ] && [ -z "$MAPTILER_API_KEY" ]; then missing="$missing MAPTILER_API_KEY"; fi
           if [ -n "$missing" ]; then
             echo "::error::Missing GitHub secrets:$missing. Follow docs/IOS.md section 2, then run this workflow again."
             exit 1
@@ -90,10 +95,13 @@ jobs:
         run: |
           set -euo pipefail
           api="${PRODUCTION_API:-https://nuqati.al-riadah.sa}"
+          defines=(--dart-define=NUQATI_API="$api")
+          if [ "$APP" = driver ]; then defines+=(--dart-define=NUQATI_FALLBACK_API="${FALLBACK_API:-}"); fi
+          if [ "$APP" = manager ]; then defines+=(--dart-define=MAPTILER_API_KEY="$MAPTILER_API_KEY"); fi
           # --no-codesign: only prepares the Xcode workspace and compiles Dart; Xcode signs and archives below.
           flutter build ios --release --no-codesign \
             --build-name="$VERSION" --build-number="${{ github.run_number }}" \
-            --dart-define=NUQATI_API="$api"
+            "${defines[@]}"
 
       - name: Archive and sign (automatic signing through the API key)
         shell: bash

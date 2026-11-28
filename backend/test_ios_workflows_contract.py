@@ -109,6 +109,16 @@ def test_release_needs_the_apple_account_and_keeps_nothing_in_the_public_repo():
     assert "permissions:\n      contents: read" in text
 
 
+def test_ios_builds_get_the_same_build_settings_as_android():
+    for name in ("build-ios.yml", "release-ios.yml"):
+        text = _text(WORKFLOWS / name)
+        assert "secrets.MAPTILER_API_KEY" in text and "vars.NUQATI_FALLBACK_API" in text, name
+        assert "--dart-define=MAPTILER_API_KEY=" in text and "--dart-define=NUQATI_FALLBACK_API=" in text, name
+    release = _text(WORKFLOWS / "release-ios.yml")
+    assert 'if [ "$APP" = manager ] && [ -z "$MAPTILER_API_KEY" ]' in release, "the manager release must stop early without the map key"
+    assert "vars.NUQATI_PRODUCTION_API" in release
+
+
 def test_ios_icons_are_square_1024_and_opaque():
     for app in ("driver_app", "manager_app"):
         data = (ROOT / app / "assets" / "nuqati_icon_ios.png").read_bytes()
